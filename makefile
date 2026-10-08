@@ -9,10 +9,12 @@
 # VARIANT=l2 (L2 variant with quad support instead of the periodic table)
 #
 # UNITS=1 (physical units instead of Python syntax, see below)
+# STEPS=1 (step-by-step solutions instead of Python syntax: neither Python nor units)
 
 APPLANG ?= en
 VARIANT ?= normal
 UNITS ?= 0
+STEPS ?= 0
 
 # This fork drops the spreadsheet (WITH_SHEET) and the periodic table (WITH_PERIODIC): about
 # 160 KB of flash for the input/display work (user's choice, 2026-10-05), and the variation tables
@@ -23,6 +25,13 @@ UNITS ?= 0
 FEATURE_DEFS = -DWITH_LAPLACE -DWITH_DESOLVE -DWITH_EQW -DWITH_PLOT
 ifeq ($(UNITS),1)
     FEATURE_DEFS += -DWITH_UNITS
+endif
+# The step-by-step build (FlowCE.b84 from 2.0): no Python syntax and no units, for the room
+ifeq ($(STEPS),1)
+    ifeq ($(UNITS),1)
+        $(error STEPS=1 and UNITS=1 do not fit together)
+    endif
+    FEATURE_DEFS += -DFLOWCE_STEPS
 endif
 
 ifeq ($(APPLANG),fr)

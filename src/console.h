@@ -14,8 +14,9 @@
 #define std ustl
 #endif
 typedef char Char;
-// Python syntax (giac's python2xcas): in every build without units (the makefile's FEATURE_DEFS)
-#ifdef WITH_UNITS
+// Python syntax (giac's python2xcas): in the build without units and without steps (the makefile's
+// FEATURE_DEFS)
+#if defined WITH_UNITS || defined FLOWCE_STEPS
 #define FLOWCE_PYTHON 0
 #else
 #define FLOWCE_PYTHON 1
