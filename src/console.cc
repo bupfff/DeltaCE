@@ -2301,8 +2301,10 @@ static int console_insert_template(const quick_item & q){
 // (integrate, diff, limit, series; not sum: its k) act on what is typed when the caret ends the
 // line: x^2-1 then Factor gives factor(x^2-1), x^2 then Antiderivative integrate(x^2,x); on an
 // empty line, on the last answer: factor(Ans), as a TI's menus paste Ans>Frac. ENTER evaluates as
-// usual. A slot left empty gets the caret: integrate(x^2,x,|,), limit(1/x,x,|). Elsewhere (the
-// caret inside the line, nothing to act on) the template goes in. 1 if done.
+// usual. A slot left empty gets the caret: integrate(x^2,x,|,), limit(1/x,x,|). The caret ends the
+// line also before brackets that closed themselves (sin(x|) is sin(x) typed). Elsewhere (the
+// caret inside the line, nothing to act on) the template goes in, after a * when a letter is
+// before the caret (x then integrate( would read xintegrate). 1 if done.
 static int console_apply_action(const char * text){
   static const char * const acts[]={"solve(","factor(","expand(","simplify(","partfrac(","integrate(","diff(","limit(","series("};
   const char * open=strchr(text,'(');
@@ -2312,14 +2314,20 @@ static int console_apply_action(const char * text){
   if (!act || !console_input2d() || !Edit_Line)
     return 0;
   const char * e=(const char *)Edit_Line;
-  const int len=strlen(e);
+  const int len=strlen(e),caret=console_caret();
+  bool at_end=len && caret>=0;
+  for (int i=caret;at_end && i<len;++i)
+    at_end=e[i]==')';
   std::string s(text,open+1-text); // factor(
-  if (len && console_caret()==len)
+  if (at_end)
     s+=e;
   else if (!len && focus_result_line()>=0)
     s+="ans()";
-  else
+  else {
+    if (caret>0 && (isalpha((unsigned char)e[caret-1]) || e[caret-1]=='_'))
+      Console_Input((const Char *)"*");
     return 0;
+  }
   s+=open+1; // ) or ,x) or ,x,,)
   Console_Clear_EditLine();
   Console_Input((const Char *)s.c_str());
