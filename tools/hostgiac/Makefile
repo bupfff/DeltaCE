@@ -30,7 +30,7 @@ endif
 USTL_SRC := $(wildcard $(T)/ustlsrc/*.cc)
 TOM_SRC := $(wildcard $(REPO)/src/tommath/*.c)
 # KhiCAS's input pre-pass (TI implicit multiplication), used by the driver's -i option
-KHI_SRC := $(REPO)/src/tiinput.cc $(REPO)/src/tiinput_glue.cc
+KHI_SRC := $(REPO)/src/tiinput.cc $(REPO)/src/tiinput_glue.cc $(REPO)/src/steps.cc
 OBJS := $(patsubst $(T)/giac/%.cc,$(OBJ)/giac/%.o,$(GIAC_SRC)) \
         $(patsubst $(T)/ustlsrc/%.cc,$(OBJ)/ustl/%.o,$(USTL_SRC)) \
         $(patsubst $(REPO)/src/tommath/%.c,$(OBJ)/tommath/%.o,$(TOM_SRC)) \

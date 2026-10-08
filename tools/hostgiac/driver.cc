@@ -120,6 +120,28 @@ static void report_retained(const char * label){
 extern "C" bool khicas_implicit_mult(char * line,int maxlen); // tiinput_glue.cc
 std::string khicas_do_run(const char * s) __attribute__((weak)); // khicas_post.cc (KDISPLAY=1)
 std::string khicas_forms(const char * s) __attribute__((weak)); // -F: the answer and its F4 forms
+extern void answer_prepass(char * buf,int cap,bool focus);
+
+// -S: the step-by-step solution of each input (src/steps.cc), then FlowCE's answer. Each step: its
+// depth, its rule's title, the formula it applies, its math line; then the time and the result.
+#include "../../src/steps.h"
+static void print_steps(const char * s){
+  char buf[1024]; strncpy(buf,s,500); buf[500]=0;
+  answer_prepass(buf,sizeof(buf),true);
+  gen g(buf,contextptr);
+  std::vector<step_t> v;
+  struct timespec t0,t1; clock_gettime(CLOCK_MONOTONIC,&t0);
+  bool ok=steps_of(g,v,contextptr);
+  clock_gettime(CLOCK_MONOTONIC,&t1);
+  ctrl_c=kbd_interrupted=interrupted=false;
+  printf("== %s   [%s, %d steps, %.0f ms]\n",s,ok?"ok":"NO STEPS",(int)v.size(),(t1.tv_sec-t0.tv_sec)*1e3+(t1.tv_nsec-t0.tv_nsec)/1e6);
+  for (unsigned i=0;ok && i<v.size();++i){
+    const char * t=steps_title(v[i]);
+    printf("%*s%s%s%s\n",2+4*v[i].depth,"",*t?t:"",*t?":  ":"= ",steps_math(v[i],contextptr).print(contextptr).c_str());
+  }
+  if (khicas_do_run) printf("   FlowCE answer: %s\n",khicas_do_run(s).c_str());
+  fflush(stdout);
+}
 static std::string eval_one(const char * s,bool autosimp,bool prepass){
   ctrl_c=kbd_interrupted=interrupted=false; // do_eval
   std::string text(s);
@@ -141,7 +163,7 @@ static std::string eval_one(const char * s,bool autosimp,bool prepass){
 
 int main(int argc,char ** argv){
   int N=1,trace_round=0;
-  bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false;
+  bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false,steps=false;
   const char * file=0;
   static const char * exprs[8192]; int ne=0;
   for (int i=1;i<argc;++i){
@@ -158,6 +180,7 @@ int main(int argc,char ** argv){
       dorun=true;
     }
     else if (!strcmp(argv[i],"-m")) measure=true;
+    else if (!strcmp(argv[i],"-S")) steps=true;
     else if (!strcmp(argv[i],"-t") && i+1<argc) trace_round=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-d") && i+1<argc) stack_depth=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-L")){ static void * volatile p; p=malloc(100); p=0; }
@@ -185,6 +208,10 @@ int main(int argc,char ** argv){
   contextptr=new giac::context;
   giac::epsilon(contextptr)=1e-5;
   angle_radian(1,contextptr);
+  if (steps){
+    for (int k=0;k<ne;++k) print_steps(exprs[k]);
+    return 0;
+  }
   for (int r=1;r<=N;++r){
     for (int k=0;k<ne;++k){
       const bool tr=measure || r==trace_round;
