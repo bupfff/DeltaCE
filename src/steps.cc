@@ -363,11 +363,13 @@ static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen
   vecteur ids=lidnt(makevecteur(d,f));
   double c=0.71;
   EACH(it,ids){ if (*it!=x && evalf(*it,1,CTX).type!=_DOUBLE_){ d=sub(d,*it,c); f=sub(f,*it,c); } c+=0.17; } // (pi keeps its value)
-  static const double pts[]={0.13,0.37,0.61,0.89,0.37,-0.61,1.29,-2.4,2.13,3.7,5.3,-7.9,11.3};
+  // (the last ones, next to 0, while fewer than 3 points gave a number: (2x+1)^2026 stays finite there
+  // in the calculator's 32-bit floats)
+  static const double pts[]={0.13,0.37,0.61,0.89,0.37,-0.61,1.29,-2.4,2.13,3.7,5.3,-7.9,11.3,0.011,-0.013,0.007};
   // the points: inside [lo,hi], the fixed ones, then next to the real ones while fewer than 3 are
   // (sqrt(sec(3x^2-7x)) is real only near some of them)
   vecteur ps;
-  for (int i=lo?0:4;i<(only?4:13);++i) ps.push_back(i<4?ev(*lo+(*hi-*lo)*pts[i]):gen(pts[i]));
+  for (int i=lo?0:4;i<(only?4:16);++i) ps.push_back(i<4?ev(*lo+(*hi-*lo)*pts[i]):gen(pts[i]));
   unsigned nf=ps.size();
   int real=0,cplx=0;
   for (unsigned i=0;i<ps.size() && real<5 && (i<nf || real<3);++i){
@@ -1820,6 +1822,7 @@ static gen one_(const gen & op){
   if (is(op,at_sum)) return ssteps(op,v,x);
   if (is(op,at_series)) return tsteps(op,v,x);
   if (is(op,at_derive)){
+    if (v.size()>2) return undef; // (of order 5 or more: nest)
     gen r;
     if (ftc1able(op)){
       const vecteur & w=*arg(v[0])._VECTptr; // integrate(f,t,a,b)
@@ -1900,14 +1903,16 @@ static gen one(const gen & op){
   return r;
 }
 
-// diff(f,x,2) and diff(f,x,y) as nested derivatives
+// diff(f,x,2) and diff(f,x,y) as nested derivatives (up to the 4th: the 23rd of x^2 sin(x^3) took
+// 31050 steps, 168 MB and 64 s on the PC; one of order 5 or more has no steps, as the course reads
+// it off the Taylor series)
 static gen nest(const gen & g){
   if (g.type!=_SYMB) return g;
   gen a=arg(g);
   if (a.type==_VECT){
     vecteur w=*a._VECTptr;
     EACHW(it,w) *it=nest(*it);
-    if (is(g,at_derive) && w.size()>2){
+    if (is(g,at_derive) && w.size()>2 && !(w.back().type==_INT_ && w.back().val>4)){
       gen r=w[0];
       for (unsigned i=1;i<w.size();++i){
         if (w[i].type==_INT_ && i>1){ for (int k=1;k<w[i].val;++k) r=SYM2(at_derive,r,w[i-1]); continue; }

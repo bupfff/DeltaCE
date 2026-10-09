@@ -27,10 +27,16 @@ extern "C" { extern volatile char oom_hit; } // allocator_custom.c: memory ran o
 void oom_rearm(); // main.cc: the memory reserve, taken again
 
 static bool starts(const char * s, const char * p) { return !strncmp(s, p, strlen(p)); }
-// a calculation the steps screen can show: a derivative, an integral or a limit
+// a calculation the steps screen can show: a derivative, an integral, a limit, a sum, a Taylor
+// polynomial, also inside another command (subst(diff(f,x,3),x=0), solve(diff(f,x)=0,x): the
+// steps take the calculus part first, then the rest)
 int focus_steps_able(const char * s) {
-  while (*s == ' ') ++s;
-  return starts(s, "diff(") || starts(s, "integrate(") || starts(s, "int(") || starts(s, "derive(") || starts(s, "limit(") || starts(s, "series(") || starts(s, "sum(");
+  static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum("};
+  for (const char * p = s; *p; ++p)
+    if (p == s || !isalnum((unsigned char)p[-1]))
+      for (unsigned k = 0; k < sizeof(ops) / sizeof(ops[0]); ++k)
+        if (starts(p, ops[k])) return 1;
+  return 0;
 }
 
 // The page: items laid out once (page coordinates: y from the top of the page), drawn in bands.
