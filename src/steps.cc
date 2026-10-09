@@ -22,7 +22,7 @@ enum {
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
   R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
-  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_COSPI, R_NRULES
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_COSPI, R_LOSC, R_LDIVQ, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -89,7 +89,7 @@ static const char * const RULES[]={
   "Factor out the fastest term",0,"A=B",
   "Derivatives",0,"A=B",
   "Their values at the center",0,"A=B",
-  "Taylor polynomial","T(x)=sum(f^(k)(a)/k!*(x-a)^k,k,0,n)","A=B",
+  "Taylor polynomial",0,"A=B",
   "Divergence test: the terms do not go to 0",0,"A=B",
   "Ratio of consecutive terms",0,"A=B",
   "Geometric series with |r| < 1","sum(a*r^k,k,0,inf)=a/(1-r)","A=B",
@@ -97,7 +97,7 @@ static const char * const RULES[]={
   "Partial sum: the middle terms cancel",0,"A=B",
   "Its limit",0,"A=B",
   "p-series: converges for p > 1, diverges for p <= 1","sum(1/n^p,n,1,inf)","A=B",
-  "Limit comparison with the p-series",0,"A=B",
+  "Limit comparison with the p-series","limit(a(n)/b(n),n,inf)=L","A=B",
   "Indeterminate form",0,"A,B",
   "Alternating series test: the size decreases to 0",0,"A=B",
   "Ratio test: below 1, the series converges",0,"A=B",
@@ -105,6 +105,8 @@ static const char * const RULES[]={
   "Log of a quotient","ln(a/b)=ln(a)-ln(b)","A=B",
   "Integral test: same behavior as the integral",0,"A",
   "cos(n pi) is (-1)^n",0,"A=B",
+  "Oscillates between -1 and 1: no limit",0,"A=B",
+  "Long division",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -312,7 +314,7 @@ static NOINL gen norm(const gen & g){
   if ((u==at_plus || u==at_prod) && a.type==_VECT){
     flat(&u,SYM(&u,a),v); return SYM(&u,gen(v,_SEQ__VECT));
   }
-  if (u==at_neg && a.type<_IDNT) return -a;
+  if (u==at_neg && (a.type<_IDNT || a==plus_inf)) return -a; // (-inf: not -(+infinity) at the top)
   if (u==at_sqrt) // sqrt(x^7) is x^(7/2); a power: giac prints x-sqrt(x+1) as x-(sqrt(x+1))
     return a.is_pow() && arg(a,0).type==_IDNT?symb_pow(arg(a,0),ev(arg(a,1)/2)):symb_pow(a,plus_one_half);
   return SYM(&u,a);
@@ -934,7 +936,9 @@ static NOINL gen ratfrac(const gen & fe,int lev){
   if (!shape(fe,SH_FRAC) || !dep(_denom(fe,CTX))) return undef;
   gen p=pfrac(fe);
   if (is_undef(p) || p==fe || !p.is_plus()) return undef;
-  return via(R_PFRAC,fe,p,lev);
+  vecteur t; flat(at_plus,p,t); // a polynomial and one fraction (x^2/(x^2+1)): long division
+  int k=0; EACH(it,t) if (dep(_denom(*it,CTX))) ++k;
+  return via(k>1?R_PFRAC:R_LDIVQ,fe,p,lev);
 }
 // (a x+b)/q^n, q = A x^2+B x+C: a/(2A) q'/q^n plus the rest (a logarithm and an arctangent)
 static NOINL gen splitnum(const gen & fe,int lev){
@@ -1333,7 +1337,7 @@ static gen * la_;
 static NOINL gen Lx(const gen & f){ return SYM(at_limit,ldir_?makesequence(f,X,*la_,ldir_):makesequence(f,X,*la_)); }
 static NOINL gen glim(const gen & g){ return ev(Lx(g)); }
 static NOINL bool finv(const gen & v){ return v.type!=_STRNG && !has_inf_or_undef(v) && !has_op(v,*at_bounded_function); }
-static NOINL gen Ls(int r,const gen & f,const gen & v){ S(r,Lx(f),v); return v; } // lim f = v by rule r
+static NOINL gen Ls(int r,const gen & f,const gen & v0){ gen v=v0.type==_FRAC?v0._FRACptr->num/v0._FRACptr->den:v0; S(r,Lx(f),v); return v; } // lim f = v by rule r (giac's limit gave the fraction 1/-7)
 static gen lsteps(const gen & f,int lev);
 static gen lq(const gen & f,const gen & n,const gen & d,int lev);
 static NOINL gen quo(const gen & n,const gen & d){ return is_one(d)?n:symb_prod(n,symb_inv(d)); }
@@ -1341,7 +1345,7 @@ static NOINL gen quo(const gen & n,const gen & d){ return is_one(d)?n:symb_prod(
 static NOINL gen lvia(int r,const gen & f,const gen & n,const gen & d,int lev){
   size_t m=mark();
   gen g=quo(n,d);
-  S(r,Lx(f),Lx(g));
+  if (mergek(Lx(f)).print(CTX)!=mergek(Lx(g)).print(CTX)) S(r,Lx(f),Lx(g)); // (no step that changes nothing on the screen: e^x/(2x))
   gen L=is_one(d)?lsteps(n,lev+1):lq(g,n,d,lev+1);
   if (is_undef(L)) cut(m);
   return L;
@@ -1405,7 +1409,9 @@ static gen lq(const gen & f,const gen & n,const gen & d,int lev){
   if (!(zn && zd) && !(in && id)) return undef;
   // 0/0, inf/inf: the fraction simplified (factor and cancel), defined at a (at infinity: shorter)
   gen fe=ev(f),h=rn(fe);
-  if (h!=fe && (is_inf(a)?taille(h,200)<taille(fe,200):finv(ev(sub(h,X,a)))) && !is_undef(v=lvia(R_LALG,f,h,1,lev))) return v;
+  gen dh=_denom(h,CTX);
+  if (h!=fe && (is_inf(a)?shape(d,0) && shape(dh,0)?is_strictly_greater(_degree(makesequence(d,X),CTX),_degree(makesequence(dh,X),CTX),CTX):taille(h,200)<taille(fe,200):finv(ev(sub(h,X,a)))) && !is_undef(v=lvia(R_LALG,f,h,1,lev))) return v;
+  // (at infinity a denominator of lower degree: (x^4-4x^3+1)/(2-2x^2-7x^4) only changed its signs)
   // a finite point: a square root in a sum, times its conjugate over itself
   gen c=is_inf(a)?gen(0):conjof(n);
   const bool top=!is_zero(c);
@@ -1417,7 +1423,7 @@ static gen lq(const gen & f,const gen & n,const gen & d,int lev){
   if (finv(p) && is_strictly_positive(p,CTX)){
     gen t=pow(X,p,CTX),n2=rootin(expand(ev(n/t),CTX)),d2=rootin(expand(ev(d/t),CTX));
     // (over a denominator x^p itself: only when the numerator comes apart, (x+cos(x))/x; e^x/x stays)
-    if ((!is_one(d2) || n2.is_plus()) && !is_undef(v=lvia(R_LDIV,f,n2,d2,lev))) return v;
+    if ((dep(d2) || n2.is_plus()) && !is_undef(v=lvia(R_LDIV,f,n2,d2,lev))) return v; // (e^x/(2x): no)
   }
   else if (is_inf(a) && d.is_plus()){ // no power of x (e^x below): over its fastest term
     gen t=fastest(d);
@@ -1480,6 +1486,20 @@ static gen lsteps(const gen & f0,int lev){
       if (dep(d) && !is_undef(v=lvia(R_LFRAC,f,_numer(h,CTX),d,lev))) return v;
       gen tt=is_inf(a)?fastest(f):gen(0);
       return is_zero(tt)?gen(undef):lvia(R_LDOM,f,symb_prod(tt,expand(ev(f/tt),CTX)),1,lev);
+    }
+  }
+  if (has_op(f,*at_sin) || has_op(f,*at_cos)){ // limit laws need every part's limit: a term with a
+    vecteur t,u; flat(at_plus,f,t); // sine or cosine factor without one, going to 0, by the squeeze
+    EACH(it,t){ // theorem first (cos(x)/x at infinity; 2+sqrt(atan(x))*sqrt(sin(1/x)) at 0)
+      u.clear(); flat(at_prod,*it,u);
+      int k=0; // factors without a limit (each a sine or a cosine, or a positive power of one)
+      EACH(jt,u){
+        gen l=glim(*jt),b=jt->is_pow()?arg(*jt,0):*jt;
+        if (finv(l) || is_inf(l)) continue;
+        if ((!is(b,at_sin) && !is(b,at_cos)) || (jt->is_pow() && !is_strictly_positive(arg(*jt,1),CTX))) return undef;
+        ++k;
+      }
+      if (k){ if (!is_zero(glim(*it))) return undef; S(R_LSQZ,Lx(*it),0); }
     }
   }
   v=glim(f); // every part has a limit: put together
@@ -1667,7 +1687,7 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   L=finv(e) && is_strictly_positive(e,CTX)?ev(Linf(t*pow(x,e,CTX),x)):gen(0);
   size_t m=mark();
   if (finv(L) && is_strictly_positive(L,CTX)){
-    S(R_LCMP,Linf(symb_prod(v[0],pow(x,e,CTX)),x),L);
+    S(R_LCMP,Linf(SYM2(at_division,v[0],symb_inv(pow(x,e,CTX))),x),L); // a_n over b_n = 1/n^p, as written (a quotient mergek leaves)
     val=pser(op,G,e);
     if (!is_undef(val)) return val;
     cut(m);
@@ -1720,14 +1740,14 @@ static gen one_(const gen & op){
     gen a=ev(v[2]),L,G;
     la_=&a; ldir_=v.size()>3?(is_positive(v[3],CTX)?1:-1):0;
     budget_=80;
-    size_t m=mark();
-    L=lsteps(v[0],0);
-    if (interrupted) return undef;
-    // (giac's limit of sin(x)/sqrt(1-cos(x)) at 0 as typed: "limits are distinct"; of
-    // sin(x)*(1-cos(x))^(-1/2), sqrt(2)); no limit, steps to a value: the two sides (|x|/x at 0)
+    // giac's limit of the problem as typed (of sin(x)/sqrt(1-cos(x)) at 0: "limits are distinct";
+    // of sin(x)*(1-cos(x))^(-1/2), the steps' form, sqrt(2)); no limit: the two sides first (|x|/x
+    // at 0: L'Hopital was tried for 5 s on the calculator before), then the other ways
     G=ev(depth_?op:*in_);
-    if (!ldir_ && (L.type!=_IDNT || is_undef(L)) && (G.type==_STRNG || G==unsigned_inf)){ cut(m); L=sides(v[0]); } // (undef: a name)
-    if (is_undef(L)) return L;
+    if (has_op(G,*at_bounded_function) && (is(v[0],at_sin) || is(v[0],at_cos))){ L=word("DNE"); S(R_LOSC,Lx(v[0]),L); return L; } // sin(1/x) at 0
+    L=!ldir_ && (G.type==_STRNG || G==unsigned_inf)?sides(v[0]):gen(undef);
+    if (is_undef(L)) L=lsteps(v[0],0);
+    if (interrupted || is_undef(L)) return undef;
     if (L.type==_IDNT) return G.type==_STRNG || G==unsigned_inf || is_undef(G)?L:gen(undef);
     return L==G || (finv(L) && finv(G) && is_zero(evalf(L-G,1,CTX)))?L:gen(undef);
   }

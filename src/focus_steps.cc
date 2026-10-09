@@ -276,7 +276,7 @@ static void lay_steps(const char * head, const std::vector<step_t> & v, const ch
     if (put(K_BOX, 0, X - 4, y, W + 8, 0, 0, 0)) {
       ++GRP;
       static const char DNE[] = "does not exist", DIV[] = "diverges"; // (a limit's, a series' text answer)
-      const char * tx = starts(ans, DNE) ? DNE : starts(ans, DIV) ? DIV : 0;
+      const char * tx = starts(ans, DNE) || starts(ans, "no limit") ? DNE : starts(ans, DIV) ? DIV : 0; // (sin(1/x) at 0: "no limit (it oscillates)")
       const int h = tx ? (put(K_TITLE, (char *)tx, X + (W - ui_text_width(&ui_tb12, tx, -1)) / 2, y + 14, 0, 16, 13, 0), 16)
                        : add_math(ans, strlen(ans), X, y + 14, W - 12 - (plusc ? 44 : 0), 2, K_ANS);
       if (plusc && NP > b + 1) { // + C after the last line

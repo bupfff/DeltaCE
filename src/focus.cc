@@ -158,7 +158,7 @@ static int NE;
 // answer), else 0
 static const char * steps_input(const fent & e) {
   const char * r = e.out < 0 ? 0 : shown((const char *)Line[e.out].str);
-  if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14) && strncmp(r, "diverges", 8))) return 0; // (a limit's "does not exist", a series' "diverges" too)
+  if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14) && strncmp(r, "diverges", 8) && strncmp(r, "no limit", 8))) return 0; // (a limit's "does not exist" or "no limit", a series' "diverges" too)
   const char * s = (const char *)Line[e.in].str;
   return focus_steps_able(s) ? s : 0;
 }
