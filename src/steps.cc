@@ -154,6 +154,17 @@ static NOINL void flat(const unary_function_ptr * u,const gen & g,vecteur & v){
 // for display: the numbers of each product multiplied together (2*1/3 is 2/3, 1*dx is dx)
 static bool isnum(const gen & g){ return g.type<_IDNT || g.type==_FRAC; }
 static gen prodof(const vecteur & v){ return v.empty()?gen(1):v.size()==1?v[0]:symb_prod(v); }
+// a polynomial (names, sums, products, positive integer powers: x, x^2+1), written before the
+// other factors of a product (mergek)
+static NOINL bool polyf(const gen & g){
+  if (g.type<=_IDNT) return true;
+  if (g.type!=_SYMB) return false;
+  if (g.is_pow()) return arg(g,1).type==_INT_ && arg(g,1).val>0 && polyf(arg(g,0));
+  if (!g.is_plus() && !g.is_prod() && !g.is_neg()) return false;
+  if (arg(g).type!=_VECT) return polyf(arg(g));
+  EACH(it,*arg(g)._VECTptr) if (!polyf(*it)) return false;
+  return true;
+}
 static NOINL gen mergek(const gen & g){
   if (g.type==_VECT){ vecteur v=*g._VECTptr; EACHW(it,v) *it=mergek(*it); return gen(v,g.subtype); } // (u=..., du=...)
   if (g.type!=_SYMB) return g;
@@ -166,8 +177,16 @@ static NOINL gen mergek(const gen & g){
     else if (it->is_inv() && isnum(arg(*it))) k=k/arg(*it);
     else w.push_back(*it);
   }
-  if (!is_one(k) || w.empty()) w.insert(w.begin(),k);
-  return prodof(w);
+  // the polynomial factors first, as the textbooks write them (2x e^(x^2), not 2 e^(x^2) x), the
+  // differential last (e^x dx)
+  vecteur u;
+  if (!is_one(k) || w.empty()) u.push_back(k);
+  for (int pass=0;pass<3;++pass)
+    EACH(it,w){
+      const bool d=it->type==_IDNT && it->_IDNTptr->id_name[0]=='d' && it->_IDNTptr->id_name[1] && !it->_IDNTptr->id_name[2];
+      if (pass==(d?2:polyf(*it)?0:1)) u.push_back(*it);
+    }
+  return prodof(u);
 }
 // constant factors in c, the others in v
 static NOINL void factors(const gen & f,vecteur & c,vecteur & v){
