@@ -155,6 +155,7 @@ static NOINL void flat(const unary_function_ptr * u,const gen & g,vecteur & v){
 static bool isnum(const gen & g){ return g.type<_IDNT || g.type==_FRAC; }
 static gen prodof(const vecteur & v){ return v.empty()?gen(1):v.size()==1?v[0]:symb_prod(v); }
 static NOINL gen mergek(const gen & g){
+  if (g.type==_VECT){ vecteur v=*g._VECTptr; EACHW(it,v) *it=mergek(*it); return gen(v,g.subtype); } // (u=..., du=...)
   if (g.type!=_SYMB) return g;
   gen h=map_of(g,mergek);
   if (!h.is_prod() || arg(h).type!=_VECT) return h;
