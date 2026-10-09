@@ -754,9 +754,17 @@ static NOINL bool parts1(const gen & f,int lev,gen & u,gen & dv,gen & du,gen & V
   V=ev(V); k=ev(prodof(c)); rest=rn(V*du);
   return true;
 }
+// h when g is -h (-cos(x), -2*x*e^x): u v - integral of (-h) is written u v + integral of h, as
+// in the textbooks; else undef
+static NOINL gen negpart(const gen & g){
+  if (is(g,at_neg)) return arg(g);
+  vecteur c,v; factors(g,c,v);
+  return !c.empty() && is_strictly_positive(-ev(prodof(c)),CTX)?rn(-g):undef;
+}
 static NOINL void parts_steps(const gen & f,const gen & u,const gen & dv,const gen & du,const gen & V,const gen & k,const gen & rest){
   S(R_PARTS,u,dv); S(R_PARTSV,du,V);
-  S(R_PARTS2,f,k*(u*V-Ix(rest)));
+  gen n=negpart(rest);
+  S(R_PARTS2,f,k*(is_undef(n)?u*V-Ix(rest):u*V+Ix(n)));
 }
 static NOINL gen parts(const gen & f,int lev){
   gen u,dv,du,V,k,rest;
@@ -774,9 +782,10 @@ static NOINL gen parts(const gen & f,int lev){
       return I;
     }
   }
-  ++depth_; gen R=isteps(rest,lev+1); --depth_;
+  gen n=negpart(rest);
+  ++depth_; gen R=isteps(is_undef(n)?rest:n,lev+1); --depth_;
   if (is_undef(R)){ cut(m); return R; }
-  gen F=ev(k*(u*V-R));
+  gen F=ev(k*(is_undef(n)?u*V-R:u*V+R));
   S(R_EQI,f,F);
   return F;
 }
