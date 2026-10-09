@@ -763,7 +763,7 @@ void cleanup(std::string & s){
 
 // confirm() as a Focus card: the texts after "F1:" and "F5:" in msg2 are its two choices
 // (Cancel / Erase); a msg2 without them is a value under the title (graph: Root at, -3.14159)
-static int focus_confirm(const char * msg1,const char * msg2,bool acexit){
+static __attribute__((noinline)) int focus_confirm(const char * msg1,const char * msg2,bool acexit){
   const char * f[2]={msg2?strstr(msg2,"F1"):0,msg2?strstr(msg2,"F5"):0};
   int key;
   if (!f[0] || !f[1]){
@@ -1518,7 +1518,7 @@ static void console_remove_line(int i){
 }
 
 // a LINE_TYPE_CONT row inserted at index i (the lines below, edit line included, move down)
-static bool console_insert_cont(int i){
+static __attribute__((noinline)) bool console_insert_cont(int i){
   if (Last_Line>=LINE_MAX-1)
     return false;
   for (int j=Last_Line+1;j>i;--j)
@@ -2172,7 +2172,7 @@ static bool console_prev_is_value(){
 
 // Close brackets left open on the input line, as TI-OS does on ENTER: "sin(x" -> "sin(x)".
 // Lines with strings left open, a // comment or a mismatched closer are left untouched.
-static void console_autoclose(Char * s){
+static __attribute__((noinline)) void console_autoclose(Char * s){
   char stack[64];
   int n=0,l=strlen(s);
   bool str=false;
@@ -2211,7 +2211,7 @@ static void console_autoclose(Char * s){
 // An empty slot left in the line (a template's box: integrate(,x), sqrt(), ()/(), limit(f,x,),
 // or an operator at the end: 2+): its position, or -1. ENTER then moves there instead of
 // evaluating, like an online calculator that points at the missing box.
-static int console_empty_slot(const char * s){
+static __attribute__((noinline)) int console_empty_slot(const char * s){
   const int n=strlen(s);
   bool str=false;
   for (int i=0;i<n;++i){
@@ -2308,7 +2308,7 @@ static int console_insert_template(const quick_item & q){
 // the line is one expression an action can take: no top-level = (solve: an equation is fine),
 // :=, => or comma, and not ending with an operator. f(x)=1+x then the integral: f(x)=1+x*integral
 // (the user's f(x)=1+x*int(f(t^2),t,-1,1)), not integrate((f(x)=1+x),x)
-static bool console_wrappable(const char * e,bool solve){
+static __attribute__((noinline)) bool console_wrappable(const char * e,bool solve){
   int d=0;
   char last=0;
   for (const char * p=e;*p;++p){

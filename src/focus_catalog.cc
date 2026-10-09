@@ -412,7 +412,7 @@ static int sb_of(const cat_state & s) {
 // the list moved by one row (d = 1: down) as the selection crossed an edge: the 5 rows that stay
 // move as pixels, and the 2 rows at that end (the new entry, the one losing the selection) are
 // composed in the strip first, copied right after the move; the scrollbar is redrawn in place
-static void scroll(int d) {
+static __attribute__((noinline)) void scroll(int d) {
   cat_state & s = *S;
   unsigned char * scr = ui_fb; // the screen (no band open)
   int r0 = d > 0 ? ROWS - 2 : 0, y0 = LT + r0 * RH, band = ui_band_open(48) >= 2 * RH;
@@ -438,7 +438,7 @@ static void scroll(int d) {
 }
 
 // the rows that changed, the selected one first; 0 if a key stopped it
-static int rows_update() {
+static __attribute__((noinline)) int rows_update() {
   cat_state & s = *S;
   int d = s.top - s.stop;
   if ((d == 1 || d == -1) && s.sb > 0 && !key_waiting()) scroll(d);

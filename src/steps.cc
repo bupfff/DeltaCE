@@ -814,10 +814,10 @@ static NOINL bool rooted(const gen & g,const gen & u){
   if (a.type==_VECT){ EACH(it,*a._VECTptr) if (rooted(*it,u)) return true; return false; }
   return rooted(a,u);
 }
-// a factor u^n of g, n >= 3
+// a factor u^n of g, n >= 3 (u = 0: of any linear sum a x+b)
 static NOINL bool upow(const gen & g,const gen & u){
   vecteur c,v; factors(g,c,v);
-  EACH(it,v){ gen w=*it,e=bexp(w); if (w==u && e.type==_INT_ && e.val>=3) return true; }
+  EACH(it,v){ gen w=*it,e=bexp(w),a,b; if (e.type==_INT_ && e.val>=3 && (is_zero(u)?w.is_plus() && is_linear_wrt(w,X,a,b,CTX):w==u)) return true; }
   return false;
 }
 static NOINL gen trigsub(const gen & f,int lev);
@@ -1077,12 +1077,6 @@ static NOINL gen square(const gen & fe,int lev){
 }
 // a product of sums of powers of x (no rational fraction): expanding gives powers
 static bool powers_only(const gen & fe){ return !fe.is_plus() && shape(fe,SH_ROOTX); }
-// a factor (a x+b)^n, n >= 3, b != 0
-static NOINL bool lpow(const gen & fe){
-  vecteur c,v; factors(fe,c,v);
-  EACH(it,v){ gen w=*it,e=bexp(w),a,b; if (w.is_plus() && is_linear_wrt(w,X,a,b,CTX) && e.type==_INT_ && e.val>=3) return true; }
-  return false;
-}
 static NOINL gen expandit(const gen & fe,int lev){
   if (fe.is_plus() || taille(fe,64)>48) return undef;
   gen t=expand(fe,CTX);
@@ -1266,7 +1260,7 @@ static gen isteps(const gen & f0,int lev){
     // is u = 2x+1 (a power >= 3 of a linear sum, rooted); giac's degree expands the powers: not
     // for those (1.25 MB of heap for 8x (2x+1)^2026: the calculator ran out of memory and quit)
     const bool big=bigp(fe);
-    gen d=big || lpow(fe)?gen(99):_degree(makesequence(fe,X),CTX);
+    gen d=big || upow(fe,0)?gen(99):_degree(makesequence(fe,X),CTX);
     if ((d.type!=_INT_ || d.val>6) && !is_undef(F=usub(f,lev))) return F;
     if (big) return undef;
     if (!is_undef(F=expandit(fe,lev))) return F;
@@ -1800,7 +1794,7 @@ static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
   return P;
 }
 // One calculus operation, with none inside: its value (undef: no steps)
-static gen one_(const gen & op){
+static NOINL gen one_(const gen & op){
   const vecteur & v=*arg(op)._VECTptr;
   gen x=v[1]; var_=&x;
   if (is(op,at_limit)){ // the steps' limit must be giac's (no limit: giac says so too)

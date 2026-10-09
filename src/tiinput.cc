@@ -139,7 +139,7 @@ static int im_oplen(const char * s,int i,int n){
 // ":=" (a definition f(x):=...) is replaced by 'D'.
 // Linear: the parentheses are matched right to left with a stack of flags
 // "this ')' is followed by :=" kept in a string.
-static void im_defmarks(const char * s,int n,std::string & mk){
+static __attribute__((noinline)) void im_defmarks(const char * s,int n,std::string & mk){
   mk.reserve(n);
   int nclose=0;
   for (int i=0;i<n;){
@@ -209,7 +209,7 @@ static bool im_cuttable(const char * s,int len){
 // piece, and only if fn) a FUNCTION name. Ties go to the longest first piece.
 // Returns the offset of the last piece, or -1 (nothing appended) when the
 // only cut is into single letters and the name is too long for that.
-static int im_cut(const char * s,int len,ti_classify_fn classify,bool fn,std::string & out){
+static __attribute__((noinline)) int im_cut(const char * s,int len,ti_classify_fn classify,bool fn,std::string & out){
   // cnt[k]: fewest pieces for s[k..len), nxt[k]: end of the first of them
   unsigned char cnt[IM_MAXCUT+1],nxt[IM_MAXCUT+1];
   cnt[len]=0;
@@ -453,7 +453,7 @@ static int im_runend(const char * s,int i,int n,ti_classify_fn classify){
 }
 // f(x)=... at the start of the line: index of that '=' (to become ":="), or -1;
 // name: end of the function name, which is copied as is
-static int im_defeq(const char * s,int n,ti_classify_fn classify,int & name){
+static __attribute__((noinline)) int im_defeq(const char * s,int n,ti_classify_fn classify,int & name){
   int i=0;
   while (i<n && im_blank(s[i]))
     ++i;

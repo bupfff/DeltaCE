@@ -189,7 +189,7 @@ static int mono_deg(const giac::gen & t,giac::gen & v){
 }
 // a sum whose leading term is negative: the highest power of a polynomial in one variable (2-x^2),
 // else most of its terms (-a-b+c)
-static bool lead_negative(const giac::gen & p){
+static __attribute__((noinline)) bool lead_negative(const giac::gen & p){
   using namespace giac;
   if (!p.is_symb_of_sommet(at_plus) || p._SYMBptr->feuille.type!=_VECT || p._SYMBptr->feuille._VECTptr->size()<2)
     return false;
@@ -301,7 +301,7 @@ static bool num_coef(const giac::gen & t,giac::gen & c){
   }
   return true;
 }
-static giac::gen sum_content(const giac::gen & p){
+static __attribute__((noinline)) giac::gen sum_content(const giac::gen & p){
   using namespace giac;
   const vecteur & w=*p._SYMBptr->feuille._VECTptr;
   gen nu=0,de=1;
@@ -360,7 +360,7 @@ static int trig_key(giac::gen t,int & size){
     }
   return 6;
 }
-static bool factor_before(const giac::gen & a,const giac::gen & b){
+static __attribute__((noinline)) bool factor_before(const giac::gen & a,const giac::gen & b){
   const int ra=factor_rank(a),rb=factor_rank(b);
   if (ra!=rb)
     return ra<rb;
@@ -663,7 +663,7 @@ static bool trig_power(const giac::gen & g){
 
 // a polynomial factor: an identifier or a sum of identifiers' monomials (x, x-1, x^2+y), or a
 // positive integer power of one ((x^2+1)^2); sum: it is (or is a power of) a sum
-static bool poly_factor(const giac::gen & f,bool & sum){
+static __attribute__((noinline)) bool poly_factor(const giac::gen & f,bool & sum){
   using namespace giac;
   gen b=f;
   if (f.is_symb_of_sommet(at_pow)){
@@ -686,7 +686,7 @@ static bool poly_factor(const giac::gen & f,bool & sum){
 // factored expression; ratnormal expanded a stored (x-1)*(x+1) to x^2-1): numbers times at least
 // two polynomial factors, one of them a sum. Its numbers are multiplied (3*2*x*(x^2+1)^2 is
 // 6*x*(x^2+1)^2) and each factor's base normalized; undef if g is not such a product.
-static giac::gen keep_factored(const giac::gen & g){
+static __attribute__((noinline)) giac::gen keep_factored(const giac::gen & g){
   using namespace giac;
   const bool neg=g.is_symb_of_sommet(at_neg);
   const gen & h=neg?g._SYMBptr->feuille:g;
@@ -755,7 +755,7 @@ static giac::gen safe_normal(const giac::gen & g){
 }
 // a sum's terms rational in its variable, collected: the 4th derivative of ln(x^6)-cos(4x) was
 // 360/x^4-720/x^4-...-2016/x^4-256cos(4x)+..., now -36/x^4-256cos(4x)+... (kept if shorter)
-static giac::gen collect_rational(const giac::gen & g){
+static __attribute__((noinline)) giac::gen collect_rational(const giac::gen & g){
   using namespace giac;
   const vecteur ids=lidnt(g);
   if (!g.is_symb_of_sommet(at_plus) || g._SYMBptr->feuille.type!=_VECT || ids.size()!=1)
@@ -778,7 +778,7 @@ static giac::gen collect_rational(const giac::gen & g){
   const gen s=rest.size()==1?rest.front():sym1(at_plus,gen(rest,_SEQ__VECT));
   return taille(s,1000)<taille(g,1000)?s:g;
 }
-static giac::gen auto_simplify(const giac::gen & g){
+static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
   using namespace giac;
   if ((g.type!=_SYMB && g.type!=_VECT) || is_undef(g) || taille(g,100)>=100)
     return g;
@@ -1229,7 +1229,7 @@ static void dne_text(char * b,const char * l,int ln,const char * r,int rn){
   strncat(b,r,rn);
   strcat(b," from the right");
 }
-static bool limit_dne(const giac::gen & in,const giac::gen & g,std::string & msg){
+static __attribute__((noinline)) bool limit_dne(const giac::gen & in,const giac::gen & g,std::string & msg){
   using namespace giac;
   if (!in.is_symb_of_sommet(at_limit) || in._SYMBptr->feuille.type!=_VECT || in._SYMBptr->feuille._VECTptr->size()!=3)
     return false;
@@ -1674,7 +1674,7 @@ static __attribute__((noinline)) giac::gen power_sum(const giac::gen & g){
 // polynomial written in u (dx = du/a) gives k u^(j+n+1)/(j+n+1), u kept as a x+c. 8x(2x+1)^2026 is
 // (2x+1)^2028/1014-2(2x+1)^2027/2027 (giac expanded the power: 49 s and 790 MB on the PC, a crash
 // on the calculator), x(2x+1)^5 is (2x+1)^7/56-(2x+1)^6/24, not (192x^7+...)/42. 0 if none.
-static giac::gen linsub(const giac::gen & f,const giac::gen & x){
+static __attribute__((noinline)) giac::gen linsub(const giac::gen & f,const giac::gen & x){
   using namespace giac;
   const vecteur fs=f.is_symb_of_sommet(at_prod) && f._SYMBptr->feuille.type==_VECT?*f._SYMBptr->feuille._VECTptr:vecteur(1,f);
   for (unsigned i=0;i<fs.size();++i){
@@ -1875,7 +1875,7 @@ void result_approx(const giac::gen & g){
 // p/q*m -> p*m/q, m*order_size(v) -> O(m); exp(1) -> e. Inside brackets nothing changes.
 // Plain chars (uSTL string ops are large and substr(pos) is broken).
 // log( typed as a word becomes log10( (outside strings), when buf (capacity cap) has the room
-static void ti_log10(char * buf,int cap){
+static __attribute__((noinline)) void ti_log10(char * buf,int cap){
   int n=strlen(buf);
   bool str=false;
   for (int i=0;i+4<=n;++i){
@@ -1898,7 +1898,7 @@ static bool word_char(char c){ return isalnum((unsigned char)c) || c=='_'; }
 // Riemann sums use i as the index, sum((i/n)^2/n,i,1,n), but giac's i is sqrt(-1) ("please use a
 // valid identifier name"). In a sum(, product( or seq( whose index is i, i becomes k (or j, m:
 // a letter the call does not use). Same length: no room needed.
-static void sum_index_i(char * buf){
+static __attribute__((noinline)) void sum_index_i(char * buf){
   const int n=strlen(buf);
   for (int i=0;i<n;++i){
     const int L=!strncmp(buf+i,"sum(",4)?4:!strncmp(buf+i,"seq(",4)?4:!strncmp(buf+i,"product(",8)?8:0;
@@ -2041,7 +2041,7 @@ __attribute__((noinline)) void textbook(std::string & str){
 }
 
 // giac prints each right side of x=... in parentheses: drops them when they enclose the whole side
-static void strip_equation_parens(std::string & s){
+static __attribute__((noinline)) void strip_equation_parens(std::string & s){
   for (size_t i=0;i+1<s.size();++i){
     if (s[i]!='=' || s[i+1]!='(')
       continue;
@@ -2069,7 +2069,7 @@ static giac::gen solutions_as_equations(const giac::gen & s,const giac::gen & x)
   return w.size()==1?w.front():gen(w,_SEQ__VECT);
 }
 // solve([x+y=3,x-y=1],[x,y]) gives [[2,1]]: x=2, y=1 (several solutions: one list each)
-static giac::gen system_as_equations(const giac::gen & s,const giac::gen & xs){
+static __attribute__((noinline)) giac::gen system_as_equations(const giac::gen & s,const giac::gen & xs){
   using namespace giac;
   if (s.type!=_VECT || xs.type!=_VECT)
     return s;
@@ -2089,7 +2089,7 @@ static giac::gen system_as_equations(const giac::gen & s,const giac::gen & xs){
   return gen(rows,_SEQ__VECT);
 }
 // (x>-2) and (x<2) as -2<x<2 (and <=, >=), in the printed solutions of an inequality
-static void chain_inequalities(std::string & str){
+static __attribute__((noinline)) void chain_inequalities(std::string & str){
   const char * s=str.c_str();
   if (!strstr(s," and "))
     return;
@@ -2247,7 +2247,7 @@ static void trig_nodes(const giac::gen & g,std::vector<std::string> & v){
   }
   trig_nodes(g._SYMBptr->feuille,v);
 }
-static bool same_trig_nodes(const giac::gen & a,const giac::gen & b){
+static __attribute__((noinline)) bool same_trig_nodes(const giac::gen & a,const giac::gen & b){
   std::vector<std::string> u,v;
   trig_nodes(a,u);
   trig_nodes(b,v);
@@ -2337,7 +2337,7 @@ static bool with_denominator(const giac::gen & t){
 // what a form is at its top: a sum (expanded), a product of factors depending on x (factored)
 // a sum of terms without a sum as a factor (outside functions): x^2*e^x-2x*e^x+2e^x, not
 // x*(2+ln(x)^2)-2x*ln(x); and not one denominator under every term (-x^4/(x^6-..)-4x^2/(x^6-..))
-static bool fully_expanded(const giac::gen & r){
+static __attribute__((noinline)) bool fully_expanded(const giac::gen & r){
   using namespace giac;
   const gen & t=r.is_symb_of_sommet(at_neg)?r._SYMBptr->feuille:r;
   if (!t.is_symb_of_sommet(at_plus) || t._SYMBptr->feuille.type!=_VECT)
@@ -2545,7 +2545,7 @@ static giac::gen form_op(int f,const giac::gen & g){
   return subst(r,to,from,false,contextptr);
 }
 // form k of F's order, computed (once): F.text[k] ("" if the form is not offered), F.form[k]
-static void form_compute(answer_forms & F,int k){
+static __attribute__((noinline)) void form_compute(answer_forms & F,int k){
   using namespace giac;
   F.done[k]=1;
   F.text[k].clear();
@@ -2855,7 +2855,7 @@ static giac::gen by_parts(const giac::gen & f,const giac::gen & x,int depth){
 }
 // x*sec(x)^2, x^2*csc(x)^2...: a polynomial times a function of the table (sec(u)^2...), by parts
 // at once (giac took 38 s on the calculator to give up); 0 for anything else
-static giac::gen parts_table(const giac::gen & g){
+static __attribute__((noinline)) giac::gen parts_table(const giac::gen & g){
   using namespace giac;
   if (!(g.is_symb_of_sommet(at_integrate) || g.is_symb_of_sommet(at_int)) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()!=2)
     return 0;
@@ -2883,7 +2883,7 @@ static giac::gen parts_table(const giac::gen & g){
 // giac's integrate(...) left as is, done by parts: an antiderivative, or a definite integral
 // (the antiderivative at the bounds, when it agrees with the integral computed numerically: a
 // pole between the bounds makes it wrong; else the numeric value)
-static giac::gen integrate_by_parts(const giac::gen & in,const giac::gen & g){
+static __attribute__((noinline)) giac::gen integrate_by_parts(const giac::gen & in,const giac::gen & g){
   using namespace giac;
   if (!in.is_symb_of_sommet(at_integrate) && !in.is_symb_of_sommet(at_int))
     return g;
@@ -3021,7 +3021,7 @@ static bool floor_const(const giac::gen & g,const giac::gen & x){ // x in floors
 }
 // k ln(c h) or k ln|c h| (k and c constants, c > 0) as k ln(h): k ln(c) goes into + C. The integral
 // of 1/(5x) is ln|x|/5, as textbooks write it (giac: ln(5|x|)/5); x ln(5x) stays (x ln(5) varies)
-static giac::gen ln_split(const giac::gen & g,const giac::gen & x){
+static __attribute__((noinline)) giac::gen ln_split(const giac::gen & g,const giac::gen & x){
   using namespace giac;
   if (g.type!=_SYMB)
     return g;
@@ -3071,7 +3071,7 @@ static giac::gen ln_split(const giac::gen & g,const giac::gen & x){
   return sym1(at_ln,ab?sym1(at_abs,r):r);
 }
 
-static giac::gen drop_constants(const giac::gen & g,const giac::gen & x){
+static __attribute__((noinline)) giac::gen drop_constants(const giac::gen & g,const giac::gen & x){
   using namespace giac;
   if (g.type!=_SYMB || is_undef(g) || contains(g,at_integrate) || taille(g,200)>=200)
     return g;
@@ -3200,7 +3200,7 @@ static bool expo(const giac::gen & g,const giac::gen & k){
 }
 // the limit of such a ratio simplified first, as students do: giac's limit was undef for the
 // course's radius problems, lim |x^(2k+2)/sqrt(k+1) / (x^(2k)/sqrt(k))| is x^2 (the steps too)
-giac::gen limit_simp(const giac::gen & g){
+__attribute__((noinline)) giac::gen limit_simp(const giac::gen & g){ // (one copy: the steps call it too)
   using namespace giac;
   if (!g.is_symb_of_sommet(at_limit) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()<3)
     return g;

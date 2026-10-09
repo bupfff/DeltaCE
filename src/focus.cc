@@ -130,7 +130,7 @@ static int ui_text(const ui_face * f, const char * s, int x, int base, int fg, i
 
 // a message (an error, "Out of memory", "no limit...") centered on up to 4 lines of width w
 // between top and bot, cut at spaces; giac's "// " prefix dropped
-static void ui_text_wrapped(const char * s, int top, int bot, int w) {
+static __attribute__((noinline)) void ui_text_wrapped(const char * s, int top, int bot, int w) {
   if (s[0] == '"') ++s;
   if (s[0] == '/' && s[1] == '/') for (s += 2; *s == ' '; ++s) ;
   const char * ln[4];
@@ -200,7 +200,7 @@ static int entry_of_line(int l) {
   return NE - 1;
 }
 
-static void draw_result(const fent & e, int right, int base, int ink, int bg) {
+static __attribute__((noinline)) void draw_result(const fent & e, int right, int base, int ink, int bg) {
   const char * s = shown(Line[e.out].str);
   if (is_text(s)) { // one line, right-aligned, cut with ... when longer than the row
     if (s[0] == '"') ++s;
@@ -234,7 +234,7 @@ static void draw_result(const fent & e, int right, int base, int ink, int bg) {
   draw_math(s, c, right - cw - c.w, base, ink, bg, MI_F_IMPLDOT);
 }
 
-static void draw_entry(const fent & e, int y, int sel, int selout) {
+static __attribute__((noinline)) void draw_entry(const fent & e, int y, int sel, int selout) {
   int bg = sel ? UC_ACCSOFT : UC_BG;
   if (sel) ui_rrect(0, 5, y + 2, UI_W - 10, e.h - 4, 7, UC_ACCSOFT, UC_BG);
   int b = y + 7;
@@ -809,7 +809,7 @@ bool focus_busy_tick() {
   return false;
 }
 
-static void compute_model() {
+static __attribute__((noinline)) void compute_model() {
   focus_phase = 20;
   scan();
   focus_phase = 6;

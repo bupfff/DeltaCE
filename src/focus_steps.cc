@@ -95,7 +95,7 @@ static int top(const char * s, char c) {
 }
 // giac prints u=(x^2), dv=(sin(x)*dx): the parentheses around a whole side of = or a whole item
 // of a list go
-static void unwrap(char * s) {
+static __attribute__((noinline)) void unwrap(char * s) {
   for (char * a = s; *a;) {
     int n = top(a, ','), e = top(a, '=');
     if (n < 0) n = strlen(a);
@@ -201,7 +201,7 @@ static void section(const char * label, int back, int & y) { // a line, then the
 }
 
 // the steps of v as items (ans: the answer, as on the console; plusc: an antiderivative)
-static void lay_steps(const char * head, const std::vector<step_t> & v, const char * ans, bool plusc) {
+static __attribute__((noinline)) void lay_steps(const char * head, const std::vector<step_t> & v, const char * ans, bool plusc) {
   int y = 10, num = 0, prevd = 0, fe = -1, eqn = 0, k0 = 0; // fe: the part's last equation, its
   // left side s[0,eqn) (the lines going on with it have their = under its =)
   unsigned char last[8] = {0}; // the number of the last step at each depth
@@ -386,7 +386,7 @@ static void waiting(const char * head) {
 
 // the steps of the calculation typed as in (its answer ans): computed (the waiting screen, ON
 // stops) and laid out; 0 if done, else why not
-static const char * build(const char * in, const char * ans) {
+static __attribute__((noinline)) const char * build(const char * in, const char * ans) {
   const int S = strlen(in), cap = 2 * S + 32 > 256 ? 2 * S + 32 : 256;
   char * buf = (char *)malloc(cap);
   wait_y = 0;

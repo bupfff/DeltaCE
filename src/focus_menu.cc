@@ -134,7 +134,7 @@ static void sym_text(const char * s, int cx, int cy, int fg, int bg) {
   ui_draw_text(f, s, -1, cx - ui_text_width(f, s, -1) / 2, cy - (t + b) / 2, ui_ramp(1, fg, bg), 0);
 }
 
-static void paint_item(const fm_menu & m, int k, int sel) {
+static __attribute__((noinline)) void paint_item(const fm_menu & m, int k, int sel) {
   const fm_item & it = m.items[k];
   int x, y, w, h;
   item_box(m, k, x, y, w, h);

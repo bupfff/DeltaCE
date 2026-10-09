@@ -112,7 +112,7 @@ static int word_color(const char * w, bool py) {
 }
 // the color of each byte of s: keywords in the accent color, commands purple, numbers and
 // constants orange, strings green, comments gray, the rest ink
-static void colorize(const std::string & s, unsigned char * c, bool py) {
+static __attribute__((noinline)) void colorize(const std::string & s, unsigned char * c, bool py) {
   const int n = s.size();
   const char * p = s.c_str();
   for (int i = 0; i < n;) {
@@ -386,7 +386,7 @@ static const char ED_HELP[] =
   "main screen, f(2) for instance. On an error, the editor goes to its line.";
 
 // the names a program defines (def f, f(x):=, function f), for the status bar
-static void names(textArea * t, char * out, int size) {
+static __attribute__((noinline)) void names(textArea * t, char * out, int size) {
   int k = 0;
   out[0] = 0;
   for (size_t i = 0; i < t->elements.size(); ++i) {
@@ -409,7 +409,7 @@ static std::string line_msg(int l, const char * s) { return "Line " + num(l) + s
 // Python's common slips, found before giac (whose error line is often the def's): brackets that
 // do not match, a header (def, if, for...) without its colon or with an empty block. Returns the
 // line (from 1) with a message, 0 if none is found.
-static int slips(textArea * t, std::string & msg) {
+static __attribute__((noinline)) int slips(textArea * t, std::string & msg) {
   const std::vector<textElement> & v = t->elements;
   const int n = v.size();
   char st[32];
@@ -597,7 +597,7 @@ static int file_menu(textArea * t) {
 
 // the command search (2nd 0), the word before the caret as the query: the command goes in as
 // its template (irem(,): the caret in the first argument)
-static void catalog(textArea * t) {
+static __attribute__((noinline)) void catalog(textArea * t) {
   std::string & L = t->elements[t->line].s;
   int w = t->pos;
   while (w > 0 && namec(L[w - 1])) --w;
