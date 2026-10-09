@@ -246,7 +246,7 @@ static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen
   gen d=a0-f0,f=f0;
   vecteur ids=lidnt(makevecteur(d,f));
   double c=0.71;
-  EACH(it,ids){ if (*it!=x){ d=sub(d,*it,c); f=sub(f,*it,c); } c+=0.17; }
+  EACH(it,ids){ if (*it!=x && evalf(*it,1,CTX).type!=_DOUBLE_){ d=sub(d,*it,c); f=sub(f,*it,c); } c+=0.17; } // (pi keeps its value)
   static const double pts[]={0.13,0.37,0.61,0.89,0.37,-0.61,1.29,-2.4,2.13,3.7,5.3,-7.9,11.3};
   int real=0,cplx=0;
   for (int i=lo?0:4;i<(only?4:13) && real<5;++i){
