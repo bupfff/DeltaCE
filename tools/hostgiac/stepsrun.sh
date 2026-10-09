@@ -4,7 +4,7 @@
 # the file's order, then a summary by kind.
 # HGBIN: another binary (default ~/hostgiac/bin/hostgiac-worktree, tools/hostgiac/build.sh worktree).
 export B=${HGBIN:-$HOME/hostgiac/bin/hostgiac-worktree}
-export ASAN_OPTIONS=detect_leaks=0
+export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=0}
 in=$1; out=${2:-/tmp/stepsrun.txt}
 export T=$(mktemp -d)
 cd /tmp

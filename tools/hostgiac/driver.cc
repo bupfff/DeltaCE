@@ -127,10 +127,17 @@ extern void answer_prepass(char * buf,int cap,bool focus);
 #include "../../src/steps.h"
 #include <signal.h>
 #include <unistd.h>
-// a search stopped after 20 s, as ON stops it on the calculator: giac's interruption flags
+#include <sys/time.h>
+// a search stopped after 20 s (STEPS_ALARM_MS: another delay, for ON sweeps), as ON stops it on
+// the calculator: giac's interruption flags
 static void steps_alarm(int){ ctrl_c=interrupted=true; }
+static void steps_timer(long ms){
+  struct itimerval it={{0,0},{ms/1000,(ms%1000)*1000}};
+  setitimer(ITIMER_REAL,&it,0);
+}
 static void print_steps(const char * s){
-  signal(SIGALRM,steps_alarm); alarm(20);
+  signal(SIGALRM,steps_alarm);
+  steps_timer(getenv("STEPS_ALARM_MS")?atol(getenv("STEPS_ALARM_MS")):20000);
   char buf[1024]; strncpy(buf,s,500); buf[500]=0;
   answer_prepass(buf,sizeof(buf),true);
   gen g(buf,contextptr);
@@ -138,12 +145,12 @@ static void print_steps(const char * s){
   struct timespec t0,t1; clock_gettime(CLOCK_MONOTONIC,&t0);
   bool ok=steps_of(g,v,contextptr);
   clock_gettime(CLOCK_MONOTONIC,&t1);
-  alarm(0);
+  steps_timer(0);
   ctrl_c=kbd_interrupted=interrupted=false;
   printf("== %s   [%s, %d steps, %.0f ms]\n",s,ok?"ok":"NO STEPS",(int)v.size(),(t1.tv_sec-t0.tv_sec)*1e3+(t1.tv_nsec-t0.tv_nsec)/1e6);
-  for (unsigned i=0;ok && i<v.size();++i){
+  for (unsigned i=0;(ok || getenv("STEPS_REJECTED")) && i<v.size();++i){ // (STEPS_REJECTED: also a failed search's)
     const char * t=steps_title(v[i]);
-    printf("%*s%s%s%s\n",2+4*v[i].depth,"",*t?t:"",*t?":  ":"= ",steps_math(v[i],contextptr).print(contextptr).c_str());
+    printf("%s%*s%s%s%s\n",ok?"":"x",2+4*v[i].depth-!ok,"",*t?t:"",*t?":  ":"= ",steps_math(v[i],contextptr).print(contextptr).c_str());
   }
   if (khicas_do_run) printf("   FlowCE answer: %s\n",khicas_do_run(s).c_str());
   fflush(stdout);
