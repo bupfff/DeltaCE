@@ -202,13 +202,14 @@ static NOINL gen pexp(const gen & g,gen & b){
   b=arg(g,0);
   return arg(g,1);
 }
+static bool raw_; // the problem as typed: no sec for 1/cos, no powers merged (x sqrt(x))
 static NOINL gen mergek(const gen & g){
   if (g.type==_VECT){ vecteur v=*g._VECTptr; EACHW(it,v) *it=mergek(*it); return gen(v,g.subtype); } // (u=..., du=...)
   if (g.type!=_SYMB) return g;
   gen h=map_of(g,mergek),b,b2;
-  if (h.is_inv() && (is(arg(h),at_cos) || is(arg(h),at_sin))) return SYM(is(arg(h),at_cos)?at_sec:at_csc,arg(arg(h))); // sec x, not 1/cos x
+  if (!raw_ && h.is_inv() && (is(arg(h),at_cos) || is(arg(h),at_sin))) return SYM(is(arg(h),at_cos)?at_sec:at_csc,arg(arg(h))); // sec x, not 1/cos x
   // textbook notation: (x^(1/9))^-2 as x^(-2/9) ...
-  if (h.is_pow() && arg(h,0).is_pow() && isnum(arg(h,1)) && isnum(arg(arg(h,0),1))){ // ... (sqrt(x+1))^2 as x+1
+  if (!raw_ && h.is_pow() && arg(h,0).is_pow() && isnum(arg(h,1)) && isnum(arg(arg(h,0),1))){ // ... (sqrt(x+1))^2 as x+1
     const gen e=arg(arg(h,0),1)*arg(h,1),b=arg(arg(h,0),0);
     h=is_one(e)?b:symb_pow(b,e);
   }
@@ -222,7 +223,7 @@ static NOINL gen mergek(const gen & g){
     else if (isnum(e) && is_strictly_positive(-e,CTX)) den.push_back(is_minus_one(e)?b:symb_pow(b,-e));
     else { // ... x*x^(1/3) as x^(4/3)
       bool m=false;
-      EACHW(jt,w){ gen e2=pexp(*jt,b2); if (!m && b2==b && isnum(e) && isnum(e2)){ e=e+e2; *jt=is_one(e)?b:symb_pow(b,e); m=true; } }
+      EACHW(jt,w){ gen e2=pexp(*jt,b2); if (!m && !raw_ && b2==b && isnum(e) && isnum(e2)){ e=e+e2; *jt=is_one(e)?b:symb_pow(b,e); m=true; } }
       if (!m) w.push_back(*it);
     }
   }
@@ -1738,7 +1739,8 @@ static gen nest(const gen & g){
   return symbolic(g._SYMBptr->sommet,nest(a));
 }
 
-gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; return nest(norm(input)); }
+// the problem as typed (mergek without its rewrites: one denominator, 1/(n(n+2)), not 1/n/(n+2))
+gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(input))); raw_=false; return r; }
 bool steps_of(const gen & input0,std::vector<step_t> & out,GIAC_CONTEXT){
   ctx_=contextptr; out_=&out; depth_=0; nsub_=0; in_=&input0;
   gen e=nest(norm(input0)),x(identificateur("x"));
