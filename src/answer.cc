@@ -1593,11 +1593,37 @@ static giac::gen known_sum(const giac::gen & g,std::string & msg){
   return g;
 }
 
+// the powers c^n of integers c as one: (-1)^n (-2)^n/(n 2^n) is 1/n, (-2)^n/(n 2^n) is (-1)^n/n. A
+// power series' endpoints come typed so (sum((x-1)^n/(n 2^n)) at x=-1 and 3): the first was "summed"
+// to 1.1259e15. Each c^n is s t_|c| (s for a negative c), ratnormal cancels them, s^2 is 1.
+static __attribute__((noinline)) giac::gen numpows(const giac::gen & f,const giac::gen & n){
+  using namespace giac;
+  const vecteur ps=lop(f,at_pow);
+  vecteur from,to,ts;
+  const gen s("np__s",contextptr);
+  for (const_iterateur it=ps.begin();it!=ps.end();++it){
+    const gen & b=it->_SYMBptr->feuille[0];
+    if (!(it->_SYMBptr->feuille[1]==n) || b.type!=_INT_ || !b.val)
+      continue;
+    char t[12];
+    sprintf(t,"np__%d",b.val<0?-b.val:b.val);
+    from.push_back(*it);
+    to.push_back(b.val<0?s*gen(t,contextptr):gen(t,contextptr));
+    ts.push_back(gen(t,contextptr));
+  }
+  if (from.size()<2)
+    return f;
+  gen r=subst(ratnormal(subst(f,from,to,false,contextptr),contextptr),sym2(at_pow,s,2),1,false,contextptr);
+  for (const_iterateur it=ts.begin();it!=ts.end();++it)
+    r=subst(r,*it,sym2(at_pow,atoi(it->print(contextptr).c_str()+4),n),false,contextptr);
+  return eval(subst(r,s,sym2(at_pow,-1,n),false,contextptr),1,contextptr);
+}
+
 // sum(c*n^q,n,a,inf) for a non-integer q (1/sqrt(n), (-1)^n/n^(3/2)) before giac sees it:
 // giac gave 2.47131 for sum(1/n^(3/2),n,1,inf) (2.61238). +-infinity for p=-q<=1, else a
 // decimal (200 terms, then the tail's integral; alternating: the mean of two partial sums).
 // Returns 0 if f is not such a power.
-static giac::gen power_sum(const giac::gen & g){
+static __attribute__((noinline)) giac::gen power_sum(const giac::gen & g){
   using namespace giac;
   if (!g.is_symb_of_sommet(at_sum) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()!=4)
     return 0;
@@ -1630,6 +1656,8 @@ static giac::gen power_sum(const giac::gen & g){
       return 0;
     if (!isalt && p<=1)
       return c._DOUBLE_val>0?plus_inf:minus_inf;
+    if (p<=0) // (-1)^n: the terms do not go to 0 (the mean of two partial sums gave -0.5)
+      return 0;
     double s;
     const int N=a.val+200;
     if (!sum200(f,n,a.val,isalt,s))
@@ -3203,6 +3231,15 @@ void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus){
   a.typed_sec=strstr(buf,"sec(") || strstr(buf,"csc(") || strstr(buf,"cot(");
   a.typed_limit=strstr(buf,"limit(");
   g=limit_simp(g);
+  if (g.is_symb_of_sommet(at_sum) && g._SYMBptr->feuille.type==_VECT && g._SYMBptr->feuille._VECTptr->size()==4
+      && g._SYMBptr->feuille._VECTptr->at(1).type==_IDNT){ // (-1)^n (-2)^n/(n 2^n): 1/n (numpows)
+    vecteur v=*g._SYMBptr->feuille._VECTptr;
+    const gen f=eval(v[0],1,contextptr),h=numpows(f,v[1]);
+    if (!(h==f)){
+      v[0]=h;
+      g=symbolic(at_sum,gen(v,_SEQ__VECT));
+    }
+  }
   a.real_in=focus && !has_i(g); // (-8)^(1/3) is -2
   if (a.real_in)
     g=real_roots(g,g.is_symb_of_sommet(at_plot) || g.is_symb_of_sommet(at_plotfunc));
