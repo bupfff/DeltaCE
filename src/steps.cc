@@ -79,20 +79,17 @@ const char * steps_formula(const step_t & s){ return RULES[3*s.rule+1]; }
 static gen dname(const gen & v){ return gen(identificateur(std::string("d")+v.print(context0))); }
 
 static gen mergek(const gen & g);
+static vecteur * phm_;
 gen steps_math(const step_t & s,GIAC_CONTEXT){
-  gen t(RULES[3*s.rule+2],contextptr);
+  if (!phm_){ // (giac's results are read as vectors only after a check: ON leaves error values)
+    gen l("[A,B,C,V,dV,dA,U,W,dU,dW]",contextptr);
+    if (l.type!=_VECT) return undef;
+    phm_=new vecteur(*l._VECTptr);
+  }
   // by parts: u and v, unless the variable is one of them (after a substitution u): p and q
   bool uv=s.v.type==_IDNT && (!strcmp(s.v._IDNTptr->id_name,"u") || !strcmp(s.v._IDNTptr->id_name,"v"));
   gen U(identificateur(uv?"p":"u")),W(identificateur(uv?"q":"v"));
-  vecteur from=makevecteur(gen(identificateur("A")),gen(identificateur("B")),gen(identificateur("C")),gen(identificateur("V")));
-  vecteur to=makevecteur(s.a,s.b,s.c,s.v);
-  from.push_back(gen(identificateur("dV"))); to.push_back(dname(s.v));
-  from.push_back(gen(identificateur("dA"))); to.push_back(dname(s.a));
-  from.push_back(gen(identificateur("U"))); to.push_back(U);
-  from.push_back(gen(identificateur("W"))); to.push_back(W);
-  from.push_back(gen(identificateur("dU"))); to.push_back(dname(U));
-  from.push_back(gen(identificateur("dW"))); to.push_back(dname(W));
-  return mergek(subst(t,from,to,true,contextptr));
+  return mergek(subst(gen(RULES[3*s.rule+2],contextptr),*phm_,makevecteur(s.a,s.b,s.c,s.v,dname(s.v),dname(s.a),U,W,dname(U),dname(W)),true,contextptr));
 }
 
 // ---------------------------------------------------------------- state and helpers
@@ -126,46 +123,56 @@ static gen Ix(const gen & f){ return SYM2(at_integrate,f,X); }
 static bool is(const gen & g,const unary_function_ptr * u){ return g.is_symb_of_sommet(u); }
 static const gen & arg(const gen & g){ return g._SYMBptr->feuille; }
 static gen arg(const gen & g,int i){ return g._SYMBptr->feuille[i]; }
+// loops by iterator: an index costs a multiplication by sizeof(gen) on the eZ80 (a helper call)
+#define EACH(it,v) for (const_iterateur it=(v).begin(),it##_=(v).end();it!=it##_;++it)
+#define EACHW(it,v) for (iterateur it=(v).begin(),it##_=(v).end();it!=it##_;++it)
+// f applied to g's arguments in turn: the first nonzero result (0: none)
+static NOINL gen first_of(const gen & g,gen (*f)(const gen &)){
+  if (g.type!=_SYMB) return 0;
+  const gen & a=arg(g);
+  if (a.type!=_VECT) return f(a);
+  EACH(it,*a._VECTptr){ gen r=f(*it); if (!is_zero(r)) return r; }
+  return 0;
+}
+// g with f applied to each argument
+static NOINL gen map_of(const gen & g,gen (*f)(const gen &)){
+  gen a=arg(g);
+  if (a.type!=_VECT) return symbolic(g._SYMBptr->sommet,f(a));
+  vecteur v=*a._VECTptr;
+  EACHW(it,v) *it=f(*it);
+  return symbolic(g._SYMBptr->sommet,gen(v,a.subtype));
+}
 
 // the factors of a product (-g: -1 and g) or the terms of a sum, flattened
 static NOINL void flat(const unary_function_ptr * u,const gen & g,vecteur & v){
   if (is(g,u) && arg(g).type==_VECT){
-    const vecteur & w=*arg(g)._VECTptr;
-    for (unsigned i=0;i<w.size();++i) flat(u,w[i],v);
+    EACH(it,*arg(g)._VECTptr) flat(u,*it,v);
   }
   else if (u==at_prod && g.is_neg()){ v.push_back(-1); flat(u,arg(g),v); }
   else v.push_back(g);
 }
 // for display: the numbers of each product multiplied together (2*1/3 is 2/3, 1*dx is dx)
 static bool isnum(const gen & g){ return g.type<_IDNT || g.type==_FRAC; }
+static gen prodof(const vecteur & v){ return v.empty()?gen(1):v.size()==1?v[0]:symb_prod(v); }
 static NOINL gen mergek(const gen & g){
   if (g.type!=_SYMB) return g;
-  gen a=arg(g);
-  if (a.type==_VECT){
-    vecteur v=*a._VECTptr;
-    for (unsigned i=0;i<v.size();++i) v[i]=mergek(v[i]);
-    a=gen(v,a.subtype);
-  }
-  else a=mergek(a);
-  gen h=symbolic(g._SYMBptr->sommet,a);
-  if (!h.is_prod() || a.type!=_VECT) return h;
+  gen h=map_of(g,mergek);
+  if (!h.is_prod() || arg(h).type!=_VECT) return h;
   vecteur v,w; gen k=1;
   flat(at_prod,h,v);
-  for (unsigned i=0;i<v.size();++i){
-    if (isnum(v[i])) k=k*v[i];
-    else if (v[i].is_inv() && isnum(arg(v[i]))) k=k/arg(v[i]);
-    else w.push_back(v[i]);
+  EACH(it,v){
+    if (isnum(*it)) k=k*(*it);
+    else if (it->is_inv() && isnum(arg(*it))) k=k/arg(*it);
+    else w.push_back(*it);
   }
   if (!is_one(k) || w.empty()) w.insert(w.begin(),k);
-  return w.size()==1?w[0]:symb_prod(w);
+  return prodof(w);
 }
 // constant factors in c, the others in v
 static NOINL void factors(const gen & f,vecteur & c,vecteur & v){
   vecteur w; flat(at_prod,f,w);
-  for (unsigned i=0;i<w.size();++i)
-    (dep(w[i])?v:c).push_back(w[i]);
+  EACH(it,w) (dep(*it)?v:c).push_back(*it);
 }
-static gen prodof(const vecteur & v){ return v.empty()?gen(1):v.size()==1?v[0]:symb_prod(v); }
 
 // g built with + * and positive integer powers from constants and x (giac's lvarx gives x for
 // sqrt(1-x^2): no help). SH_FRAC: quotients too (a rational fraction); SH_ROOTX: any power of x
@@ -185,7 +192,7 @@ static NOINL bool shape(const gen & g,int m){
   if (g.is_inv()) return ((m & SH_FRAC) || ((m & SH_ROOTX) && (a==X || (a.is_pow() && arg(a,0)==X)))) && shape(a,m);
   if (g.is_neg()) return shape(a,m);
   if ((g.is_plus() || g.is_prod()) && a.type==_VECT){
-    for (unsigned i=0;i<a._VECTptr->size();++i) if (!shape((*a._VECTptr)[i],m)) return false;
+    EACH(it,*a._VECTptr) if (!shape(*it,m)) return false;
     return true;
   }
   return false;
@@ -196,14 +203,14 @@ static NOINL bool shape(const gen & g,int m){
 static bool numeric(const gen & g){ // no identifier (lidnt skips the bound ones)
   if (g.type==_IDNT) return false;
   if (g.type==_SYMB) return numeric(arg(g));
-  if (g.type==_VECT){ for (unsigned i=0;i<g._VECTptr->size();++i) if (!numeric((*g._VECTptr)[i])) return false; }
+  if (g.type==_VECT){ EACH(it,*g._VECTptr) if (!numeric(*it)) return false; }
   return true;
 }
 static gen inv_of(const gen & g){
   if (g.type<_IDNT) return ev(symb_inv(g));
   if (g.is_prod() && arg(g).type==_VECT){
     vecteur v=*arg(g)._VECTptr;
-    for (unsigned i=0;i<v.size();++i) v[i]=inv_of(v[i]);
+    EACHW(it,v) *it=inv_of(*it);
     return symb_prod(v);
   }
   if (g.is_inv()) return arg(g);
@@ -213,13 +220,7 @@ static NOINL gen norm(const gen & g){
   if (g.type!=_SYMB) return g;
   if (numeric(g)) return ev(g);
   const unary_function_ptr & u=g._SYMBptr->sommet;
-  gen a=arg(g);
-  if (a.type==_VECT){
-    vecteur v=*a._VECTptr;
-    for (unsigned i=0;i<v.size();++i) v[i]=norm(v[i]);
-    a=gen(v,a.subtype);
-  }
-  else a=norm(a);
+  gen a=arg(map_of(g,norm));
   vecteur v;
   if (u==at_binary_minus && a.type==_VECT && a._VECTptr->size()==2){
     flat(at_plus,a[0],v); flat(at_plus,a[1].type<_IDNT?-a[1]:symb_neg(a[1]),v); return symb_plus(v);
@@ -244,8 +245,8 @@ static NOINL gen norm(const gen & g){
 static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen * lo=0,const gen * hi=0,bool only=false){
   gen d=a0-f0,f=f0;
   vecteur ids=lidnt(makevecteur(d,f));
-  for (unsigned i=0;i<ids.size();++i)
-    if (ids[i]!=x){ d=sub(d,ids[i],0.71+0.17*i); f=sub(f,ids[i],0.71+0.17*i); }
+  double c=0.71;
+  EACH(it,ids){ if (*it!=x){ d=sub(d,*it,c); f=sub(f,*it,c); } c+=0.17; }
   static const double pts[]={0.13,0.37,0.61,0.89,0.37,-0.61,1.29,-2.4,2.13,3.7,5.3,-7.9,11.3};
   int real=0,cplx=0;
   for (int i=lo?0:4;i<(only?4:13) && real<5;++i){
@@ -256,6 +257,9 @@ static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen
     if (y.type!=_DOUBLE_ && y.type!=_CPLX) continue;
     double ay=evalf_double(abs(y,CTX),1,CTX)._DOUBLE_val,az=evalf_double(abs(z,CTX),1,CTX)._DOUBLE_val;
     bool ok=ay<=TOL*(1+az);
+#ifdef HOSTGIAC
+    if (getenv("STEPDBG")) fprintf(stderr,"  same_num at %s: f=%s diff=%s %s\n",p.print(CTX).c_str(),z.print(CTX).c_str(),y.print(CTX).c_str(),ok?"ok":"DIFFERENT");
+#endif
     if (z.type==_DOUBLE_){ if (!ok) return false; ++real; }
     else cplx+=ok;
   }
@@ -303,12 +307,10 @@ static gen dsteps(const gen & f){
   if (u==at_plus && a.type==_VECT){
     const vecteur & v=*a._VECTptr;
     vecteur dv,rv;
-    for (unsigned i=0;i<v.size();++i)
-      if (dep(v[i])) dv.push_back(v[i].is_neg()?symb_neg(Dx(arg(v[i]))):Dx(v[i]));
+    EACH(it,v) if (dep(*it)) dv.push_back(it->is_neg()?symb_neg(Dx(arg(*it))):Dx(*it));
     bool shown=dv.size()>1;
     if (shown){ S(R_SUMD,f,symb_plus(dv)); ++depth_; }
-    for (unsigned i=0;i<v.size();++i)
-      if (dep(v[i])) rv.push_back(dsteps(v[i]));
+    EACH(it,v) if (dep(*it)) rv.push_back(dsteps(*it));
     gen r=ev(symb_plus(rv));
     if (shown){ --depth_; S(R_EQD,f,r); }
     return r;
@@ -317,15 +319,15 @@ static gen dsteps(const gen & f){
   if (u==at_prod && a.type==_VECT){
     vecteur c,num,den;
     const vecteur & v=*a._VECTptr;
-    for (unsigned i=0;i<v.size();++i){
-      const gen & w=v[i];
+    EACH(it,v){
+      const gen & w=*it;
       if (!dep(w)) c.push_back(w);
       else if (w.is_inv() && arg(w)!=X && !(arg(w).is_pow() && arg(arg(w),0)==X)) den.push_back(arg(w));
       else num.push_back(w);
     }
     if (!c.empty()){ // c u
       gen k=ev(prodof(c)),rest=prodof(num);
-      for (unsigned i=0;i<den.size();++i) rest=num.empty() && i==0?symb_inv(den[i]):symb_prod(rest,symb_inv(den[i]));
+      EACH(it,den) rest=num.empty() && it==den.begin()?symb_inv(*it):symb_prod(rest,symb_inv(*it));
       S(R_CONSTD,f,k,rest);
       ++depth_; gen r=dsteps(rest); --depth_;
       r=ev(k*r);
@@ -437,8 +439,8 @@ static NOINL gen subs(const gen & f,const gen & uu,const gen & ux,const gen & du
 static NOINL bool power(const gen & g,gen & F,int & r){
   vecteur c,v; factors(g,c,v);
   gen n=0;
-  for (unsigned i=0;i<v.size();++i){
-    gen w=v[i],e=1;
+  EACH(it,v){
+    gen w=*it,e=1;
     if (w.is_inv()){ w=arg(w); e=-1; }
     if (w.is_pow()){ e=ev(e*arg(w,1)); w=arg(w,0); }
     if (w!=X || dep(e)) return false;
@@ -456,7 +458,11 @@ static NOINL bool power(const gen & g,gen & F,int & r){
 // variable. A formula as a string costs far less flash than the same formula built in C++.
 static vecteur * ph_;
 static NOINL gen fill(const char * s,const vecteur & v){
-  if (!ph_) ph_=new vecteur(*gen("[A,B,C,K,Q,W,T]",CTX)._VECTptr);
+  if (!ph_){
+    gen l("[A,B,C,K,Q,W,T]",CTX);
+    if (l.type!=_VECT) return undef;
+    ph_=new vecteur(*l._VECTptr);
+  }
   vecteur from(ph_->begin(),ph_->begin()+v.size()),to(v);
   from.push_back(gen(identificateur("X"))); to.push_back(X);
   return subst(gen(s,CTX),from,to,false,CTX);
@@ -485,17 +491,20 @@ static NOINL bool near(const gen & a,const gen & b){
 static NOINL bool table(const gen & f,gen & F){
   gen x0(identificateur("x"));
   if (!tabF_){
-    tabF_=new vecteur(*gen(TABLE,CTX)._VECTptr);
+    gen l(TABLE,CTX);
+    if (l.type!=_VECT) return false;
+    tabF_=new vecteur(*l._VECTptr);
     tabV_=new vecteur;
-    for (unsigned i=0;i<tabF_->size();++i){
-      gen d=D((*tabF_)[i],x0);
+    EACH(it,*tabF_){
+      gen d=D(*it,x0);
       tabV_->push_back(makevecteur(at2(d,x0,0.37),at2(d,x0,0.61),at2(d,x0,-0.43)));
     }
   }
   gen y1=at2(f,X,0.37),y2=at2(f,X,0.61),y3=at2(f,X,-0.43); // (a negative point: |sin x| is not sin x)
-  for (unsigned i=0;i<tabF_->size();++i){
-    const gen & w=(*tabV_)[i];
-    if (near(w[0],y1) && near(w[1],y2) && near(w[2],y3)){ F=sub((*tabF_)[i],x0,X); return true; }
+  const_iterateur wi=tabV_->begin();
+  EACH(it,*tabF_){
+    const gen & w=*wi++;
+    if (near(w[0],y1) && near(w[1],y2) && near(w[2],y3)){ F=sub(*it,x0,X); return true; }
   }
   return false;
 }
@@ -530,8 +539,7 @@ static NOINL gen firstarg(const gen & g){
   if (g.type!=_SYMB) return 0;
   const gen & a=arg(g);
   if (g.is_pow() && !dep(arg(g,0))) return arg(g,1);
-  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i){ gen w=firstarg((*a._VECTptr)[i]); if (!is_zero(w)) return w; } return 0; }
-  if (g.is_inv() || g.is_neg()) return firstarg(a);
+  if (a.type==_VECT || g.is_inv() || g.is_neg()) return first_of(g,firstarg);
   return dep(a)?a:gen(0);
 }
 static bool basic(const gen & f,gen & F,int & r);
@@ -571,7 +579,7 @@ static NOINL void cands(const gen & g,vecteur & v){
       if (a[0]!=X) addc(v,a[0]);
       else if (a[1].type!=_INT_) addc(v,g); // sqrt(x)
     }
-    for (unsigned i=0;i<a._VECTptr->size();++i) cands((*a._VECTptr)[i],v);
+    EACH(it,*a._VECTptr) cands(*it,v);
     return;
   }
   if (u!=at_neg) addc(v,a);
@@ -587,7 +595,7 @@ static NOINL gen kern(const gen & u,gen & t){
   if (u.is_neg()){ t=-t; return kern(arg(u),t); }
   vecteur c,v,w;
   bool p=u.is_plus();
-  if (p){ flat(at_plus,u,w); for (unsigned i=0;i<w.size();++i) (dep(w[i])?v:c).push_back(w[i]); }
+  if (p){ flat(at_plus,u,w); EACH(it,w) (dep(*it)?v:c).push_back(*it); }
   else factors(u,c,v);
   if (v.size()!=1 || c.empty()) return u;
   t=p?t-symb_plus(c):t/prodof(c);
@@ -637,7 +645,7 @@ static NOINL bool rooted(const gen & g,const gen & u){
   const gen & a=arg(g);
   if (g.is_pow() && a[0]==u && !(a[1].type==_INT_ && a[1].val>0)) return true;
   if (g.is_inv() && (a==u || (a.is_pow() && arg(a,0)==u))) return true;
-  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i) if (rooted((*a._VECTptr)[i],u)) return true; return false; }
+  if (a.type==_VECT){ EACH(it,*a._VECTptr) if (rooted(*it,u)) return true; return false; }
   return rooted(a,u);
 }
 static NOINL gen radicand(const gen & g);
@@ -647,7 +655,7 @@ static NOINL bool oddroot(const gen & g){
   if (g.type!=_SYMB) return false;
   if (g.is_pow() && arg(g,1).type==_FRAC && arg(g,1)._FRACptr->den!=2) return true;
   const gen & a=arg(g);
-  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i) if (oddroot((*a._VECTptr)[i])) return true; return false; }
+  if (a.type==_VECT){ EACH(it,*a._VECTptr) if (oddroot(*it)) return true; return false; }
   return oddroot(a);
 }
 static NOINL gen usub(const gen & f,int lev){
@@ -657,8 +665,8 @@ static NOINL gen usub(const gen & f,int lev){
   vecteur cv; cands(fe,cv); // (evaluated: sqrt(x) is x^(1/2) there, as in fe)
   // every candidate first: a linear u giving a known integral, then the simplest new integral
   vecteur ok,gs; std::vector<int> sz;
-  for (unsigned i=0;i<cv.size() && budget_>0 && !interrupted;++i){
-    gen u=cv[i],du=D(u,X),F,a,b; int r;
+  for (const_iterateur it=cv.begin();it!=cv.end() && budget_>0 && !interrupted;++it){
+    gen u=*it,du=D(u,X),F,a,b; int r;
     budget_-=2;
     if (is_zero(du)) continue;
     bool lin=is_linear_wrt(u,X,a,b,CTX);
@@ -782,8 +790,8 @@ static NOINL gen splitnum(const gen & fe,int lev){
 static NOINL bool even_trig(const gen & fe){
   vecteur c,v; factors(fe,c,v);
   if (v.empty()) return false;
-  for (unsigned i=0;i<v.size();++i){
-    gen b=v[i]; int n=1;
+  EACH(it,v){
+    gen b=*it; int n=1;
     if (b.is_pow() && arg(b,1).type==_INT_){ n=arg(b,1).val; b=arg(b,0); }
     if ((!is(b,at_sin) && !is(b,at_cos)) || n%2) return false;
   }
@@ -822,12 +830,12 @@ static NOINL gen trigfrac(const gen & f,int lev){
 // tan(a)^n, |n| >= 2: tan^2 = sec^2 - 1 (cot: csc^2 - 1)
 static NOINL gen pyth(const gen & fe,int lev){
   vecteur c,v; factors(fe,c,v);
-  for (unsigned i=0;i<v.size();++i){
-    const gen & w=v[i];
+  EACH(it,v){
+    const gen & w=*it;
     if (!w.is_pow() || !is(arg(w,0),at_tan) || arg(w,1).type!=_INT_) continue;
     int n=arg(w,1).val;
     if (n<2 && n>-2) continue;
-    vecteur r(c); for (unsigned j=0;j<v.size();++j) if (j!=i) r.push_back(v[j]); // the other factors
+    vecteur r(c); EACH(jt,v) if (jt!=it) r.push_back(*jt); // the other factors
     return via(R_PYTH,fe,fill(n>0?"expand(A*tan(B)^C*(1/cos(B)^2-1))":"expand(A*tan(B)^C*(1/sin(B)^2-1))",makevecteur(prodof(r),arg(arg(w,0)),n>0?n-2:n+2)),lev);
   }
   return undef;
@@ -868,7 +876,7 @@ static NOINL gen radsub(const gen & g,const gen & q,const gen & root){
   gen a=arg(g);
   if (a.type==_VECT){
     vecteur v=*a._VECTptr;
-    for (unsigned i=0;i<v.size();++i) v[i]=radsub(v[i],q,root);
+    EACHW(it,v) *it=radsub(*it,q,root);
     a=gen(v,a.subtype);
   }
   else a=radsub(a,q,root);
@@ -879,9 +887,7 @@ static NOINL gen radsub(const gen & g,const gen & q,const gen & root){
 static NOINL gen radicand(const gen & g){
   if (g.type!=_SYMB) return 0;
   if (g.is_pow() && arg(g,1).type==_FRAC && arg(g,1)._FRACptr->den==2 && dep(arg(g,0)) && arg(g,0)!=X) return arg(g,0);
-  const gen & a=arg(g);
-  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i){ gen r=radicand((*a._VECTptr)[i]); if (!is_zero(r)) return r; } return 0; }
-  return radicand(a);
+  return first_of(g,radicand);
 }
 // sqrt(C-A x^2), sqrt(A x^2+C), sqrt(A x^2-C): x = a sin t, a tan t, a sec t; back to x with
 // the right triangle (sin t and cos t as fractions of x). Each: x, sqrt(q), sin t, cos t, t.
@@ -897,7 +903,9 @@ static NOINL gen trigsub(const gen & f,int lev){
   int k=pc?(pa?1:0):(pa?2:-1);
   if (k<0) return undef;
   gen t(identificateur("t"));
-  vecteur w=*fill(TSUB[k],makevecteur(sqrt(ev(k==1?C/A:-C/A),CTX),A,C,0,q,0,t))._VECTptr;
+  gen W=fill(TSUB[k],makevecteur(sqrt(ev(k==1?C/A:-C/A),CTX),A,C,0,q,0,t));
+  if (W.type!=_VECT || W._VECTptr->size()<5) return undef;
+  const vecteur & w=*W._VECTptr;
   gen dx=D(w[0],t),g=sc(ev(sub(radsub(fe,q,w[1]),X,w[0])*dx)),g2=_trigcos(g,CTX);
   if (taille(g2,200)<taille(g,200)) g=g2; // sin^2 + cos^2 = 1
   if (dep(g)) return undef;
@@ -946,12 +954,12 @@ static gen isteps(const gen & f0,int lev){
   if (f.is_plus() && arg(f).type==_VECT){ // term by term
     const vecteur & v=*arg(f)._VECTptr;
     vecteur iv,rv;
-    for (unsigned i=0;i<v.size();++i) iv.push_back(Ix(v[i]));
+    EACH(it,v) iv.push_back(Ix(*it));
     size_t m=mark();
     S(R_SUMI,f,symb_plus(iv));
     ++depth_;
-    for (unsigned i=0;i<v.size();++i){
-      gen G=isteps(v[i],lev+1);
+    EACH(it,v){
+      gen G=isteps(*it,lev+1);
       if (is_undef(G)){ --depth_; cut(m); return G; }
       rv.push_back(G);
     }
@@ -1003,12 +1011,8 @@ static bool calc_op(const gen & g){ return is(g,at_derive) || is(g,at_integrate)
 // the first calculus operation of g with none inside it (innermost first), or 0
 static gen inner(const gen & g){
   if (g.type!=_SYMB) return 0;
-  const gen & a=arg(g);
-  if (a.type==_VECT){
-    for (unsigned i=0;i<a._VECTptr->size();++i){ gen r=inner((*a._VECTptr)[i]); if (!is_zero(r)) return r; }
-  }
-  else { gen r=inner(a); if (!is_zero(r)) return r; }
-  return calc_op(g)?g:gen(0);
+  gen r=first_of(g,inner);
+  return !is_zero(r)?r:calc_op(g)?g:gen(0);
 }
 // no antiderivative in elementary functions: giac's has an integral or a special function left
 static bool elementary(const gen & G){
@@ -1026,8 +1030,8 @@ static NOINL gen sqout(const gen & f){
   for (int k=0;k<3;++k){
     gen q2=_factor(k==2?q:k?_trigcos(q,CTX):_trigsin(q,CTX),CTX),out=1,in=1;
     vecteur c,v; factors(q2,c,v);
-    for (unsigned i=0;i<v.size();++i){
-      gen b=v[i]; int e=1;
+    EACH(it,v){
+      gen b=*it; int e=1;
       if (b.is_pow() && arg(b,1).type==_INT_){ e=arg(b,1).val; b=arg(b,0); }
       if (e>=2) out=out*pow(symb_abs(b),e/2,CTX);
       if (e%2) in=in*b;
@@ -1046,12 +1050,14 @@ static NOINL gen absplit(const gen & op,const gen & g0,const gen & a,const gen &
   gen z=_solve(makesequence(symb_equal(g,0),X),CTX);
   vecteur pts(1,a);
   if (z.type==_VECT)
-    for (unsigned i=0;i<z._VECTptr->size();++i){
-      gen zi=ev((*z._VECTptr)[i]),d=evalf(zi,1,CTX);
+    EACH(it,*z._VECTptr){
+      gen zi=ev(*it),d=evalf(zi,1,CTX);
       if (d.type==_DOUBLE_ && is_strictly_greater(zi,a,CTX) && is_strictly_greater(b,zi,CTX)) pts.push_back(zi);
     }
   pts.push_back(b);
-  pts=*_sort(pts,CTX)._VECTptr;
+  gen ps=_sort(pts,CTX);
+  if (ps.type!=_VECT) return undef;
+  pts=*ps._VECTptr;
   vecteur pieces,sg;
   for (unsigned i=0;i+1<pts.size();++i){
     bool pos=is_positive(evalf(sub(g,X,(pts[i]+pts[i+1])/2),1,CTX),CTX);
@@ -1077,9 +1083,9 @@ static NOINL gen absplit(const gen & op,const gen & g0,const gen & a,const gen &
     S(R_EQV,op,tot);
     return tot;
   }
-  for (unsigned i=0;i<pieces.size();++i){
-    S(R_PART,pieces[i],0);
-    ++depth_; gen vi=one(pieces[i]); --depth_;
+  EACH(it,pieces){
+    S(R_PART,*it,0);
+    ++depth_; gen vi=one(*it); --depth_;
     if (is_undef(vi)) return vi;
     tot=tot+vi;
   }
@@ -1089,9 +1095,7 @@ static NOINL gen absplit(const gen & op,const gen & g0,const gen & a,const gen &
 static gen absarg(const gen & f){
   if (f.type!=_SYMB) return 0;
   if (is(f,at_abs) && dep(arg(f))) return arg(f);
-  const gen & a=arg(f);
-  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i){ gen r=absarg((*a._VECTptr)[i]); if (!is_zero(r)) return r; } return 0; }
-  return absarg(a);
+  return first_of(f,absarg);
 }
 // One calculus operation, with none inside: its value (undef: no steps)
 static gen one_(const gen & op){
@@ -1099,6 +1103,9 @@ static gen one_(const gen & op){
   gen x=v[1]; var_=&x;
   if (is(op,at_derive)){
     gen r=dsteps(v[0]);
+#ifdef HOSTGIAC
+    if (getenv("STEPDBG")) fprintf(stderr,"derivative of %s: steps %s, giac %s\n",v[0].print(CTX).c_str(),ev(r).print(CTX).c_str(),D(v[0],x).print(CTX).c_str());
+#endif
     return !interrupted && same_num(ev(r),D(v[0],x),x)?r:gen(undef);
   }
   gen a,b,F,f=v[0],lo,hi;
@@ -1166,7 +1173,7 @@ static gen nest(const gen & g){
   gen a=arg(g);
   if (a.type==_VECT){
     vecteur w=*a._VECTptr;
-    for (unsigned i=0;i<w.size();++i) w[i]=nest(w[i]);
+    EACHW(it,w) *it=nest(*it);
     if (is(g,at_derive) && w.size()>2){
       gen r=w[0];
       for (unsigned i=1;i<w.size();++i){
@@ -1187,6 +1194,7 @@ bool steps_of(const gen & input0,std::vector<step_t> & out,GIAC_CONTEXT){
   for (int guard=0;guard<8;++guard){
     gen t=inner(e);
     if (is_zero(t)) break;
+    if (arg(t).type!=_VECT) return false;
     const vecteur & v=*arg(t)._VECTptr;
     if (v.size()<2 || v[1].type!=_IDNT) return false;
     if (t==e) return !is_undef(one(e));
