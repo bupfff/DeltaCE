@@ -60,13 +60,16 @@ struct slot { const void * p; size_t n; };
 static const size_t TABN=1<<22; // open addressing, power of 2
 static slot * tab; // allocated with mmap-like calloc before tracking starts
 static bool tracking=false;
-static size_t live_count=0,live_bytes=0;
+static size_t live_count=0,live_bytes=0,peak_bytes=0;
 static inline size_t hsh(const void * p){ size_t x=(size_t)p; x^=x>>17; x*=0x9E3779B97F4A7C15ULL; return x>>(64-22); }
 static void on_malloc(const volatile void * p,size_t n){
   if (!tracking || !p) return;
   size_t i=hsh((const void *)p);
   for (size_t k=0;k<TABN;++k,i=(i+1)&(TABN-1)){
-    if (!tab[i].p || tab[i].p==(const void *)1){ tab[i].p=(const void *)p; tab[i].n=n; ++live_count; live_bytes+=n; return; }
+    if (!tab[i].p || tab[i].p==(const void *)1){ tab[i].p=(const void *)p; tab[i].n=n; ++live_count; live_bytes+=n; if (live_bytes>peak_bytes) peak_bytes=live_bytes;
+      static size_t traced; // STEPS_PEAK=<bytes>: where the heap first passes that many (the stack)
+      if (getenv("STEPS_PEAK") && atol(getenv("STEPS_PEAK"))>1 && live_bytes>(size_t)atol(getenv("STEPS_PEAK")) && !traced){ traced=1; __sanitizer_print_stack_trace(); }
+      return; }
   }
 }
 static void on_free(const volatile void * p){
@@ -77,7 +80,7 @@ static void on_free(const volatile void * p){
     if (tab[i].p==(const void *)p){ tab[i].p=(const void *)1; --live_count; live_bytes-=tab[i].n; return; } // tombstone
   }
 }
-static void track_start(){ memset(tab,0,TABN*sizeof(slot)); live_count=live_bytes=0; tracking=true; }
+static void track_start(){ memset(tab,0,TABN*sizeof(slot)); live_count=live_bytes=peak_bytes=0; tracking=true; }
 static void track_stop(){ tracking=false; }
 
 // ---- grouping of the retained blocks by allocation stack ----
@@ -143,7 +146,11 @@ static void print_steps(const char * s){
   gen g(buf,contextptr);
   std::vector<step_t> v;
   struct timespec t0,t1; clock_gettime(CLOCK_MONOTONIC,&t0);
+  // STEPS_PEAK: the most heap the steps held at once (the calculator has far less than the PC)
+  const bool pk=getenv("STEPS_PEAK") && tab;
+  if (pk){ track_start(); peak_bytes=0; }
   bool ok=steps_of(g,v,contextptr);
+  if (pk){ track_stop(); printf("   peak heap %zu bytes\n",peak_bytes); }
   clock_gettime(CLOCK_MONOTONIC,&t1);
   steps_timer(0);
   ctrl_c=kbd_interrupted=interrupted=false;
@@ -250,7 +257,7 @@ int main(int argc,char ** argv){
   }
   if (!ne)
     for (;default_exprs[ne];++ne) exprs[ne]=default_exprs[ne];
-  if (measure || trace_round){
+  if (measure || trace_round || getenv("STEPS_PEAK")){
     tab=(slot *)calloc(TABN,sizeof(slot));
     __sanitizer_install_malloc_and_free_hooks(on_malloc,on_free);
   }
@@ -269,7 +276,7 @@ int main(int argc,char ** argv){
   }
   for (int r=1;r<=N;++r){
     for (int k=0;k<ne;++k){
-      const bool tr=measure || r==trace_round;
+      const bool pk=getenv("STEPS_PEAK") && tab && !measure,tr=measure || r==trace_round || pk; // (STEPS_PEAK: the answers too)
       size_t before=__sanitizer_get_current_allocated_bytes();
       if (tr) track_start();
       struct timespec t0,t1;
@@ -284,6 +291,7 @@ int main(int argc,char ** argv){
         fflush(stdout);
       }
       if (tr) track_stop();
+      if (pk && print && r==1) printf("   peak heap %zu bytes\n",peak_bytes);
       size_t after=__sanitizer_get_current_allocated_bytes();
       if (measure)
         printf("round %d  %-34s  +%zu bytes in %zu blocks (allocator total %+ld)\n",r,exprs[k],live_bytes,live_count,(long)(after-before));
