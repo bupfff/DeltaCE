@@ -466,7 +466,7 @@ extern "C" {
 }
 // the reserve given back when memory runs out (8 KB, OOM_RESERVE): taken again after each
 // evaluation while memory allows
-static void oom_rearm(){
+void oom_rearm(){ // (focus_steps.cc too)
   oom_hit=0;
   if (!oom_reserve){
     oom_soft=1;

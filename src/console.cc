@@ -3002,6 +3002,14 @@ int Console_GetKey(){
 
     if (key == KEY_CTRL_EXE){
       if (Current_Line == Last_Line){
+#ifdef FLOWCE_STEPS
+        const char * sa=0, * st=Edit_Line && !Edit_Line[0]?focus_steps_input(&sa):0;
+        if (st){ // Enter after a derivative or an integral shown large: its steps (focus_steps.cc)
+          focus_steps(st,sa);
+          Console_Disp(1);
+          continue;
+        }
+#endif
         const int slot=Edit_Line?console_empty_slot((const char *)Edit_Line):-1;
         if (slot>=0 && !console_python_mode()){
           const int sc=slot>COL_DISP_MAX-1?slot-(COL_DISP_MAX-1):0;

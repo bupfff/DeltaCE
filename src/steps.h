@@ -18,4 +18,6 @@ bool steps_of(const giac::gen & input, std::vector<step_t> & out, const giac::co
 const char * steps_title(const step_t & s);
 const char * steps_formula(const step_t & s);
 giac::gen steps_math(const step_t & s, const giac::context * contextptr);
+// input as the steps write it (- and / as + and *: 1-x^2, not 1-(x^2) as parsed)
+giac::gen steps_problem(const giac::gen & input, const giac::context * contextptr);
 #endif

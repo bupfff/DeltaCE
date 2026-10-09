@@ -465,11 +465,14 @@ static int style(int n, int k) { // style of the text of leaf n of kind k: names
   // (a one-letter name stays italic before its bracket: x(x+1), f(x), as textbooks write them)
   return k == K_TEXT && (T[n].f & F_NAME) && (!(T[n].f & F_FN) || T[n].b - T[n].c == 1) ? (int)MI_IT : (int)MI_UP;
 }
-static int hidedot(int n) { // MI_F_IMPLDOT: a * before a letter or ( is implicit multiplication
-  if (!(M->flags & MI_F_IMPLDOT)) return 0;
-  int j = T[n].b;
+static int hidedot(int n) { // MI_F_IMPLDOT: a * before a letter or ( is implicit multiplication:
+  if (!(M->flags & MI_F_IMPLDOT)) return 0; // its gap, 1 px; a thin space before a differential
+  int j = T[n].b;                           // (2x dx) or a name of letters (x sin(x))
   while (j < L && blank(ch(j))) ++j;
-  return j < L && (namec(ch(j)) || ch(j) == '(');
+  if (j >= L || (!namec(ch(j)) && ch(j) != '(')) return 0;
+  const int c1 = j + 1 < L ? ch(j + 1) : 0, c2 = j + 2 < L ? ch(j + 2) : 0;
+  if (!namec(ch(j)) || !namec(c1)) return 1;
+  return 1 + M->big.adv / (ch(j) == 'd' && !namec(c2) && !digit(c2) ? 3 : 5); // (as the font grows)
 }
 
 static int slot(int n, int i) { // i-th slot content of a 2D construct (hidden parens removed)
@@ -567,8 +570,9 @@ static void cons(int n, int x, int y, int sm) {
     dec(MI_BAR, sm, t + 2 + A.w, -ca, t, ca + cd);
     cw = 2 * t + 2 + A.w;
     break;
-  case K_INT: case K_DEFINT: { // sign, [bounds], f, gap, d, x
+  case K_INT: case K_DEFINT: { // sign, [bounds], f (in parens if it is a sum), gap, d, x
     int s = ISW, g = GAP, dw = lw("d", 1, sm);
+    i = needp(sn[0]);
     ca = mx(ca, B.as); cd = mx(cd, B.ds);
     dec(MI_INTEGRAL, sm, 0, -ca - g, s, ca + cd + 2 * g);
     t = s + 1;
@@ -578,15 +582,17 @@ static void cons(int n, int x, int y, int sm) {
       sl(3, s + 1, mn(-ca - g + D.as, u - 1 - D.ds), 1);
       t += mx(C.w, D.w) + 1;
     }
+    if (i) { dec(MI_LPAREN, sm, t, -ca, h + 1, ca + cd); t += h + 1; }
     sl(0, t, 0, sm);
+    if (i) { dec(MI_RPAREN, sm, t + A.w, -ca, h + 1, ca + cd); t += h + 1; }
     t += A.w + g;
     dtext("d", 1, sm, t, 0);
     sl(1, t + dw, 0, sm);
     cw = t + dw + B.w + 2; // trailing gap: "after the construct" differs from "end of x"
   } break;
-  case K_DIFF: { // d/(d x) then f, in parens if it is a sum
+  case K_DIFF: { // d/(d x) then f, in parens if it is a sum or a factor follows (d/dx(u) v)
     int g = GAP, b = BAR, dw = lw("d", 1, sm);
-    i = needp(sn[0]);
+    i = needp(sn[0]) || (T[n].nx && T[T[n].nx].k == K_DOT);
     u = mx(f.asc, B.as); v = dw + B.w + 2 * g;
     dec(MI_HLINE, sm, 0, -ax, v, b);
     dtext("d", 1, sm, (v - dw) / 2, -ax - g - f.desc);
@@ -655,7 +661,7 @@ static void measure(int n, int sm) {
   k = kindof(n); c = corec(n, k); w = (c - d.a) * h;
   d.as = f.asc; d.ds = f.desc;
   if (k < K_EMPTY) { // leaf: leading blanks, glyphs, gaps
-    if (k == K_DOT) w += hidedot(n) ? 1 : h + 2;
+    if (k == K_DOT) { const int g = hidedot(n); w += g ? g : h + 2; }
     else if (k == K_PI || k == K_INF || k == K_THETA) w += lw(symlit(k), 1, sm);
     else if (k != K_BLANK) {
       const char * dn = dname(n);

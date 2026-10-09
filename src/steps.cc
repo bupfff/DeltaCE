@@ -1210,6 +1210,7 @@ static gen nest(const gen & g){
   return symbolic(g._SYMBptr->sommet,nest(a));
 }
 
+gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; return nest(norm(input)); }
 bool steps_of(const gen & input0,std::vector<step_t> & out,GIAC_CONTEXT){
   ctx_=contextptr; out_=&out; depth_=0; nsub_=0;
   gen e=nest(norm(input0)),x(identificateur("x"));

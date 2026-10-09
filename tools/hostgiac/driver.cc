@@ -155,6 +155,40 @@ static void print_steps(const char * s){
   if (khicas_do_run) printf("   FlowCE answer: %s\n",khicas_do_run(s).c_str());
   fflush(stdout);
 }
+// -V <dir>: the steps screen of each input (src/focus_steps.cc) drawn off screen, one image per
+// stop (the top, then each step up/down goes to): <dir>/<n>_<stop>.ppm (n: the input's number)
+int focus_steps_preview(const char * in,const char * ans,int stop);
+#include "../../src/ui_gfx.h"
+#include "../../src/ui_font.h"
+#include "../../src/ui_fontdata.h"
+extern "C" { extern unsigned char * ui_fb; unsigned short * ui_host_palette(void); }
+static void view_steps(const char * dir,int n,const char * s){
+  static bool themed;
+  if (!themed){ ui_set_theme(&ui_theme_paper); themed=true; }
+  std::string ans=khicas_do_run?khicas_do_run(s):std::string();
+  const size_t ap=ans.find("  ~"); // (the decimal value: shown apart on the calculator)
+  if (ap!=std::string::npos) ans=ans.substr(0,ap);
+  int stops=1;
+  for (int k=0;k<stops && k<8;++k){
+    stops=focus_steps_preview(s,ans.c_str(),k);
+    if (stops<0){ printf("%d: %s  no steps\n",n,s); return; }
+    ui_fill(0,0,UI_W,18,ui_col(0,UC_BG)); // the status bar, as on the calculator (its label)
+    ui_draw_text(&ui_tb9,"STEPS",-1,8,13,ui_ramp(0,UC_SUB,UC_BG),0);
+    char fn[600]; snprintf(fn,sizeof(fn),"%s/%d_%d.ppm",dir,n,k);
+    FILE * f=fopen(fn,"wb");
+    if (!f){ perror(fn); return; }
+    fprintf(f,"P6\n%d %d\n255\n",UI_W,UI_H);
+    const unsigned short * pal=ui_host_palette();
+    for (int i=0;i<UI_W*UI_H;++i){
+      unsigned v=pal[ui_fb[i]];
+      unsigned char rgb[3]={(unsigned char)((v>>10&31)<<3),(unsigned char)((v>>5&31)<<3),(unsigned char)((v&31)<<3)};
+      fwrite(rgb,1,3,f);
+    }
+    fclose(f);
+  }
+  printf("%d: %s  %d stops; answer %s\n",n,s,stops,ans.c_str());
+  fflush(stdout);
+}
 static std::string eval_one(const char * s,bool autosimp,bool prepass){
   ctrl_c=kbd_interrupted=interrupted=false; // do_eval
   std::string text(s);
@@ -177,6 +211,7 @@ static std::string eval_one(const char * s,bool autosimp,bool prepass){
 int main(int argc,char ** argv){
   int N=1,trace_round=0;
   bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false,steps=false;
+  const char * viewdir=0;
   const char * file=0;
   static const char * exprs[8192]; int ne=0;
   for (int i=1;i<argc;++i){
@@ -194,6 +229,7 @@ int main(int argc,char ** argv){
     }
     else if (!strcmp(argv[i],"-m")) measure=true;
     else if (!strcmp(argv[i],"-S")) steps=true;
+    else if (!strcmp(argv[i],"-V") && i+1<argc) viewdir=argv[++i];
     else if (!strcmp(argv[i],"-t") && i+1<argc) trace_round=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-d") && i+1<argc) stack_depth=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-L")){ static void * volatile p; p=malloc(100); p=0; }
@@ -223,6 +259,10 @@ int main(int argc,char ** argv){
   angle_radian(1,contextptr);
   if (steps){
     for (int k=0;k<ne;++k) print_steps(exprs[k]);
+    return 0;
+  }
+  if (viewdir){
+    for (int k=0;k<ne;++k) view_steps(viewdir,k,exprs[k]);
     return 0;
   }
   for (int r=1;r<=N;++r){

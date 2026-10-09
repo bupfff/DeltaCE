@@ -31,6 +31,10 @@ USTL_SRC := $(wildcard $(T)/ustlsrc/*.cc)
 TOM_SRC := $(wildcard $(REPO)/src/tommath/*.c)
 # KhiCAS's input pre-pass (TI implicit multiplication), used by the driver's -i option
 KHI_SRC := $(REPO)/src/tiinput.cc $(REPO)/src/tiinput_glue.cc $(REPO)/src/steps.cc
+# the steps screen, drawn off screen (the driver's -V option), with the math layout it uses
+ifeq ($(KDISPLAY),1)
+KHI_SRC += $(REPO)/src/focus_steps.cc $(REPO)/src/ui_math.cc $(REPO)/src/mathinput.cc
+endif
 OBJS := $(patsubst $(T)/giac/%.cc,$(OBJ)/giac/%.o,$(GIAC_SRC)) \
         $(patsubst $(T)/ustlsrc/%.cc,$(OBJ)/ustl/%.o,$(USTL_SRC)) \
         $(patsubst $(REPO)/src/tommath/%.c,$(OBJ)/tommath/%.o,$(TOM_SRC)) \

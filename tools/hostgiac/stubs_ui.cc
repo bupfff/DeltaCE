@@ -22,6 +22,14 @@ extern "C" {
   int select_item(const char ** ptr,const char * title,bool askfor1){ return -1; }
 }
 int focus_view=0;
+// the steps screen (focus_steps.cc, -V): the status bar, the busy prompt, the memory reserve
+void focus_status_label(const char * s){}
+void focus_invalidate(){}
+void focus_busy(int on){}
+bool focus_busy_tick(){ return false; }
+void focus_note(const char * t,const char * s){}
+extern "C" { volatile char oom_hit; }
+void oom_rearm(){}
 void focus_table(const char * const * head,int ncol,const char * const * cells,int nrow,const char * hint){} // (the table view)
 bool stringtodouble(const std::string & s1,double & d){ d=atof(s1.c_str()); return true; }
 bool inputdouble(const char * msg1,double & d){ return false; }

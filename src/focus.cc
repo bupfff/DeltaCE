@@ -153,6 +153,15 @@ static void ui_text_wrapped(const char * s, int top, int bot, int w) {
 struct fent { short in, out, m0; short h, inh, outh, msgs; };
 static fent * E; // heap (see FC)
 static int NE;
+#ifdef FLOWCE_STEPS
+// the input of an entry the steps screen explains (a derivative or an integral with a math
+// answer), else 0
+static const char * steps_input(const fent & e) {
+  if (e.in < 0 || e.out < 0 || is_text(shown((const char *)Line[e.out].str))) return 0;
+  const char * s = (const char *)Line[e.in].str;
+  return focus_steps_able(s) ? s : 0;
+}
+#endif
 static void scan() {
   NE = 0;
   if (!E) E = (fent *)calloc(MAXE, sizeof(fent));
@@ -432,11 +441,24 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
       if (*ap) { strcpy(abuf, "\xe2\x89\x88 "); strncat(abuf, ap, sizeof(abuf) - 5); } // ≈ value
       int aw = *abuf ? ui_text_width(&ui_tr10, abuf, -1) + 12 : 0;
       int cw2 = ui_text_width(&ui_tb9, fn, -1) + ui_text_width(&ui_tb9, "F4", -1) + 20, cy = y0 + h - 13;
-      int x0 = (UI_W - aw - cw2) / 2, cx = x0 + aw;
+#ifdef FLOWCE_STEPS
+      // the steps of a derivative or an integral: a filled chip, the action of Enter (console.cc)
+      const int sw = steps_input(e) ? ui_text_width(&ui_tb9, "steps", -1) + ui_text_width(&ui_tb9, "enter", -1) + 28 : 0;
+      if (aw + cw2 + sw > UI_W - 8) { aw = 0; *abuf = 0; }
+#else
+      const int sw = 0;
+#endif
+      int x0 = (UI_W - aw - cw2 - sw) / 2, cx = x0 + aw;
       if (*abuf) ui_draw_text(&ui_tr10, abuf, -1, x0, cy, ramp(UC_SUB, UC_BG), 0);
       ui_rrect(0, cx, cy - 10, cw2, 13, 6, UC_ACCSOFT, UC_BG);
       int w1 = ui_text(&ui_tb9, fn, cx + 6, cy, UC_ACC, UC_ACCSOFT, 0);
       ui_text(&ui_tb9, "F4", cx + 12 + w1, cy, UC_SUB, UC_ACCSOFT, 0);
+      if (sw) {
+        const int sx = cx + cw2 + 8;
+        ui_rrect(0, sx, cy - 10, sw - 8, 13, 6, UC_ACC, UC_BG);
+        int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, UC_ONACC, UC_ACC, 0);
+        ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
+      }
     }
   } else {
     int m = y0 + h / 2 - 2, b = m + 20;
@@ -900,6 +922,13 @@ int focus_result_line() {
   return hm == HM_RESULT && NE ? E[NE - 1].out : -1;
 }
 static int forms_key() { return focus_result_line() >= 0; }
+#ifdef FLOWCE_STEPS
+const char * focus_steps_input(const char ** ans) {
+  const char * s = hm == HM_RESULT && NE ? steps_input(E[NE - 1]) : 0;
+  if (s) *ans = shown((const char *)Line[E[NE - 1].out].str);
+  return s;
+}
+#endif
 // History by calculations, as the prototype: the console line to select for dir 0 up, 1 down,
 // 2 left (the input), 3 right (the result); Last_Line for the edit line. Up and down keep the
 // part (input or result) that is selected.
