@@ -906,10 +906,23 @@ static NOINL gen parts(const gen & f,int lev){
   return F;
 }
 
+// 1 if g holds a sum with a fraction (x-1/2), else 0
+static NOINL gen fracin(const gen & g){
+  if (g.is_plus() && arg(g).type==_VECT) EACH(it,*arg(g)._VECTptr) if (it->type==_FRAC) return 1;
+  return first_of(g,fracin);
+}
+// partial fractions, a term over x-1/2 as over 2x-1 (1/(4(x-1/2)): 1/(2(2x-1)))
+static NOINL gen pfrac(const gen & g){
+  gen p=_partfrac(makesequence(g,X),CTX);
+  if (!p.is_plus() || arg(p).type!=_VECT) return p;
+  vecteur t=*arg(p)._VECTptr;
+  EACHW(it,t) if (!is_zero(fracin(*it))) *it=_factor(*it,CTX);
+  return symb_plus(t);
+}
 // a rational fraction: partial fractions (and the polynomial part)
 static NOINL gen ratfrac(const gen & fe,int lev){
   if (!shape(fe,SH_FRAC) || !dep(_denom(fe,CTX))) return undef;
-  gen p=_partfrac(makesequence(fe,X),CTX);
+  gen p=pfrac(fe);
   if (is_undef(p) || p==fe || !p.is_plus()) return undef;
   return via(R_PFRAC,fe,p,lev);
 }
@@ -1495,15 +1508,12 @@ static NOINL gen pser(const gen & op,const gen & G,const gen & e){
   if (cv && !is(G,at_sum)) S(R_EQV,op,G);
   return !cv?word("diverges"):is(G,at_sum)?word("converges"):G;
 }
-// the sums linear in N written out: 2(N+1)-1 as 2N+1, N+1+1 as N+2
-static NOINL gen linn(const gen & g,const gen & N){
-  if (g.type!=_SYMB) return g;
-  gen a,b,h=arg(g);
-  if (g.is_plus() && is_linear_wrt(g,N,a,b,CTX)) return a*N+b;
-  if (h.type!=_VECT) return symbolic(g._SYMBptr->sommet,linn(h,N));
-  vecteur w=*h._VECTptr;
-  EACHW(it,w) *it=linn(*it,N);
-  return symbolic(g._SYMBptr->sommet,gen(w,h.subtype));
+// the sums linear in N (*nn_) written out: 2(N+1)-1 as 2N+1, N+1+1 as N+2
+static const gen * nn_;
+static NOINL gen linn(const gen & g){
+  gen a,b;
+  if (g.is_plus() && is_linear_wrt(g,*nn_,a,b,CTX)) return a*(*nn_)+b;
+  return g.type==_SYMB?map_of(g,linn):g;
 }
 // sum(t,n,a,inf): the divergence test, telescoping, a p-series, a geometric series, the partial
 // sums' limit, else a limit comparison with a p-series (convergence only)
@@ -1515,13 +1525,21 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
     S(R_SDIV,Linf(v[0],x),has_op(L,*at_bounded_function)?word("DNE"):L); // (no raw bounded_function)
     return undone(G)?word("diverges"):gen(undef);
   }
-  if (t.is_plus() && arg(t).type==_VECT && arg(t)._VECTptr->size()==2){ // f(n)-f(n+1): telescoping
-    gen u=arg(t,0),w=arg(t,1);
-    for (int k=0;k<2;++k,std::swap(u,w)) if (same(sub(u,x,x+1),-w)){
-      SN=symb_plus(sub(u,x,a),symb_neg(linn(subst(u,x,N+1,true,CTX),N)));
+  // f(n)-f(n+k), k up to 3, as typed or in partial fractions: telescoping, S_N the first terms
+  // less the last (1/(n(n+2)): 1+1/2-1/(N+1)-1/(N+2))
+  gen pf=shape(t,SH_FRAC)?pfrac(t):t,s=t.is_plus()?t:pf; // (X: the index here)
+  if (s.is_plus() && arg(s).type==_VECT && arg(s)._VECTptr->size()==2){
+    gen u=arg(s,0),w=arg(s,1);
+    for (int i=0;i<6;++i,std::swap(u,w)) if (same(sub(u,x,x+1+i/2),-w)){
+      vecteur q;
+      for (int j=0;j<=i/2;++j) q.push_back(sub(u,x,a+j));
+      nn_=&N;
+      for (int j=1;j<=1+i/2;++j) q.push_back(symb_neg(linn(subst(u,x,N+j,true,CTX))));
+      SN=symb_plus(q);
       val=ev(Linf(SN,N));
       if (!same(val,G) && !is(G,at_sum) && !(is_inf(val) && is_inf(G))) return undef; // (S_N is exact)
-      S(R_PSUMT,SYM(at_sum,makesequence(v[0],x,a,N)),SN);
+      if (s!=t) S(R_PFRAC,v[0],pf);
+      S(R_PSUMT,SYM(at_sum,makesequence(s!=t?pf:v[0],x,a,N)),SN);
       S(R_SLIM,Linf(SN,N),val);
       return is_inf(val)?word("diverges"):val;
     }
@@ -1541,7 +1559,6 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
     S(R_EQV,op,val);
     return same(val,G)?val:gen(undef);
   }
-  gen pf=shape(t,SH_FRAC)?_partfrac(makesequence(t,x),CTX):t; // (x: the index here)
   SN=ev(SYM(at_sum,makesequence(t,x,a,N)));
   if (elementary(SN) && SN.type!=_STRNG){
     SN=rn(SN);
