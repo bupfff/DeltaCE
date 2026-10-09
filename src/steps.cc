@@ -1037,9 +1037,13 @@ static NOINL gen sqout(const gen & f){
   return f;
 }
 static gen one(const gen & op);
-// integrate(f,x,a,b) with |g| in f: one integral per interval where g keeps its sign
-static NOINL gen absplit(const gen & op,const gen & g,const gen & a,const gen & b){
-  gen f=arg(op,0),z=_solve(makesequence(symb_equal(g,0),X),CTX);
+// integrate(f,x,a,b) with |g| in f: one integral per interval where g keeps its sign. |g| alone
+// (area between curves): g simplified, one antiderivative, each interval evaluated with it.
+static NOINL gen absplit(const gen & op,const gen & g0,const gen & a,const gen & b){
+  gen f=arg(op,0),g=rn(g0);
+  if (taille(g,200)>=taille(g0,200)) g=g0;
+  bool alone=f==symb_abs(g0);
+  gen z=_solve(makesequence(symb_equal(g,0),X),CTX);
   vecteur pts(1,a);
   if (z.type==_VECT)
     for (unsigned i=0;i<z._VECTptr->size();++i){
@@ -1048,14 +1052,31 @@ static NOINL gen absplit(const gen & op,const gen & g,const gen & a,const gen & 
     }
   pts.push_back(b);
   pts=*_sort(pts,CTX)._VECTptr;
-  vecteur pieces;
+  vecteur pieces,sg;
   for (unsigned i=0;i+1<pts.size();++i){
-    gen s=evalf(sub(g,X,(pts[i]+pts[i+1])/2),1,CTX);
-    gen fi=sub(f,symb_abs(g),is_positive(s,CTX)?g:-g);
-    pieces.push_back(symbolic(at_integrate,makesequence(fi,X,pts[i],pts[i+1])));
+    bool pos=is_positive(evalf(sub(g,X,(pts[i]+pts[i+1])/2),1,CTX),CTX);
+    sg.push_back(pos?1:-1);
+    gen I=symbolic(at_integrate,makesequence(alone?g:sub(f,symb_abs(g0),pos?g0:-g0),X,pts[i],pts[i+1]));
+    pieces.push_back(alone && !pos?symb_neg(I):I);
   }
   S(R_ABS,op,symb_plus(pieces));
   gen tot=0;
+  if (alone){
+    gen I=symbolic(at_integrate,makesequence(g,X));
+    S(R_PART,I,0);
+    ++depth_; gen G=one(I); --depth_;
+    if (is_undef(G)) return G;
+    vecteur t;
+    for (unsigned i=0;i+1<pts.size();++i){
+      gen Gb=sub(G,X,pts[i+1]),Ga=sub(G,X,pts[i]),d=SYM2(at_binary_minus,Gb,Ga);
+      t.push_back(sg[i]==1?d:symb_neg(d));
+      tot=tot+sg[i]*(Gb-Ga);
+    }
+    S(R_FTC,op,symb_plus(t));
+    tot=_simplify(ev(tot),CTX);
+    S(R_EQV,op,tot);
+    return tot;
+  }
   for (unsigned i=0;i<pieces.size();++i){
     S(R_PART,pieces[i],0);
     ++depth_; gen vi=one(pieces[i]); --depth_;
