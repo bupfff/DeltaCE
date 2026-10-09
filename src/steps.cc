@@ -20,7 +20,8 @@ enum {
   R_EQI, R_SUMI, R_CONSTI, R_POWI, R_CONSTANT, R_LNI, R_TABLE, R_ATAN, R_ASIN, R_LNSQ, R_SUB, R_SUBEQ, R_BACK,
   R_PARTS, R_PARTSV, R_PARTS2, R_CYCLE, R_PFRAC, R_TRIGID, R_PYTH, R_EXPAND, R_SQUARE, R_SIMP, R_TSUB,
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
-  R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_NRULES
+  R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
+  R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -71,6 +72,20 @@ static const char * const RULES[]={
   "Compute",0,"A",
   "Sign on the interval",0,"A=B",
   "Fundamental theorem of calculus","diff(integrate(f(t),t,a,u),x)=f(u)*diff(u,x)","diff(A,V)=B",
+  "Direct substitution",0,"A=B",
+  "Limit laws",0,"A=B",
+  "Factor and cancel",0,"A=B",
+  "Multiply by the conjugate",0,"A=B",
+  "L'Hopital's rule","limit(f/g,x,a)=limit(diff(f,x)/diff(g,x),x,a)","A=B",
+  "Divide by the highest power",0,"A=B",
+  "Write the product as a quotient",0,"A=B",
+  "Write the power with e","u^v=e^(v*ln(u))","A=B",
+  "The denominator goes to 0, the numerator does not",0,"A=B",
+  "The one-sided limits differ: no limit",0,"A,B",
+  "Squeeze theorem: a bounded factor times one going to 0",0,"A=B",
+  "Limit of a continuous function","limit(f(u),x,a)=f(limit(u,x,a))","A=B",
+  "One fraction",0,"A=B",
+  "Factor out the fastest term",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -1147,7 +1162,7 @@ static gen isteps(const gen & f0,int lev){
 }
 
 // ---------------------------------------------------------------- entry
-static bool calc_op(const gen & g){ return is(g,at_derive) || is(g,at_integrate); }
+static bool calc_op(const gen & g){ return is(g,at_derive) || is(g,at_integrate) || is(g,at_limit); }
 // d/dx of an integral with x in its bounds: f(b) b' - f(a) a' (the fundamental theorem)
 static bool ftc1able(const gen & g){
   if (!is(g,at_derive) || arg(g).type!=_VECT || arg(g)._VECTptr->size()!=2) return false;
@@ -1246,6 +1261,140 @@ static gen absarg(const gen & f){
   if (is(f,at_abs) && dep(arg(f))) return arg(f);
   return first_of(f,absarg);
 }
+// ---------------------------------------------------------------- limits
+// lim f at la_ from ldir_ (1 the right, -1 the left, 0 both). The form is read from giac's limits
+// of the parts (0/0, inf/inf, c/0, 0*inf, inf-inf, 1^inf) and rewritten the textbook way. A
+// quotient is carried as its numerator and denominator: evaluated whole, giac undid the
+// rewriting (x ln x written ln x/(1/x) came back as x ln x).
+static int ldir_;
+static gen * la_;
+static NOINL gen Lx(const gen & f){ return SYM(at_limit,ldir_?makesequence(f,X,*la_,ldir_):makesequence(f,X,*la_)); }
+static NOINL gen glim(const gen & g){ return ev(Lx(g)); }
+static NOINL bool finv(const gen & v){ return v.type!=_STRNG && !has_inf_or_undef(v) && !has_op(v,*at_bounded_function); }
+static NOINL gen Ls(int r,const gen & f,const gen & v){ S(r,Lx(f),v); return v; } // lim f = v by rule r
+static gen lsteps(const gen & f,int lev);
+static gen lq(const gen & f,const gen & n,const gen & d,int lev);
+static NOINL gen quo(const gen & n,const gen & d){ return is_one(d)?n:symb_prod(n,symb_inv(d)); }
+// lim f = lim n/d by rule r, then that limit (d = 1: n's)
+static NOINL gen lvia(int r,const gen & f,const gen & n,const gen & d,int lev){
+  size_t m=mark();
+  gen g=quo(n,d);
+  S(r,Lx(f),Lx(g));
+  gen L=is_one(d)?lsteps(n,lev+1):lq(g,n,d,lev+1);
+  if (is_undef(L)) cut(m);
+  return L;
+}
+// lim f = shown by rule r, then lim u (undef: the step taken back)
+static NOINL gen linner(int r,const gen & f,const gen & shown,const gen & u,int lev){
+  size_t m=mark();
+  S(r,Lx(f),shown);
+  gen L=lsteps(u,lev+1);
+  if (is_undef(L)) cut(m);
+  return L;
+}
+// the term of the sum g growing fastest: every other over it has a finite limit (0: none)
+static NOINL gen fastest(const gen & g){
+  vecteur w; flat(at_plus,g,w);
+  EACH(it,w){
+    bool ok=dep(*it);
+    EACH(jt,w) if (ok && jt!=it && !finv(glim(ev(*jt / *it)))) ok=false; // (rn expanded (x+1)^1000)
+    if (ok) return *it;
+  }
+  return 0;
+}
+// the conjugate of the sum g holding a square root: its first root term kept, the others' signs
+// changed (sqrt(x+4)-1: sqrt(x+4)+1; sqrt(1+x)-sqrt(1-x): sqrt(1+x)+sqrt(1-x)); 0 if none
+static NOINL gen conjof(const gen & g){
+  vecteur w,c; flat(at_plus,g,w);
+  bool r=false;
+  EACH(it,w){ bool q=!r && froot(ev(*it),0); c.push_back(q?*it:it->is_neg()?arg(*it):symb_neg(*it)); r=r||q; }
+  return r && w.size()>1?symb_plus(c):gen(0);
+}
+// f's limits from each side, different: no limit (undef if they agree or one is missing)
+static NOINL gen sides(const gen & f){
+  gen L=SYM(at_limit,makesequence(f,X,*la_,-1)),R=SYM(at_limit,makesequence(f,X,*la_,1)),l=ev(L),r=ev(R);
+  if (l==r || !(finv(l) || is_inf(l)) || !(finv(r) || is_inf(r))) return undef;
+  S(R_LDNE,symb_equal(L,l),symb_equal(R,r));
+  return gen(identificateur("DNE"));
+}
+static gen lq(const gen & f,const gen & n,const gen & d,int lev){
+  if (lev>12 || --budget_<0 || interrupted) return undef;
+  gen ln=glim(n),ld=glim(d),a=*la_,v;
+  const bool fn=finv(ln),fd=finv(ld),zn=fn && is_zero(ln),zd=fd && is_zero(ld),in=is_inf(ln),id=is_inf(ld);
+  if (fd && !zd?fn || in:fn && id) return Ls(!is_inf(a) && fn && fd?R_LSUB:R_LLAW,f,glim(f)); // c/d, inf/d, c/inf
+  if (zd && (in || (fn && !zn))){ // c/0, inf/0: infinite on each side (both: no limit if they differ)
+    v=glim(f);
+    return ldir_ || is_inf(a) || (is_inf(v) && v!=unsigned_inf)?Ls(R_LINFV,f,v):sides(f);
+  }
+  if (id && has_op(ln,*at_bounded_function)) return Ls(R_LSQZ,f,0); // sin(x)/x at infinity
+  if (!(zn && zd) && !(in && id)) return undef;
+  // 0/0, inf/inf: the fraction simplified (factor and cancel), defined at a (at infinity: shorter)
+  gen fe=ev(f),h=rn(fe);
+  if (h!=fe && (is_inf(a)?taille(h,200)<taille(fe,200):finv(ev(sub(h,X,a)))) && !is_undef(v=lvia(R_LALG,f,h,1,lev))) return v;
+  // a square root in a sum: times its conjugate over itself
+  gen c=conjof(n);
+  const bool top=!is_zero(c);
+  if (!top) c=conjof(d);
+  if (!is_zero(c) && !is_undef(v=lvia(R_LCONJ,f,top?rn(expand(ev(n*c),CTX)):symb_prod(n,c),top?symb_prod(d,c):rn(expand(ev(d*c),CTX)),lev))) return v;
+  // at infinity, numerator and denominator over the fastest term below
+  gen t=is_inf(a) && d.is_plus()?fastest(d):gen(0);
+  if (!is_zero(t) && !is_undef(v=lvia(R_LDIV,f,expand(ev(n/t),CTX),expand(ev(d/t),CTX),lev))) return v;
+  return lev<8?lvia(R_LHOP,f,D(n,X),D(d,X),lev):gen(undef); // (L'Hopital a few times at most)
+}
+static gen lsteps(const gen & f0,int lev){
+  if (lev>12 || --budget_<0 || ctrl_c || interrupted) return undef;
+  gen f=norm(f0),a=*la_,v,L;
+  if (!dep(f)) return Ls(R_LSUB,f,f);
+  if (!is_inf(a) && !has_op(f,*at_floor) && !has_op(f,*at_sign) && finv(v=ev(sub(f,X,a)))) return Ls(R_LSUB,f,v); // continuous there
+  vecteur c,w,de; factors(f,c,w);
+  vecteur nu(c);
+  EACH(it,w){ gen b=*it,e=bexp(b); if (is_strictly_positive(-e,CTX)) de.push_back(is_minus_one(e)?b:symb_pow(b,ev(-e))); else nu.push_back(*it); }
+  if (!de.empty()){ gen n=prodof(nu),d=prodof(de); return lq(quo(n,d),n,d,lev); }
+  gen k=ev(prodof(c));
+  if (w.size()==1 && w[0].type==_SYMB){
+    const gen & g=w[0],& u=g.is_pow()?arg(g,0):arg(g);
+    if (g.is_pow() && dep(arg(g,1))){ // u^v: e^(v ln u)
+      gen e=symb_prod(arg(g,1),symb_ln(u));
+      L=linner(R_LEXP,f,symb_prod(k,SYM(at_exp,Lx(e))),e,lev);
+      return is_undef(L)?L:Ls(R_EQV,f,ev(k*exp(L,CTX)));
+    }
+    if (u.type!=_VECT){ // h(u), h continuous (a constant power too)
+      if (u==X) return Ls(R_LLAW,f,glim(f)); // e^x at infinity: at once
+      size_t m=mark();
+      L=linner(R_LCOMP,f,symb_prod(k,g.is_pow()?symb_pow(Lx(u),arg(g,1)):SYM(&g._SYMBptr->sommet,Lx(u))),u,lev);
+      if (is_undef(L)) return L;
+      if (L.type==_IDNT && !ldir_){ cut(m); return sides(f); } // atan(1/x) at 0
+      v=ev(k*sub(g,u,L)); // (giac's ln(0) is -inf, e^(-inf) 0)
+      if (finv(v) || is_inf(v)) return Ls(R_EQV,f,v);
+      cut(m); return undef;
+    }
+  }
+  if (w.size()>1){ // a product: 0 times infinity as a quotient, a bounded factor times 0
+    gen z=0,i=0;
+    EACH(it,w){ gen l=glim(*it); if (is_zero(l)) z=*it; else if (is_inf(l)) i=*it; }
+    if (!is_zero(z) && !is_zero(i)){
+      vecteur r(c); EACH(it,w) if (*it!=z && *it!=i) r.push_back(*it);
+      // ln x/(1/x), x^2/e^x (e^(-x) below as e^x), sin(1/x)/(1/x)
+      const bool up=has_op(i,*at_ln) || has_op(z,*at_exp);
+      if (!is_undef(v=lvia(R_LQUOT,f,prodof(r)*(up?i:z),ev(inv(up?z:i,CTX)),lev))) return v;
+    }
+    EACH(it,w) if ((is(*it,at_sin) || is(*it,at_cos)) && !finv(glim(*it)) && is_zero(glim(ev(f / *it)))) return Ls(R_LSQZ,f,0);
+  }
+  if (f.is_plus()){
+    vecteur t; flat(at_plus,f,t);
+    bool pi=false,mi=false;
+    EACH(it,t){ gen l=glim(*it); if (l==plus_inf) pi=true; else if (l==minus_inf) mi=true; else if (!finv(l)) pi=mi=true; }
+    if (pi && mi){ // infinity - infinity (or a term without a limit, csc(x)-1/x at 0): the
+      gen c=conjof(f),h=rn(f),d=_denom(h,CTX); // conjugate, one fraction, the fastest term out
+      if (!is_zero(c) && !is_undef(v=lvia(R_LCONJ,f,rn(ev(f*c)),c,lev))) return v;
+      if (dep(d) && !is_undef(v=lvia(R_LFRAC,f,_numer(h,CTX),d,lev))) return v;
+      gen tt=is_inf(a)?fastest(f):gen(0);
+      return is_zero(tt)?gen(undef):lvia(R_LDOM,f,symb_prod(tt,expand(ev(f/tt),CTX)),1,lev);
+    }
+  }
+  v=glim(f); // every part has a limit: put together
+  return finv(v) || is_inf(v)?Ls(R_LLAW,f,v):gen(undef);
+}
 static gen realroot(const gen & g){
   if (g.type!=_SYMB) return g;
   gen h=map_of(g,realroot);
@@ -1259,6 +1408,17 @@ static gen realroot(const gen & g){
 static gen one_(const gen & op){
   const vecteur & v=*arg(op)._VECTptr;
   gen x=v[1]; var_=&x;
+  if (is(op,at_limit)){ // the steps' limit must be giac's (no limit: giac says so too)
+    if (v.size()<3) return undef;
+    gen a=ev(v[2]),L,G;
+    la_=&a; ldir_=v.size()>3?(is_positive(v[3],CTX)?1:-1):0;
+    budget_=80;
+    L=lsteps(v[0],0);
+    if (interrupted || is_undef(L)) return undef;
+    G=ev(op);
+    if (L.type==_IDNT) return G.type==_STRNG || G==unsigned_inf || is_undef(G)?L:gen(undef);
+    return L==G || (finv(L) && finv(G) && is_zero(evalf(L-G,1,CTX)))?L:gen(undef);
+  }
   if (is(op,at_derive)){
     gen r;
     if (ftc1able(op)){

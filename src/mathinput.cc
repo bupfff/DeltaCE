@@ -302,6 +302,7 @@ static int pcall(int nm) { // name( args ): normal or special call
   else T[cl].b = T[t].b;
   for (unsigned i = 0; i < sizeof(spec) / sizeof(spec[0]); ++i)
     if (spec[i].na == na && namei(nm, spec[i].nm)) k = spec[i].k;
+  if (!k && na == 4 && (M->flags & MI_F_IMPLDOT) && namei(nm, "limit")) k = K_LIM; // a result: lim x->0+
   if (k) { T[cl].k = k; T[cl].kid = T[nm].nx; T[cl].c = T[nm].c; } // name is structure
   else {
     T[cl].kid = nm;
@@ -631,15 +632,22 @@ static void cons(int n, int x, int y, int sm) {
     sl(0, t + h, 0, sm);
     cw = t + h + A.w + 2;
   } break;
-  case K_LIM: { // column: lim over x->a; then f
+  case K_LIM: { // column: lim over x->a (results: x->a+ or a-, its 4th argument 1 or -1); then f
     int bx, bb, lmw = lw("lim", 3, sm), aw = lw("\x1e", 1, 1);
-    u = B.w + aw + C.w; v = mx(sf.asc, mx(B.as, C.as));
+    const char * sg = sn[3] ? (ch(T[sn[3]].a) == '-' ? "-" : "+") : "";
+    const int sw = *sg ? lw(sg, 1, 1) : 0;
+    u = B.w + aw + C.w + sw; v = mx(sf.asc, mx(B.as, C.as));
     t = mx(lmw, u);
     dtext("lim", 3, sm, (t - lmw) / 2, 0);
     bx = (t - u) / 2; bb = f.desc + 1 + v;
     sl(1, bx, bb, 1);
     dtext("\x1e", 1, 1, bx + B.w, bb);
     sl(2, bx + B.w + aw, bb, 1);
+    if (sw) { // (- as a bar: the small font's hyphen was a dot; the 1 or -1 itself off the screen)
+      const int sx = bx + B.w + aw + C.w, sy = bb - sf.asc / 2;
+      if (*sg == '-') dec(MI_HLINE, 1, sx + 1, sy - sf.asc / 3, sw - 1, BAR); else dtext(sg, 1, 1, sx, sy);
+      if (gm != GM_MEASURE) sl(3, -30000, 0, 1);
+    }
     sl(0, t + h, 0, sm);
     cw = t + h + A.w + 2;
   } break;

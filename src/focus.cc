@@ -157,7 +157,8 @@ static int NE;
 // the input of an entry the steps screen explains (a derivative or an integral with a math
 // answer), else 0
 static const char * steps_input(const fent & e) {
-  if (e.in < 0 || e.out < 0 || is_text(shown((const char *)Line[e.out].str))) return 0;
+  const char * r = e.out < 0 ? 0 : shown((const char *)Line[e.out].str);
+  if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14))) return 0; // (a limit's "does not exist" too)
   const char * s = (const char *)Line[e.in].str;
   return focus_steps_able(s) ? s : 0;
 }
