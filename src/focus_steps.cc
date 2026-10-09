@@ -107,11 +107,12 @@ static void unwrap(char * s) {
 // where a line of s[0,n) may break: before a + or - between terms, at top level, after the =
 static int cuts(const char * s, int n, short * at, int max) {
   int depth = 0, k = 0, eq = top(s, '=');
-  for (int i = eq < 0 ? 1 : eq + 2; i < n && k < max; ++i) {
+  const int s0 = eq < 0 ? 0 : eq + 1; // (every parenthesis counted: from 1, ((u)-(v))/(1-w)^2 was cut
+  for (int i = s0; i < n && k < max; ++i) { // inside (1-w), a garbled line; no cut at the start)
     const char c = s[i];
     if (c == '(' || c == '[') ++depth;
     else if (c == ')' || c == ']') --depth;
-    else if (!depth && (c == '+' || c == '-') && !strchr("+-*/^(,=", s[i - 1]) &&
+    else if (!depth && i > s0 + 1 && (c == '+' || c == '-') && !strchr("+-*/^(,=", s[i - 1]) &&
              !(s[i - 1] == 'e' && i > 1 && s[i - 2] >= '0' && s[i - 2] <= '9')) at[k++] = i;
   }
   return k;
@@ -154,9 +155,10 @@ static int add_math(const char * s, int n, int x, int y, int w, int lv0, int kin
       if (lay(s + a, e - a, LVWRAP, L) <= wi) best = e;
       else break;
     }
-    if (best < 0) best = k < nc ? at[k] : n; // (too wide anyway: clipped)
-    lay(s + a, best - a, LVWRAP, L);
-    item * it = put(kind, dup(s + a, best - a), xi, y + h + 4, (a ? 0 : lr) + L.width, L.asc + L.desc, L.asc, LVWRAP);
+    if (best < 0) best = k < nc ? at[k] : n; // (too wide anyway: smaller, down to 10 px, then clipped)
+    int lv = LVWRAP;
+    while (lay(s + a, best - a, lv, L) > wi && lv < UI_NSIZES - 1) ++lv;
+    item * it = put(kind, dup(s + a, best - a), xi, y + h + 4, (a ? 0 : lr) + L.width, L.asc + L.desc, L.asc, lv);
     if (it && lead && !a) { it->num = 1; it->eqx = 0; }
     h += L.asc + L.desc + 4;
     a = best;
@@ -179,7 +181,7 @@ static void finish(int k0) {
       if (q->x < a) a = q->x;
       if (q->x + q->w > b) b = q->x + q->w;
     }
-    if (p->grp) for (; p < q; ++p) p->x += X + (W - (b - a)) / 2 - a;
+    if (p->grp) for (; p < q; ++p) p->x += X + (b - a < W ? (W - (b - a)) / 2 : 0) - a; // (wider: at the left, cut at the right only)
     p = q;
   }
 }
