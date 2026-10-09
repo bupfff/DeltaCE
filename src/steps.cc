@@ -1156,10 +1156,13 @@ static gen one_(const gen & op){
   }
   if (v.size()==2) return F;
   gen Fb=sub(F,x,b),Fa=sub(F,x,a),val;
-  if (is_inf(a) || is_inf(b)){ // limits at the infinite bounds
-    gen Lb=is_inf(b)?SYM(at_limit,makesequence(F,x,b)):Fb,La=is_inf(a)?SYM(at_limit,makesequence(F,x,a)):Fa;
+  // limits at an infinite bound, or where F is not defined (ln(x) at 0), from inside [a,b]
+  bool ia=is_inf(a) || has_inf_or_undef(ev(Fa)),ib=is_inf(b) || has_inf_or_undef(ev(Fb)),up=is_greater(b,a,CTX);
+  if (ia || ib){
+    gen La=ia?SYM(at_limit,is_inf(a)?makesequence(F,x,a):makesequence(F,x,a,up?1:-1)):Fa;
+    gen Lb=ib?SYM(at_limit,is_inf(b)?makesequence(F,x,b):makesequence(F,x,b,up?-1:1)):Fb;
     S(R_IMPROPER,op,SYM2(at_binary_minus,Lb,La));
-    val=ev(_limit(makesequence(F,x,b),CTX)-_limit(makesequence(F,x,a),CTX));
+    val=ev(ev(Lb)-ev(La));
   }
   else {
     S(R_FTC,op,SYM2(at_binary_minus,Fb,Fa));
