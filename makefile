@@ -56,12 +56,17 @@ CFLAGS = -Wall -Wextra -Oz -DMP_16BIT -DTICE -Isrc/tommath -Wno-unused-command-l
 CXXFLAGS = -std=c++14 -fno-rtti -fno-threadsafe-statics -Wall -Wextra -Oz -Iustl -Isrc/tommath -DMP_16BIT -DTICE -DFLOWCE -DHAVE_CONFIG_H -DXLIGHT -DCOMPILE_FOR_STABILITY \
     -Wno-unknown-pragmas -Wno-unneeded-internal-declaration -Wno-sign-compare -Wno-unused-function -Wno-unused-parameter \
     -Wno-unused-variable -Wno-unused-but-set-variable -Wno-deprecated-register -Wno-reorder-ctor -Wno-inline-new-delete \
-    -Wno-deprecated-copy-with-user-provided-copy $(LANG_DEF) $(FEATURE_DEFS)
+    -Wno-deprecated-copy-with-user-provided-copy $(LANG_DEF) $(FEATURE_DEFS) $(INLFILE)
 # The LTO code generation (CEdev: LTOFLAGS ?= CFLAGS) merges identical functions (uSTL vectors of
 # same-size types, copy constructors...): 3.8 KB less; a function whose address is used keeps it.
 # It inlines less: a small helper called from many places (context accessors, gen(vecteur),
 # evalf...) stays a call, smaller than its copies on the eZ80: 33 KB less
 LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -inline-threshold=-10
+
+# giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB
+# less; FlowCE's own files keep the default inlining
+INLFILE = -mllvm -inline-threshold=-10
+%/answer.cc.bc %/console.cc.bc %/fake.cc.bc %/file.cc.bc %/focus.cc.bc %/focus_catalog.cc.bc %/focus_edit.cc.bc %/focus_menu.cc.bc %/focus_steps.cc.bc %/main.cc.bc %/mathedit.cc.bc %/mathinput.cc.bc %/mathinput_glue.cc.bc %/menufr.cc.bc %/steps.cc.bc %/textGUI.cc.bc %/tiinput.cc.bc %/tiinput_glue.cc.bc %/ui_math.cc.bc: INLFILE :=
 
 # The Focus drawing code works per pixel: compiled for speed (with -Oz, shifts and multiplies
 # become helper calls). Small files: a few KB of flash.
