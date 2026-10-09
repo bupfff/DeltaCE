@@ -1535,6 +1535,20 @@ static NOINL gen ratio_of(const gen & f,const gen & t,const gen & x){
 // g at n as a decimal (0 if not real): compared as decimals (giac's is_strictly_positive is
 // false for 4.5e-7, the term n e^(-n^2) at 4)
 static NOINL double at_(const gen & g,const gen & n){ gen y=evalf(sub(g,X,n),1,CTX); return y.type==_DOUBLE_?y._DOUBLE_val:0; }
+// 0 when g falls fast toward 0 at a+5, a+10, a+20 (giac's limit of n!/n^n took seconds on the
+// calculator; of 1/n! it stays 1/((+infinity)!)), else g's limit
+static NOINL gen lim_(const gen & g,const gen & a){
+  const double y1=fabs(at_(g,a+5)),y2=fabs(at_(g,a+10)),y3=fabs(at_(g,a+20));
+  return y1>0 && y2<y1 && y3<y2 && y3<1e-3*y1?gen(0):ev(Linf(g,X));
+}
+// every factor of g a constant to a power of n (or e^(...)): maybe geometric (no simplify of the
+// ratio of (n/(2n+1))^n: seconds on the calculator)
+static NOINL bool geo(const vecteur & w){
+  EACH(it,w){ const gen & f=it->is_inv()?arg(*it):*it; if (!is(f,at_exp) && !(f.is_pow() && !dep(arg(f,0)))) return false; }
+  return !w.empty();
+}
+// 1 if the index is in a power's base and exponent ((n/(2n+1))^n, n^n), else 0
+static NOINL gen npow(const gen & g){ return g.is_pow() && dep(arg(g,0)) && dep(arg(g,1))?gen(1):first_of(g,npow); }
 // 1 if the index is in an exponent of g (2^n, n^n), else 0
 static NOINL gen nexp(const gen & g){ return g.is_pow() && dep(arg(g,1))?gen(1):first_of(g,nexp); }
 // the sums linear in N (*nn_) written out: 2(N+1)-1 as 2N+1, N+1+1 as N+2
@@ -1548,8 +1562,46 @@ static NOINL gen linn(const gen & g){
 // sums' limit, else a limit comparison with a p-series (convergence only)
 static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   if (v.size()!=4 || ev(v[3])!=plus_inf) return undef;
-  const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N"),G=ev(op);
-  gen L=ev(Linf(t,x)),val,SN;
+  const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N");
+  // giac's sum as the reference, but not of n in a power's base and exponent, n!, ln, trig: it
+  // simplifies them at length for nothing (43 s of (n/(2n+1))^n on the calculator; the console's
+  // answer skips it too, answer.cc power_sum)
+  const gen G=!is_zero(npow(t)) || has_op(t,*at_factorial) || has_op(t,*at_ln) || has_op(t,*at_sin) || has_op(t,*at_cos) || has_op(t,*at_tan)?op:ev(op);
+  gen L,val,SN;
+  vecteur c,w; factors(t,c,w);
+  // the shape first: giac's limit of (n/(2n+1))^n or (-1)^n/sqrt(n) took 10 to 20 s on the calculator
+  gen r=0;
+  if (geo(w)){ // geometric
+    r=_simplify(ev(sub(t,x,x+1)/t),CTX); // (2^n/2^(n+1): ratnormal left it)
+    if (!dep(r) && is_strictly_greater(1,evalf(abs(r,CTX),1,CTX),CTX)){
+      gen t0=ev(sub(t,x,a));
+      val=ev(t0/(1-r));
+      S(R_SRAT,ratio_of(v[0],t,x),r);
+      S(R_SGEOM,op,symb_prod(t0,symb_inv(symb_plus(1,symb_neg(r)))));
+      S(R_EQV,op,val);
+      return same(val,G)?val:gen(undef);
+    }
+  }
+  // b^n, b depending on n: the root test, lim (a_n)^(1/n) = lim b below 1 ((n/(2n+1))^n, 1/ln(n)^n)
+  gen u=t.is_inv()?arg(t):t;
+  if (!is_inf(G) && u.is_pow() && dep(arg(u,0)) && (arg(u,1)==x || is_zero(ev(arg(u,1)+x)))){
+    gen b=(arg(u,1)==x)!=t.is_inv()?arg(u,0):symb_inv(arg(u,0));
+    L=ev(Linf(b,x));
+    if (finv(L) && is_strictly_greater(1,abs(L,CTX),CTX)){ S(R_ROOT,Linf(b,x),L); return cvg(op,G); }
+  }
+  // (-1)^(n+k) b, b > 0 decreasing to 0 (from a+3 on: ln(n)/n): the alternating series test
+  if (!is_inf(G)) EACH(it,w) if (it->is_pow() && is_minus_one(arg(*it,0))){
+    vecteur o(c);
+    EACH(jt,w) if (jt!=it) o.push_back(*jt);
+    gen b=ev(prodof(o));
+    if (at_(b,a+3)<0) b=ev(-b);
+    int k=3;
+    while (k<12 && at_(b,a+k)>at_(b,a+k+1)) ++k;
+    if (k<12 || !is_zero(lim_(b,a))) break; // (b not decreasing to 0: the terms' limit below)
+    S(R_AST,Linf(b,x),0);
+    return cvg(op,G);
+  }
+  L=lim_(t,a); // (0 at once when the terms fall fast: n!/n^n, 2^n/n!)
   if (!is_zero(L) && (finv(L) || L==plus_inf || L==minus_inf || has_op(L,*at_bounded_function))){ // the terms do not go to 0
     // (+-infinity itself: giac's limit of 1/n! is 1/((+infinity)!), and is_inf looks inside)
     S(R_SDIV,Linf(v[0],x),has_op(L,*at_bounded_function)?word("DNE"):L); // (no raw bounded_function)
@@ -1575,21 +1627,22 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
       return is_inf(val)?word("diverges"):val;
     }
   }
-  vecteur c,w; factors(t,c,w);
   gen e=0;
   bool ps=!w.empty();
   EACH(it,w){ gen b=*it,ei=bexp(b); ps=ps && b==x; e=e+ei; } // c/n^p (1/n^(3/2) is 1/(n*sqrt(n)))
   e=ev(-e);
   if (ps && is_strictly_positive(e,CTX)) return pser(op,G,e);
-  gen r=_simplify(ev(sub(t,x,x+1)/t),CTX); // (2^n/2^(n+1): ratnormal left it)
-  if (!dep(r) && is_strictly_greater(1,evalf(abs(r,CTX),1,CTX),CTX)){ // geometric
-    gen t0=ev(sub(t,x,a));
-    val=ev(t0/(1-r));
-    S(R_SRAT,ratio_of(v[0],t,x),r);
-    S(R_SGEOM,op,symb_prod(t0,symb_inv(symb_plus(1,symb_neg(r)))));
-    S(R_EQV,op,val);
-    return same(val,G)?val:gen(undef);
+  // n! or the index in an exponent: the ratio test, lim |a(n+1)/a(n)| below 1 (2^n/n!, n!/n^n)
+  if (!is_inf(G) && (has_op(t,*at_factorial) || !is_zero(nexp(t))) && dep(is_zero(r)?r=_simplify(ev(sub(t,x,x+1)/t),CTX):r)){
+    gen q=_factor(r,CTX),qa=is_strictly_positive(evalf(sub(q,x,a+3),1,CTX),CTX)?q:SYM(at_abs,q);
+    L=ev(Linf(qa,x));
+    if (finv(L) && is_strictly_greater(1,L,CTX)){
+      S(R_SRAT,ratio_of(v[0],t,x),q);
+      S(R_RATIO,Linf(qa,x),L);
+      return cvg(op,G);
+    }
   }
+  // the partial sums' closed form (giac's symbolic sum to N, slow: after the tests above)
   SN=ev(SYM(at_sum,makesequence(t,x,a,N)));
   if (elementary(SN) && SN.type!=_STRNG){
     SN=rn(SN);
@@ -1601,33 +1654,6 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
       S(R_SLIM,Linf(SN,N),val);
       S(R_EQV,op,val);
       return val;
-    }
-  }
-  // (-1)^(n+k) b, b > 0 decreasing to 0 (from a+3 on: ln(n)/n): the alternating series test
-  if (!is_inf(G)) EACH(it,w) if (it->is_pow() && is_minus_one(arg(*it,0))){
-    vecteur o(c);
-    EACH(jt,w) if (jt!=it) o.push_back(*jt);
-    gen b=ev(prodof(o));
-    if (at_(b,a+3)<0) b=ev(-b);
-    for (int k=3;k<12;++k) if (!(at_(b,a+k)>at_(b,a+k+1))) return undef;
-    S(R_AST,Linf(b,x),0);
-    return cvg(op,G);
-  }
-  // b^n: the root test, lim (a_n)^(1/n) = lim b below 1 ((n/(2n+1))^n, 1/ln(n)^n)
-  gen u=t.is_inv()?arg(t):t;
-  if (!is_inf(G) && u.is_pow() && (arg(u,1)==x || is_zero(ev(arg(u,1)+x)))){
-    gen b=(arg(u,1)==x)!=t.is_inv()?arg(u,0):symb_inv(arg(u,0));
-    L=ev(Linf(b,x));
-    if (finv(L) && is_strictly_greater(1,abs(L,CTX),CTX)){ S(R_ROOT,Linf(b,x),L); return cvg(op,G); }
-  }
-  // n! or the index in an exponent: the ratio test, lim |a(n+1)/a(n)| below 1 (2^n/n!, n!/n^n)
-  if (dep(r) && !is_inf(G) && (has_op(t,*at_factorial) || !is_zero(nexp(t)))){
-    gen q=_factor(r,CTX),qa=is_strictly_positive(evalf(sub(q,x,a+3),1,CTX),CTX)?q:SYM(at_abs,q);
-    L=ev(Linf(qa,x));
-    if (finv(L) && is_strictly_greater(1,L,CTX)){
-      S(R_SRAT,ratio_of(v[0],t,x),q);
-      S(R_RATIO,Linf(qa,x),L);
-      return cvg(op,G);
     }
   }
   // like 1/n^p: lim t n^p finite and not 0 (a limit comparison: converges or not)
