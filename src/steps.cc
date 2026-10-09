@@ -124,12 +124,13 @@ static bool is(const gen & g,const unary_function_ptr * u){ return g.is_symb_of_
 static const gen & arg(const gen & g){ return g._SYMBptr->feuille; }
 static gen arg(const gen & g,int i){ return g._SYMBptr->feuille[i]; }
 
-// the factors of a product or the terms of a sum, flattened
+// the factors of a product (-g: -1 and g) or the terms of a sum, flattened
 static NOINL void flat(const unary_function_ptr * u,const gen & g,vecteur & v){
   if (is(g,u) && arg(g).type==_VECT){
     const vecteur & w=*arg(g)._VECTptr;
     for (unsigned i=0;i<w.size();++i) flat(u,w[i],v);
   }
+  else if (u==at_prod && g.is_neg()){ v.push_back(-1); flat(u,arg(g),v); }
   else v.push_back(g);
 }
 // constant factors in c, the others in v
@@ -139,6 +140,30 @@ static NOINL void factors(const gen & f,vecteur & c,vecteur & v){
     (dep(w[i])?v:c).push_back(w[i]);
 }
 static gen prodof(const vecteur & v){ return v.empty()?gen(1):v.size()==1?v[0]:symb_prod(v); }
+
+// g built with + * and positive integer powers from constants and x (giac's lvarx gives x for
+// sqrt(1-x^2): no help). SH_FRAC: quotients too (a rational fraction); SH_ROOTX: any power of x
+// itself (x^(1/3), x^-2); SH_TRIG: sin and cos of linear arguments instead of x.
+enum { SH_FRAC=1, SH_ROOTX=2, SH_TRIG=4 };
+static NOINL bool shape(const gen & g,int m){
+  if (!dep(g)) return true;
+  if (g==X) return !(m & SH_TRIG);
+  if (g.type!=_SYMB) return false;
+  const gen & a=arg(g);
+  if (is(g,at_sin) || is(g,at_cos)){ gen p,q; return (m & SH_TRIG) && is_linear_wrt(a,X,p,q,CTX); }
+  if (g.is_pow()){
+    if (dep(arg(g,1))) return false;
+    if ((m & SH_ROOTX) && arg(g,0)==X) return true;
+    return arg(g,1).type==_INT_ && (arg(g,1).val>0 || (m & SH_FRAC)) && shape(arg(g,0),m);
+  }
+  if (g.is_inv()) return ((m & SH_FRAC) || ((m & SH_ROOTX) && (a==X || (a.is_pow() && arg(a,0)==X)))) && shape(a,m);
+  if (g.is_neg()) return shape(a,m);
+  if ((g.is_plus() || g.is_prod()) && a.type==_VECT){
+    for (unsigned i=0;i<a._VECTptr->size();++i) if (!shape((*a._VECTptr)[i],m)) return false;
+    return true;
+  }
+  return false;
+}
 
 // The parsed text as sums and products: a-b is a+(-b), a/b a*inv(b), the inverse of a product the
 // product of the inverses, nested sums and products flattened, numbers evaluated (1*1/3 is 1/3).
@@ -352,17 +377,23 @@ static NOINL gen subs(const gen & f,const gen & uu,const gen & ux,const gen & du
   return F;
 }
 
-// c x^r: the power rule (or 1/x)
+// c x^a x^b...: the power rule (or 1/x). Read from the factors: giac's normal of several roots
+// (sqrt(x) x^(1/3)) can take minutes.
 static NOINL bool power(const gen & g,gen & F,int & r){
-  vecteur l=lvarx(g,X);
-  for (unsigned i=0;i<l.size();++i)
-    if (l[i]!=X && !(l[i].is_pow() && arg(l[i],0)==X)) return false;
-  gen n=normal(X*D(g,X)/g,CTX); // (ratnormal leaves x/(3x) with roots)
-  if (dep(n) || n.type==_VECT) return false;
-  gen c=normal(g/pow(X,n,CTX),CTX);
-  if (dep(c)) return false;
+  vecteur c,v; factors(g,c,v);
+  gen n=0;
+  for (unsigned i=0;i<v.size();++i){
+    gen w=v[i],e=1;
+    if (w.is_inv()){ w=arg(w); e=-1; }
+    if (w.is_pow()){ e=ev(e*arg(w,1)); w=arg(w,0); }
+    if (w!=X || dep(e)) return false;
+    n=n+e;
+  }
+  n=ev(n);
+  if (v.empty() || is_zero(n)) return false;
+  gen k=ev(prodof(c));
   r=is_minus_one(n)?R_LNI:R_POWI;
-  F=r==R_LNI?c*symb_ln(symb_abs(X)):ev(c*pow(X,n+1,CTX)/(n+1));
+  F=r==R_LNI?k*symb_ln(symb_abs(X)):ev(k*pow(X,n+1,CTX)/(n+1));
   return true;
 }
 
@@ -483,6 +514,9 @@ static NOINL gen xof(const gen & u,const gen & t){
   if (u.is_inv()) return xof(arg(u),symb_inv(t));
   if (is(u,at_exp)) return xof(arg(u),symb_ln(t));
   if (is(u,at_ln)) return xof(arg(u),symb_exp(t));
+  if (is(u,at_sin)) return xof(arg(u),SYM(at_asin,t)); // cos(asin(t)) is sqrt(1-t^2)
+  if (is(u,at_cos)) return xof(arg(u),SYM(at_acos,t));
+  if (is(u,at_tan)) return xof(arg(u),SYM(at_atan,t));
   if (u.is_pow() && !dep(arg(u,1))) return xof(arg(u,0),symb_pow(t,ev(symb_inv(arg(u,1)))));
   vecteur c,v;
   if (u.is_plus()){ // u = w + c
@@ -502,12 +536,7 @@ static NOINL gen rewrite(const gen & fe,const gen & du,const gen & u,const gen &
     gen xs=xof(u,t);
     if (!is_undef(xs)) g=rn(ev(sub(g,X,xs)));
   }
-  if (dep(g)){
-    gen fx;
-    if (!is_rewritable_as_f_of(rn(fe/du),u,fx,X,CTX) || is_undef(fx)) return undef;
-    g=sub(fx,X,t);
-  }
-  if (dep(g) || is_undef(g)) return undef;
+  if (dep(g) || is_undef(g) || has_op(g,*at_rootof) || taille(g,200)>2*taille(fe,200)+20) return undef;
   return recursive_normal(g,CTX);
 }
 // u under a root or in a denominator (x sqrt(x+2), x/(x+1)^2): a linear u is the textbook way
@@ -526,7 +555,7 @@ static NOINL gen usub(const gen & f,int lev){
   vecteur cv; cands(fe,cv); // (evaluated: sqrt(x) is x^(1/2) there, as in fe)
   // every candidate first: a linear u giving a known integral, then the simplest new integral
   vecteur ok,gs; std::vector<int> sz;
-  for (unsigned i=0;i<cv.size() && budget_>0;++i){
+  for (unsigned i=0;i<cv.size() && budget_>0 && !interrupted;++i){
     gen u=cv[i],du=D(u,X),F,a,b; int r;
     budget_-=2;
     if (is_zero(du)) continue;
@@ -537,15 +566,15 @@ static NOINL gen usub(const gen & f,int lev){
     if (getenv("STEPDBG")) fprintf(stderr,"%*s  candidate u=%s: %s\n",2*lev,"",u.print(CTX).c_str(),g.print(CTX).c_str());
 #endif
     if (is_undef(g) || is_inf(g) || is_zero(g)) continue;
-    int score=taille(g,1000);
-    if (lin){ // cos(2x): u = 2x; a linear u otherwise only under roots
-      vecteur c2,v2; gen * old=var_; var_=&uu; factors(g,c2,v2);
-      bool known=v2.size()==1 && basic(ev(v2[0]),F,r);
-      var_=old;
-      if (known) score=-1;
-      else if (!rooted(fe,u)) continue;
-    }
-    ok.push_back(u); gs.push_back(g); sz.push_back(score);
+    // the new integral in the table: taken at once (a textbook substitution lands there; the other
+    // candidates can cost giac minutes, x = u^(1/4) in roots...). A linear u otherwise only under
+    // roots (x sqrt(x+2)), else the simplest new integral
+    vecteur c2,v2; gen * old=var_; var_=&uu; factors(g,c2,v2);
+    bool known=v2.size()==1 && basic(ev(v2[0]),F,r);
+    var_=old;
+    if (lin && !known && !rooted(fe,u)) continue;
+    ok.push_back(u); gs.push_back(g); sz.push_back(known?-1:int(taille(g,1000)));
+    if (known) break;
   }
   while (!ok.empty()){
     unsigned b=0;
@@ -566,8 +595,7 @@ static NOINL int liate(const gen & g0){
   if (g.is_pow() && arg(g,1).type==_INT_ && arg(g,1).val>0) g=arg(g,0); // ln(x)^2
   if (is(g,at_ln)) return 0;
   if (is(g,at_atan) || is(g,at_asin) || is(g,at_acos)) return 1;
-  vecteur l=lvarx(g0,X);
-  if (l.size()==1 && l[0]==X && !dep(_denom(g0,CTX))) return 2; // a polynomial
+  if (shape(g0,0)) return 2; // a polynomial
   if ((is(g0,at_sin) || is(g0,at_cos) || is(g0,at_sinh) || is(g0,at_cosh)) && linarg(g0)) return 3;
   if (is(g0,at_exp) && linarg(g0)) return 4;
   if (g0.is_pow() && !dep(arg(g0,0)) && !dep(D(arg(g0,1),X))) return 4;
@@ -576,8 +604,7 @@ static NOINL int liate(const gen & g0){
 // by parts: u by LIATE, v the integral of dv (found quietly), rest = v du, k the constant
 static NOINL bool parts1(const gen & f,int lev,gen & u,gen & dv,gen & du,gen & V,gen & k,gen & rest){
   gen fe=ev(f);
-  vecteur l=lvarx(fe,X);
-  if (l.size()==1 && l[0]==X) return false; // a rational fraction: partial fractions
+  if (shape(fe,SH_FRAC)) return false; // a rational fraction: partial fractions
   vecteur c,v; factors(fe,c,v);
   if (v.empty() || v.size()>2) return false;
   int best=-1,br=9;
@@ -625,8 +652,7 @@ static NOINL gen parts(const gen & f,int lev){
 
 // a rational fraction: partial fractions (and the polynomial part)
 static NOINL gen ratfrac(const gen & fe,int lev){
-  vecteur l=lvarx(fe,X);
-  if (l.size()!=1 || l[0]!=X || !dep(_denom(fe,CTX))) return undef;
+  if (!shape(fe,SH_FRAC) || !dep(_denom(fe,CTX))) return undef;
   gen p=_partfrac(makesequence(fe,X),CTX);
   if (is_undef(p) || p==fe || !p.is_plus()) return undef;
   return via(R_PFRAC,fe,p,lev);
@@ -653,11 +679,7 @@ static NOINL bool even_trig(const gen & fe){
 // powers and products of sin and cos: power reduction, product to sum
 static NOINL gen trigid(const gen & f,int lev){
   gen fe=sc(ev(f));
-  vecteur l=lvarx(fe,X);
-  if (l.empty()) return undef;
-  for (unsigned i=0;i<l.size();++i)
-    if (!is(l[i],at_sin) && !is(l[i],at_cos)) return undef;
-  if (dep(_denom(fe,CTX))) return undef;
+  if (!shape(fe,SH_TRIG)) return undef; // a polynomial in sin and cos
   gen t=_tlin(fe,CTX);
   if (t==fe || is_undef(t)) return undef;
   return via(R_TRIGID,fe,t,lev);
@@ -666,10 +688,7 @@ static NOINL gen trigid(const gen & f,int lev){
 // substitution t = tan(x/2)
 static NOINL gen trigfrac(const gen & f,int lev){
   gen fe=sc(ev(f)),d=_denom(fe,CTX);
-  vecteur l=lvarx(fe,X);
-  if (l.empty() || !dep(d) || nsub_>3) return undef;
-  for (unsigned i=0;i<l.size();++i)
-    if ((!is(l[i],at_sin) && !is(l[i],at_cos)) || arg(l[i])!=X) return undef;
+  if (!shape(fe,SH_TRIG|SH_FRAC) || !dep(d) || nsub_>3) return undef; // (sin and cos of x: else t stays)
   gen w(identificateur(" w"));
   for (int k=0;k<2;++k){ // d = p + q s, p^2 = q^2: times (p - q s), 1 - s^2 is the other one squared
     gen s=k?symb_cos(X):symb_sin(X),p,q;
@@ -710,16 +729,8 @@ static NOINL gen square(const gen & fe,int lev){
   if (is_undef(F)) cut(m);
   return F;
 }
-// every kernel a power of x (and no rational fraction): expanding gives powers
-static NOINL bool powers_only(const gen & fe){
-  if (fe.is_plus()) return false;
-  vecteur l=lvarx(fe,X);
-  for (unsigned i=0;i<l.size();++i)
-    if (l[i]!=X && !(l[i].is_pow() && arg(l[i],0)==X)) return false;
-  gen d=_denom(fe,CTX);
-  vecteur ld=lvarx(d,X);
-  return ld.empty() || (ld.size()==1 && is_zero(rn(X*D(d,X)/d-_degree(makesequence(d,X),CTX))));
-}
+// a product of sums of powers of x (no rational fraction): expanding gives powers
+static bool powers_only(const gen & fe){ return !fe.is_plus() && shape(fe,SH_ROOTX); }
 static NOINL gen expandit(const gen & fe,int lev){
   if (fe.is_plus() || taille(fe,64)>48) return undef;
   gen t=expand(fe,CTX);
@@ -836,6 +847,7 @@ static gen isteps(const gen & f0,int lev){
   if (basic(fe,F,r)){ S(r,f,F); return F; }
   if (even_trig(fe) && !is_undef(F=trigid(f,lev))) return F;
   if (powers_only(fe) && !is_undef(F=expandit(fe,lev))) return F;
+  if (_numer(fe,CTX).is_plus() && !_denom(fe,CTX).is_plus() && dep(_denom(fe,CTX)) && !is_undef(F=expandit(fe,lev))) return F; // (a+b)/c
   if (!is_undef(F=usub(f,lev))) return F;
   if (!is_undef(F=ratfrac(fe,lev))) return F;
   if (!is_undef(F=splitnum(fe,lev))) return F;
@@ -844,8 +856,8 @@ static gen isteps(const gen & f0,int lev){
   if (!is_undef(F=trigid(f,lev))) return F;
   if (!is_undef(F=square(fe,lev))) return F;
   if (!is_undef(F=trigsub(f,lev))) return F;
-  if (!is_undef(F=trigfrac(f,lev))) return F;
   if (!is_undef(F=expandit(fe,lev))) return F;
+  if (!is_undef(F=trigfrac(f,lev))) return F;
   return simp(fe,lev);
 }
 
@@ -911,7 +923,7 @@ static gen one_(const gen & op){
   gen x=v[1]; var_=&x;
   if (is(op,at_derive)){
     gen r=dsteps(v[0]);
-    return same_num(ev(r),D(v[0],x),x)?r:gen(undef);
+    return !interrupted && same_num(ev(r),D(v[0],x),x)?r:gen(undef);
   }
   budget_=150;
   gen a,b;
@@ -921,6 +933,7 @@ static gen one_(const gen & op){
     if (!is_zero(g) && !is_inf(a) && !is_inf(b)) return absplit(op,g,a,b);
   }
   gen F=isteps(v[0],0);
+  if (interrupted) return undef; // (ON, or too long: giac's state after an interruption is fragile)
   if (is_undef(F) || !same_num(D(F,x),ev(v[0]),x)){
     if (v.size()!=4 || elementary(_integrate(makesequence(v[0],x),CTX))) return undef;
     gen val=evalf(op,1,CTX); // no elementary antiderivative: the decimal value
