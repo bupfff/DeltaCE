@@ -124,6 +124,7 @@ gen steps_math(const step_t & s,GIAC_CONTEXT){
 // ---------------------------------------------------------------- state and helpers
 static std::vector<step_t> * out_;
 static unsigned char depth_;
+static const gen * in_; // the problem as typed: its limit is the console's, the steps' reference
 static int budget_;
 static const context * ctx_;
 static gen * var_; // the variable (no global gen: the app has no static constructors)
@@ -1371,7 +1372,8 @@ static gen lq(const gen & f,const gen & n,const gen & d,int lev){
   if (lev>12 || --budget_<0 || interrupted) return undef;
   gen ln=glim(n),ld=glim(d),a=*la_,v;
   const bool fn=finv(ln),fd=finv(ld),zn=fn && is_zero(ln),zd=fd && is_zero(ld),in=is_inf(ln),id=is_inf(ld);
-  if (fd && !zd?fn || in:fn && id) return Ls(!is_inf(a) && fn && fd?R_LSUB:R_LLAW,f,glim(f)); // c/d, inf/d, c/inf
+  if (fd && !zd?fn || in:fn && id) return Ls(!is_inf(a) && fn && fd && finv(ev(sub(f,X,a)))?R_LSUB:R_LLAW,f,glim(f)); // c/d, inf/d, c/inf
+  // (direct substitution only where f is defined: cos(x)/(sin(x)/(2sqrt(1-cos(x)))) at 0 is 1/(0/0))
   if (zd && (in || (fn && !zn))){ // c/0, inf/0: infinite on each side (both: no limit if they differ)
     v=glim(f);
     return ldir_ || is_inf(a) || (is_inf(v) && v!=unsigned_inf)?Ls(R_LINFV,f,v):sides(f);
@@ -1588,9 +1590,14 @@ static gen one_(const gen & op){
     gen a=ev(v[2]),L,G;
     la_=&a; ldir_=v.size()>3?(is_positive(v[3],CTX)?1:-1):0;
     budget_=80;
+    size_t m=mark();
     L=lsteps(v[0],0);
-    if (interrupted || is_undef(L)) return undef;
-    G=ev(op);
+    if (interrupted) return undef;
+    // (giac's limit of sin(x)/sqrt(1-cos(x)) at 0 as typed: "limits are distinct"; of
+    // sin(x)*(1-cos(x))^(-1/2), sqrt(2)); no limit, steps to a value: the two sides (|x|/x at 0)
+    G=ev(depth_?op:*in_);
+    if (!ldir_ && (L.type!=_IDNT || is_undef(L)) && (G.type==_STRNG || G==unsigned_inf)){ cut(m); L=sides(v[0]); } // (undef: a name)
+    if (is_undef(L)) return L;
     if (L.type==_IDNT) return G.type==_STRNG || G==unsigned_inf || is_undef(G)?L:gen(undef);
     return L==G || (finv(L) && finv(G) && is_zero(evalf(L-G,1,CTX)))?L:gen(undef);
   }
@@ -1699,7 +1706,7 @@ static gen nest(const gen & g){
 
 gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; return nest(norm(input)); }
 bool steps_of(const gen & input0,std::vector<step_t> & out,GIAC_CONTEXT){
-  ctx_=contextptr; out_=&out; depth_=0; nsub_=0;
+  ctx_=contextptr; out_=&out; depth_=0; nsub_=0; in_=&input0;
   gen e=nest(norm(input0)),x(identificateur("x"));
   var_=&x;
   for (int guard=0;guard<8;++guard){
