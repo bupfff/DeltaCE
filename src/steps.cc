@@ -22,7 +22,7 @@ enum {
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
   R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
-  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_NRULES
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_COSPI, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -104,6 +104,7 @@ static const char * const RULES[]={
   "Root test: below 1, the series converges",0,"A=B",
   "Log of a quotient","ln(a/b)=ln(a)-ln(b)","A=B",
   "Integral test: same behavior as the integral",0,"A",
+  "cos(n pi) is (-1)^n",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -1564,11 +1565,14 @@ static NOINL gen linn(const gen & g){
 // sums' limit, else a limit comparison with a p-series (convergence only)
 static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   if (v.size()!=4 || ev(v[3])!=plus_inf) return undef;
-  const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N");
+  const gen a=ev(v[2]),N=word(x==word("N")?"M":"N"),m1=pow(gen(-1),x,CTX);
+  gen cp=ev(SYM(at_cos,x*cst_pi));
+  gen t=ev(v[0]);
   // giac's sum as the reference, but not of n in a power's base and exponent, n!, ln, trig: it
   // simplifies them at length for nothing (43 s of (n/(2n+1))^n on the calculator; the console's
   // answer skips it too, answer.cc power_sum)
   const gen G=!is_zero(npow(t)) || has_op(t,*at_factorial) || has_op(t,*at_ln) || has_op(t,*at_sin) || has_op(t,*at_cos) || has_op(t,*at_tan)?op:ev(op);
+  for (int i=0;i<2;++i,cp=SYM(at_cos,symb_prod(cst_pi,x))) if (contains(t,cp)){ S(R_COSPI,cp,m1); t=ev(subst(t,cp,m1,false,CTX)); } // (giac leaves cos(n pi), cos(pi n))
   gen L,val,SN;
   vecteur c,w; factors(t,c,w);
   // the shape first: giac's limit of (n/(2n+1))^n or (-1)^n/sqrt(n) took 10 to 20 s on the calculator
