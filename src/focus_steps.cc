@@ -403,8 +403,9 @@ static const char * build(const char * in, const char * ans) {
   const bool stopped = giac::interrupted || giac::ctrl_c;
   giac::control_c_hook = 0;
   free(buf);
-  const char * why = oom_hit ? "Out of memory" : stopped ? "Stopped" : !ok || v.empty() ? "No steps for this one" : 0;
-  giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = false;
+  const char * why = oom_hit ? "Out of memory" : giac::stack_hit ? "Too many recursion levels" : stopped ? "Stopped" :
+    !ok || v.empty() ? "No steps for this one" : 0;
+  giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = giac::stack_hit = false;
   if (!why) {
     const char * p = in; // an antiderivative (integrate with 2 arguments): + C
     while (*p == ' ') ++p;

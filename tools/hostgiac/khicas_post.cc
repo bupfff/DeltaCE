@@ -29,12 +29,12 @@ std::string khicas_do_run(const char * s){
     answer_before(g,a,buf,true);
     if (!a.tabled)
       g=eval(g,eval_level(contextptr),contextptr); // do_eval
-    const bool stopped=interrupted;
-    ctrl_c=kbd_interrupted=interrupted=false;
+    const bool stopped=interrupted,deep=stack_hit;
+    ctrl_c=kbd_interrupted=interrupted=stack_hit=false;
     std::string msg;
     gen graw;
     if (stopped){
-      msg="Interrupted";
+      msg=deep?"Too many recursion levels":"Interrupted";
       g=0;
     }
     else {

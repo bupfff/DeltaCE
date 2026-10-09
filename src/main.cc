@@ -475,13 +475,25 @@ void oom_rearm(){ // (focus_steps.cc too)
   }
 }
 extern "C" { extern volatile unsigned char focus_phase; } // focus.cc: the phase probe
-static int eval_stopped; // the last do_eval: 1 interrupted (ON), 2 out of memory
+static int eval_stopped; // the last do_eval: 1 interrupted (ON), 2 out of memory, 3 the stack floor
+
+// The stack (main: 0xD2A800) grows down over the OS's free RAM, which starts after the RAM
+// variables: giac stops 16 KB above them ("Too many recursion levels") instead of overwriting
+// them (f(x):=1+x*integrate(f(t^2),t,-1,1) then f(3) did); at least 24 KB of stack are kept.
+// The deepest calculations measured use 9 KB (tools/emu/stackprobe.py).
+static void stack_floor(){
+  void * fr; os_MemChk(&fr);
+  size_t f=(size_t)fr+16384;
+  giac::stack_floor=f<0xD2A800-24576?f:0xD2A800-24576;
+  giac::stack_hit=false;
+}
 
 void do_eval(giac::gen & g){
 #ifdef FAKE_GIAC
   statuslinemsg(!lang?(focus_on?"ON or clear: stop":"cancel: stop calcul."):"annul: stoppe calcul",COLOR_RED);
   os_wait_1ms(1000);
 #else
+  stack_floor();
   freeze=giac::ctrl_c=giac::kbd_interrupted=giac::interrupted=false;
 #ifndef WITH_QUAD
   if (taille(g,64)<64)
@@ -490,7 +502,7 @@ void do_eval(giac::gen & g){
   giac::set_abort();
   statuslinemsg(!lang?(focus_on?"ON or clear: stop":"cancel: stop calcul."):"annul: stoppe calcul",COLOR_RED);
   g=giac::eval(g,giac::eval_level(contextptr),contextptr);
-  eval_stopped=giac::interrupted?(oom_hit?2:1):0;
+  eval_stopped=giac::interrupted?(oom_hit?2:giac::stack_hit?3:1):0;
   if (giac::interrupted && !focus_on){ // Focus: the history says it (run)
     print_msg12(lang?"Interrompu":"Interrupted",nullptr);
     getkey(0);
@@ -1214,7 +1226,7 @@ void do_run(const char * s){
     std::string msg; // a plain message instead of the result
     giac::gen graw; // g before positive_first
     if (eval_stopped){ // ON, or memory ran out: what the calculation built is freed
-      msg=eval_stopped==2?"Out of memory":"Interrupted";
+      msg=eval_stopped==2?"Out of memory":eval_stopped==3?"Too many recursion levels":"Interrupted";
       g=0;
     }
     else {
@@ -1222,7 +1234,7 @@ void do_run(const char * s){
       if (focus_on && msg.empty() && !giac::interrupted) // ("diverges": g is not shown)
         result_approx(g);
       if (giac::interrupted || giac::ctrl_c){ // ON while simplifying: giac's "Stopped by user
-        msg=oom_hit?"Out of memory":"Interrupted"; // interruption" texts were in the result
+        msg=oom_hit?"Out of memory":giac::stack_hit?"Too many recursion levels":"Interrupted"; // interruption" texts were in the result
         g=0;
       }
     }
@@ -1537,6 +1549,7 @@ int main(){
 #endif // WITH_LCDMALLOC
 #endif // FAKE_GIAC
   oom_rearm();
+  stack_floor();
   main1();
   python_free();
   sdk_end();

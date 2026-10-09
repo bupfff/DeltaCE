@@ -204,7 +204,8 @@ static std::string eval_one(const char * s,bool autosimp,bool prepass){
   if (autosimp)
     g=add_autosimplify(g,contextptr);
   g=eval(g,eval_level(contextptr),contextptr);
-  ctrl_c=kbd_interrupted=interrupted=false;
+  if (stack_hit) g=string2gen("Too many recursion levels",false); // (main.cc: the console's message)
+  ctrl_c=kbd_interrupted=interrupted=stack_hit=false;
   return g.print(contextptr);
 }
 
@@ -257,6 +258,7 @@ int main(int argc,char ** argv){
   contextptr=new giac::context;
   giac::epsilon(contextptr)=1e-5;
   angle_radian(1,contextptr);
+  { char c; giac::stack_floor=(size_t)&c-(6<<20); } // as main.cc's stack_floor: 6 MB of the 8 MB stack
   if (steps){
     for (int k=0;k<ne;++k) print_steps(exprs[k]);
     return 0;
