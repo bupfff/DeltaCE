@@ -260,6 +260,16 @@ static NOINL gen mergek(const gen & g){
     }
   }
   if (k.type==_FRAC && !den.empty()){ den.insert(den.begin(),k._FRACptr->den); k=k._FRACptr->num; } // dx/(2 sqrt(x))
+  // cos u csc^k u is cot u csc^(k-1) u, sin u sec^k u is tan u sec^(k-1) u (giac evaluates cot and
+  // tan with sin and cos: -2cos(x)csc(x)^3 for -2cot(x)csc(x)^2), cos u sec u and sin u csc u are 1
+  if (!raw_) EACHW(it,w) EACHW(jt,w){
+    gen e=pexp(*jt,b2);
+    if (jt==it || !(is(*it,at_cos) || is(*it,at_sin)) || !(is(b2,at_csc) || is(b2,at_sec)) || arg(*it)!=arg(b2) || e.type!=_INT_ || e.val<1) continue;
+    const bool c=is(*it,at_cos);
+    *it=c==is(b2,at_sec)?gen(1):SYM(c?at_cot:at_tan,arg(*it));
+    *jt=e.val==1?gen(1):e.val==2?b2:symb_pow(b2,e-1);
+  }
+  for (unsigned i=0;i<w.size();) if (is_one(w[i])) w.erase(w.begin()+i); else ++i;
   // the polynomial factors first, as the textbooks write them (2x e^(x^2), not 2 e^(x^2) x), the
   // differential last (e^x dx)
   vecteur u;
@@ -1923,6 +1933,25 @@ static NOINL gen serfix(const gen & g){
   return x.type==_IDNT?SYM(at_series,makesequence(v[0],x,a,n)):g;
 }
 gen limit_simp(const gen & g); // answer.cc: a ratio with k in exponents simplified first
+// the derivative of f by the steps' rules, written as they are (6x sec(3x^2)^2, -12 cot^2 csc^2):
+// the console's answer when tan, cot, sec or csc is typed (giac's: 6x/cos(3x^2)^2,
+// 12(sin^2-1)/sin^4); undef if it is not giac's
+// e^(g ln b) back as b^g (x^cot(x): the steps write the power with e to differentiate it)
+static gen unexp(const gen & g){
+  if (g.type!=_SYMB) return g;
+  if (is(g,at_exp)){
+    vecteur c; flat(at_prod,arg(g),c);
+    EACH(it,c) if (is(*it,at_ln)){ vecteur r(c); r.erase(r.begin()+(it-c.begin())); return symb_pow(arg(*it),prodof(r)); }
+  }
+  return map_of(g,unexp);
+}
+gen steps_derivative(const gen & f,const gen & x,GIAC_CONTEXT){
+  std::vector<step_t> v;
+  gen xx=x;
+  ctx_=contextptr; out_=&v; depth_=0; nsub_=0; var_=&xx;
+  gen r=dsteps(norm(f));
+  return !is_undef(r) && !interrupted && same_num(ev(r),D(f,x),x)?mergek(unexp(r)):gen(undef);
+}
 // the problem as typed (mergek without its rewrites: one denominator, 1/(n(n+2)), not 1/n/(n+2))
 gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(serfix(input)))); raw_=false; return r; }
 bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){

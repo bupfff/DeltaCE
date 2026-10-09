@@ -3380,6 +3380,15 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
   }
   if (interrupted)
     return;
+  // a derivative of tan, cot, sec or csc: the steps' form (sec(x)^2, not 1/cos(x)^2), unless giac's
+  // simplified one is shorter (sec(x) for ln(sec(x)+tan(x)))
+  gen rs=undef;
+#if defined FLOWCE_STEPS || defined HOSTGIAC
+  if (a.gin.is_symb_of_sommet(at_derive) && a.gin._SYMBptr->feuille.type==_VECT && a.gin._SYMBptr->feuille._VECTptr->size()==2
+      && a.gin._SYMBptr->feuille._VECTptr->back().type==_IDNT && (a.typed_sec || contains(a.gin,at_tan))
+      && !contains(a.gin._SYMBptr->feuille._VECTptr->front(),at_derive))
+    rs=steps_derivative(a.gin._SYMBptr->feuille._VECTptr->front(),a.gin._SYMBptr->feuille._VECTptr->back(),contextptr); // (as typed: cot stays cot)
+#endif
   if (a.autosimp && !a.tabled){
     g=auto_simplify(g);
     g=collect_rational(power_sums(g)); // -7x^(5/2)+4x^(1/3)/3+28/(9x^(5/9))
@@ -3426,6 +3435,8 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
     return;
   if (a.typed_sec) // sec(x)tan(x), not sin(x)/cos(x)^2, for the derivative of sec(x)
     g=sec_only(g);
+  if (!is_undef(rs) && taille(rs,200)<=taille(g,200)+4)
+    g=rs;
   if (a.simp && g.type==_SYMB && !contains(g,at_sum) && evalf(g,1,contextptr).type==_DOUBLE_){ // a number (not a sum giac
     // left: evalf would sum it), its terms collected:
     const gen m=map_nodes(g,ln_power,0),e=radicals(m)==1?normal(m,contextptr):ratnormal(m,contextptr); // 12ln(2)-6ln(4)+3: 3; subst's
