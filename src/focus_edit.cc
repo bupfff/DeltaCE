@@ -19,6 +19,8 @@
 #include "ui_gfx.h"
 #include "ui_font.h"
 #include "ui_fontdata.h"
+// a Python program (never in the builds without Python syntax, FLOWCE_PYTHON 0: that code goes)
+#define PY(t) (FLOWCE_PYTHON && (t)->python)
 #if !defined std
 #define std ustl
 #endif
@@ -192,7 +194,7 @@ static void paint(textArea * t, int l0, int l1, bool all) {
     const int nr = wrap(v[i].s, rs);
     unsigned char * c = new unsigned char[v[i].s.size() + 1];
     if (!c) break;
-    colorize(v[i].s, c, t->python);
+    colorize(v[i].s, c, PY(t));
     for (int k = 0; k < nr; ++k) {
       const int sr = g + k - top;
       if (sr < 0 || sr >= NV) continue;
@@ -462,8 +464,8 @@ static int slips(textArea * t, std::string & msg) {
   return 0;
 }
 static int verify(textArea * t, std::string & msg) {
-  const int l = t->python ? slips(t, msg) : 0;
-  return l ? l : check_program(t->elements, t->python, msg);
+  const int l = PY(t) ? slips(t, msg) : 0;
+  return l ? l : check_program(t->elements, PY(t), msg);
 }
 
 // checks and loads the program (2nd enter, the file menu): its functions are defined; on an
@@ -639,7 +641,7 @@ int focus_edit(textArea * t) {
   int chrome = 1, full = 1, layer = -1, res = TEXTAREA_RETURN_EXIT;
   for (;;) {
     if (chrome) {
-      focus_status_view(t->allowEXE ? "TEXT" : t->python ? "PYTHON" : "PROGRAM", 1);
+      focus_status_view(t->allowEXE ? "TEXT" : PY(t) ? "PYTHON" : "PROGRAM", 1);
       layer = -1;
     }
     refresh(t, full || chrome);
@@ -678,7 +680,7 @@ int focus_edit(textArea * t) {
     }
     else focus_status_msg(0);
     if (key == KEY_CTRL_F1 || key == KEY_CTRL_F2 || key == KEY_CTRL_F4) {
-      const bool py = t->python;
+      const bool py = PY(t);
       const char * s = key == KEY_CTRL_F2 ? (py ? pick(1, PY_TESTS, N(PY_TESTS), 1) : pick(1, XC_TESTS, N(XC_TESTS), 1))
         : key == KEY_CTRL_F1 ? (py ? pick(0, PY_BLOCKS, N(PY_BLOCKS), 0) : pick(0, XC_BLOCKS, N(XC_BLOCKS), 0))
         : (py ? pick(3, PY_SYMBOLS, N(PY_SYMBOLS), 1) : pick(3, XC_SYMBOLS, N(XC_SYMBOLS), 1));

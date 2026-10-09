@@ -656,7 +656,7 @@ int handle_key(textArea * text,int key,int keyflag){
       return -5;
     }
     if (key<32 || key>=127){
-      const char * adds=keytostring(key,keyflag,text->python);
+      const char * adds=keytostring(key,keyflag,FLOWCE_PYTHON && text->python);
       if (adds){
         insert(text,adds,key!=KEY_CTRL_PASTE); // a paste keeps its own indentation
         return -4;
