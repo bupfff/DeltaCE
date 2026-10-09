@@ -1680,7 +1680,7 @@ static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
   if (v.size()<4 || v[3].type!=_INT_ || v[3].val<1 || v[3].val>8) return undef;
   const gen a=ev(v[2]),h=a==0?x:symb_plus(x,symb_neg(a)); // x - a
   const int n=v[3].val;
-  vecteur ds(1,ev(v[0])),qs,gt,kp;
+  vecteur ds(1,ev(v[0])),qs,gt,kp,ts;
   gen P=0;
   for (int k=1;k<=n && !interrupted;++k){ // (normal form only when shorter: -1/(x+1)^2)
     gen d=D(ds.back(),x),d2=rn(d);
@@ -1693,12 +1693,16 @@ static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
     if (is_zero(c)) continue;
     qs.push_back(k?symb_prod(k>1?symb_prod(c,symb_inv(SYM(at_factorial,k))):c,k>1?symb_pow(h,k):h):c);
     P=P+c/factorial(k)*pow(h,k,CTX);
+    // the polynomial as textbooks write it: each coefficient a number, (x-a)^k kept whole (giac's
+    // sum distributed it: 1-x+1+(x-1)^2 for 1-(x-1)+(x-1)^2)
+    gen e=ev(c/factorial(k)),hk=k>1?symb_pow(h,k):h;
+    ts.push_back(!k?e:is_one(e)?hk:is_strictly_positive(-e,CTX)?symb_neg(is_minus_one(e)?hk:symb_prod(-e,hk)):symb_prod(e,hk));
   }
   P=ev(P);
   flat(at_plus,ev(op),gt);
   EACH(it,gt) if (!has_op(*it,*at_order_size)) kp.push_back(*it);
   if (interrupted || !same(symb_plus(kp),P)) return undef;
-  S(R_TAYLOR,qs.empty()?gen(0):symb_plus(qs),P);
+  S(R_TAYLOR,qs.empty()?gen(0):symb_plus(qs),ts.empty()?gen(0):symb_plus(ts));
   return P;
 }
 // One calculus operation, with none inside: its value (undef: no steps)
