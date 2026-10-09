@@ -22,7 +22,7 @@ enum {
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
   R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
-  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_NRULES
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -98,6 +98,7 @@ static const char * const RULES[]={
   "Its limit",0,"A=B",
   "p-series: converges for p > 1, diverges for p <= 1","sum(1/n^p,n,1,inf)","A=B",
   "Limit comparison with the p-series",0,"A=B",
+  "Indeterminate form",0,"A,B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -1413,7 +1414,13 @@ static gen lq(const gen & f,const gen & n,const gen & d,int lev){
     gen t=fastest(d);
     if (!is_zero(t) && !is_undef(v=lvia(R_LDIV,f,expand(ev(n/t),CTX),expand(ev(d/t),CTX),lev))) return v;
   }
-  return lev<8?lvia(R_LHOP,f,D(n,X),D(d,X),lev):gen(undef); // (L'Hopital a few times at most)
+  if (lev>=8) return undef; // (L'Hopital a few times at most)
+  size_t m=mark(); // the form (0/0 or inf/inf), f' and g', then the rule
+  gen n1=D(n,X),d1=D(d,X);
+  S(R_LFORM,symb_equal(Lx(n),ln),symb_equal(Lx(d),ld));
+  S(R_EQD,n,n1); S(R_EQD,d,d1);
+  if (is_undef(v=lvia(R_LHOP,f,n1,d1,lev))) cut(m);
+  return v;
 }
 static gen lsteps(const gen & f0,int lev){
   if (lev>12 || --budget_<0 || ctrl_c || interrupted) return undef;
