@@ -2305,6 +2305,25 @@ static int console_insert_template(const quick_item & q){
 // line also before brackets that closed themselves (sin(x|) is sin(x) typed). Elsewhere (the
 // caret inside the line, nothing to act on) the template goes in, after a * when a letter is
 // before the caret (x then integrate( would read xintegrate). 1 if done.
+// the line is one expression an action can take: no top-level = (solve: an equation is fine),
+// :=, => or comma, and not ending with an operator. f(x)=1+x then the integral: f(x)=1+x*integral
+// (the user's f(x)=1+x*int(f(t^2),t,-1,1)), not integrate((f(x)=1+x),x)
+static bool console_wrappable(const char * e,bool solve){
+  int d=0;
+  char last=0;
+  for (const char * p=e;*p;++p){
+    const char c=*p;
+    if (c=='(' || c=='[' || c=='{') ++d;
+    else if (c==')' || c==']' || c=='}') --d;
+    else if (!d && c==',') return false;
+    else if (!d && c=='=' && p[1]!='=' && (p==e || !strchr("=<>!:",p[-1])))
+      return solve && p[1]!='>';
+    else if (!d && c==':' && p[1]=='=') return false;
+    if (c!=' ') last=c;
+  }
+  return !strchr("+-*/^=,(<>",last);
+}
+
 static int console_apply_action(const char * text){
   static const char * const acts[]={"solve(","factor(","expand(","simplify(","partfrac(","integrate(","diff(","limit(","series("};
   const char * open=strchr(text,'(');
@@ -2319,7 +2338,7 @@ static int console_apply_action(const char * text){
   for (int i=caret;at_end && i<len;++i)
     at_end=e[i]==')';
   std::string s(text,open+1-text); // factor(
-  if (at_end)
+  if (at_end && console_wrappable(e,text[0]=='s' && text[1]=='o'))
     s+=e;
   else if (!len && focus_result_line()>=0)
     s+="ans()";
