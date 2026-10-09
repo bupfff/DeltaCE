@@ -2937,7 +2937,18 @@ static giac::gen ln_power(const giac::gen & g,const giac::gen & f,const giac::ge
 // -1/(x(sqrt(x^2+4)-x)), whose normal form is (-sqrt(x^2+4)-x)/(4x) = -sqrt(x^2+4)/(4x)-1/4;
 // sqrt(x^2-1)/x, not (sqrt(x^2-1)+x)/x. The terms of g's numerator (or of its normal form's:
 // a radical below a bar, rationalized) whose quotient by the denominator is constant are
-// dropped; g is kept unless that makes it smaller.
+// dropped; g is kept unless that makes it smaller. A floor counts as a constant (one between its
+// jumps): x+4tan(x), not giac's x-pi*floor(x/pi+1/2)+4tan(x) (its atan(tan(x)), for
+// (cos(x)^2+4)/cos(x)^2; giac's ceil(u) is -floor(-u)).
+static bool floor_const(const giac::gen & g,const giac::gen & x){ // x in floors only
+  if (g.type==giac::_VECT){
+    for (unsigned i=0;i<g._VECTptr->size();++i)
+      if (!floor_const((*g._VECTptr)[i],x))
+        return false;
+    return true;
+  }
+  return g.is_symb_of_sommet(giac::at_floor) || (g.type==giac::_SYMB?floor_const(g._SYMBptr->feuille,x):!(g==x));
+}
 static giac::gen drop_constants(const giac::gen & g,const giac::gen & x){
   using namespace giac;
   if (g.type!=_SYMB || is_undef(g) || contains(g,at_integrate) || taille(g,200)>=200)
@@ -2954,7 +2965,7 @@ static giac::gen drop_constants(const giac::gen & g,const giac::gen & x){
     const vecteur & t=*n._SYMBptr->feuille._VECTptr;
     vecteur keep;
     for (unsigned i=0;i<t.size();++i)
-      if (!free_of(ratnormal(t[i]/d,contextptr),x))
+      if (!floor_const(ratnormal(t[i]/d,contextptr),x))
         keep.push_back(t[i]);
     if (keep.empty() || keep.size()==t.size())
       continue;
