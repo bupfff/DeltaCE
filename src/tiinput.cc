@@ -253,6 +253,12 @@ std::string ti_implicit_mult(const std::string & line,ti_classify_fn classify,bo
   // a differential equation: y(0)=1 and y'(0)=0 are conditions on the function y (or u), not
   // y*0 (desolve([y'=3y,y(0)=2],y) gave nothing)
   const bool ode=strstr(s,"desolve")!=0;
+  // related rates: in diff(pi*r(t)^2*h(t),t), a letter applied to the variable of a diff is a
+  // function of it (r*t^2 gave a wrong derivative): dv is that variable (one letter)
+  char dv=0; // (the last ",t)" of a line with diff()
+  for (int i=strstr(s,"diff(")?n-1:0;i>=2 && !dv;--i)
+    if (s[i]==')' && s[i-2]==',' && im_alpha(s[i-1]))
+      dv=s[i-1];
   // definition marks, only needed if the line contains ":="
   bool defs=false;
   for (int i=0;i+1<n && !defs;++i)
@@ -319,7 +325,8 @@ std::string ti_implicit_mult(const std::string & line,ti_classify_fn classify,bo
       lk=K_NAME;
       lend = pcls==TI_NAME_VALUE || pcls==TI_NAME_UNKNOWN;
       lcall = def || pcls==TI_NAME_FUNCTION || pcls==TI_NAME_USERFN ||
-        (j-p==1 && (s[p]=='f' || s[p]=='g' || s[p]=='h' || (ode && (s[p]=='y' || s[p]=='u'))) && pcls!=TI_NAME_VALUE) ||
+        (j-p==1 && (s[p]=='f' || s[p]=='g' || s[p]=='h' || (ode && (s[p]=='y' || s[p]=='u'))
+                    || (dv && paren && q+2<n && s[q+1]==dv && s[q+2]==')' && s[p]!=dv)) && pcls!=TI_NAME_VALUE) ||
         (j-p>1 && pcls==TI_NAME_UNKNOWN); // an uncut unknown name: a call
       i=j;
       continue;
