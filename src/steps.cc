@@ -749,9 +749,11 @@ static NOINL gen rewrite(const gen & fe,const gen & du,const gen & u,const gen &
   if (dep(g)){ // x = u^-1(t)
     gen xs=xof(u,t);
     if (!is_undef(xs)) g=rn(exp2pow(ev(sub(g,X,xs)),CTX)); // (e^(2 ln u) is u^2)
-    // an inverse trig function or a log left: x itself was there (x sin x with u = cos x,
-    // x^2 e^(-2x) with u = e^(-2x)), not a substitution (by parts)
-    if ((atrig(g) && !atrig(fe)) || (has_op(g,*at_ln) && !has_op(fe,*at_ln))) return undef;
+    // an inverse trig function, a log or an exponential left: x itself was there (x sin x with
+    // u = cos x, x^2 e^(-2x) with u = e^(-2x), x^2 ln(x) with u = ln(x)), not a substitution (by
+    // parts); x = e^t stays for sin(ln(x)) (then by parts twice, as textbooks do it)
+    if ((atrig(g) && !atrig(fe)) || (has_op(g,*at_ln) && !has_op(fe,*at_ln))
+        || (has_op(g,*at_exp) && !has_op(fe,*at_exp) && !has_op(fe,*at_sin) && !has_op(fe,*at_cos))) return undef;
   }
   if (dep(g) || is_undef(g) || has_op(g,*at_rootof) || taille(g,200)>2*taille(fe,200)+20) return undef;
   gen r=recursive_normal(g,CTX); // only if simpler: it writes 1/sqrt(q) as sqrt(q)/q
