@@ -57,6 +57,9 @@ CXXFLAGS = -std=c++14 -fno-rtti -fno-threadsafe-statics -Wall -Wextra -Oz -Iustl
     -Wno-unknown-pragmas -Wno-unneeded-internal-declaration -Wno-sign-compare -Wno-unused-function -Wno-unused-parameter \
     -Wno-unused-variable -Wno-unused-but-set-variable -Wno-deprecated-register -Wno-reorder-ctor -Wno-inline-new-delete \
     -Wno-deprecated-copy-with-user-provided-copy $(LANG_DEF) $(FEATURE_DEFS)
+# The LTO code generation (CEdev: LTOFLAGS ?= CFLAGS) merges identical functions (uSTL vectors of
+# same-size types, copy constructors...): 3.8 KB less; a function whose address is used keeps it
+LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions
 
 # The Focus drawing code works per pixel: compiled for speed (with -Oz, shifts and multiplies
 # become helper calls). Small files: a few KB of flash.
