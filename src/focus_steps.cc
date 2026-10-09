@@ -352,11 +352,28 @@ static int stop(int sec, int maxtop) {
   return y0 < maxtop ? y0 : maxtop;
 }
 
-// the steps of the calculation typed as in (its answer ans): computed ("Calculating", ON stops)
-// and laid out; 0 if done, else why not
+// While the steps are worked out (seconds on the CE; Enter showed nothing, the user said): at
+// once the problem, as at the top of the page, over "Working out the steps" and the dots of
+// "Calculating" (focus_busy_tick, from giac's control_c checks; ON stops, as for any calculation)
+static int wait_y; // the baseline of that line, 0 if not shown
+static void waiting(const char * head) {
+  static const char T[] = "Working out the steps";
+  SEC = 0; GRP = 1;
+  wait_y = (Y0 + 10 + add_math(head, strlen(head), X, 10, W, 2, K_HEAD) + UI_H) / 2;
+  finish(0);
+  if (NP) paint(0, 0);
+  clear_page();
+  ui_draw_text(&ui_tr12, T, -1, (UI_W - ui_text_width(&ui_tr12, T, -1)) / 2, wait_y, ui_ramp(0, UC_SUB, UC_BG), 0);
+  focus_busy(wait_y + 10);
+  focus_status_msg("ON or clear: stop");
+}
+
+// the steps of the calculation typed as in (its answer ans): computed (the waiting screen, ON
+// stops) and laid out; 0 if done, else why not
 static const char * build(const char * in, const char * ans) {
   const int S = strlen(in), cap = 2 * S + 32 > 256 ? 2 * S + 32 : 256;
   char * buf = (char *)malloc(cap);
+  wait_y = 0;
   if (!buf) return "Out of memory";
   strcpy(buf, in);
   answer_prepass(buf, cap, true);
@@ -364,11 +381,14 @@ static const char * build(const char * in, const char * ans) {
   std::string head;
   bool ok = false;
   giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = false;
-  focus_busy(1);
-  giac::control_c_hook = focus_busy_tick;
   {
     giac::gen g(buf, contextptr);
-    if (!giac::interrupted) { head = steps_problem(g, contextptr).print(contextptr); ok = steps_of(g, v, contextptr); }
+    if (!giac::interrupted) {
+      head = steps_problem(g, contextptr).print(contextptr);
+      waiting(head.c_str());
+      giac::control_c_hook = focus_busy_tick;
+      ok = steps_of(g, v, contextptr);
+    }
   }
   const bool stopped = giac::interrupted || giac::ctrl_c;
   giac::control_c_hook = 0;
@@ -408,23 +428,26 @@ static void move(int dir, int & cur, int & top, int maxtop) {
 }
 
 void focus_steps(const char * in, const char * ans) {
-  const char * why = build(in, ans);
-  if (why) {
-    clear_page();
-    focus_note(why, why[0] == 'N' ? "No textbook method explains this answer" : 0);
-    int k; GetKey(&k);
-    return;
-  }
-  const int vis = UI_H - Y0, maxtop = PH > vis ? PH - vis : 0;
-  int top = 0, cur = 1;
   focus_status_label("STEPS");
-  for (;;) {
-    paint(top, cur);
-    int key;
+  const char * why = build(in, ans);
+  focus_status_msg(0);
+  int key;
+  if (why) { // over the problem (the waiting line erased)
+    clear_page();
+    if (wait_y) ui_fill(0, wait_y - 14, UI_W, 32, ui_col(0, UC_BG));
+    focus_note(why, why[0] == 'N' ? "No textbook method explains this answer" : 0);
     GetKey(&key);
-    if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_EXE || key == KEY_CTRL_OK) break;
-    if (key == KEY_CTRL_DOWN || key == KEY_CTRL_RIGHT) move(1, cur, top, maxtop);
-    if (key == KEY_CTRL_UP || key == KEY_CTRL_LEFT) move(-1, cur, top, maxtop);
+  }
+  else {
+    const int vis = UI_H - Y0, maxtop = PH > vis ? PH - vis : 0;
+    int top = 0, cur = 1;
+    for (;;) {
+      paint(top, cur);
+      GetKey(&key);
+      if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_EXE || key == KEY_CTRL_OK) break;
+      if (key == KEY_CTRL_DOWN || key == KEY_CTRL_RIGHT) move(1, cur, top, maxtop);
+      if (key == KEY_CTRL_UP || key == KEY_CTRL_LEFT) move(-1, cur, top, maxtop);
+    }
   }
   clear_page();
   focus_status_label(0);

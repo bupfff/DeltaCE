@@ -773,15 +773,18 @@ static int screen_is_ours() { // a grid of 6 x 6 points: a message box over the 
 // Calculating: enter on a long calculation left the prompt ("Type a calculation") on screen for
 // seconds, no sign of work (the user, 2026-10-07). While giac works, its control_c checks call
 // focus_busy_tick (main.cc sets giac::control_c_hook): after 0.4 s the prompt becomes
-// "Calculating" over three dots lit in turn, 4 a second. A quick answer shows nothing.
+// "Calculating" over three dots lit in turn, 4 a second. A quick answer shows nothing. The steps'
+// waiting screen (focus_steps.cc) has the dots at once, at its row.
 // The time of the next frame, not the frame of the elapsed time: (t >> 13) % 3 in 32 bits was a
 // remainder loop in the OS at every 8th check (0.3% of a calculation).
 static long busy_next = -1; // clock() (32768 Hz) when the dots change next; -1: no calculation
 static signed char busy_fr;
-void focus_busy(int on) {
+static int busy_y; // the dots' top row, 0 under the prompt
+void focus_busy(int on) { // on > 1: the dots' top row
 #ifdef TICE
-  busy_next = on ? (long)(clock)() + 13107 : -1; // 0.4 s ((clock): giac's first.h makes clock() 0)
-  busy_fr = -1;
+  busy_next = on ? (long)(clock)() + (on > 1 ? 0 : 13107) : -1; // 0.4 s ((clock): giac's first.h makes clock() 0)
+  busy_fr = on > 1 ? 2 : -1;
+  busy_y = on > 1 ? on : 0;
 #endif
 }
 bool focus_busy_tick() {
@@ -792,7 +795,7 @@ bool focus_busy_tick() {
   if (t < busy_next) return false;
   busy_next = t + 8192; // 4 frames a second
   int fr = busy_fr < 0 || busy_fr == 2 ? 0 : busy_fr + 1;
-  int m = hy0 + hh / 2 - 2, b = m + 20; // where hero_paint wrote the prompt
+  int m = hy0 + hh / 2 - 2, b = busy_y ? busy_y + 9 : m + 20; // where hero_paint wrote the prompt
   if (!screen_is_ours() || (busy_fr < 0 && (hm != HM_HINT || M.hist))) { busy_next = -1; return false; } // (a program draws)
   if (busy_fr < 0) {
     ui_noclip();
