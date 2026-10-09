@@ -490,31 +490,38 @@ static NOINL bool linpow(const gen & g,gen & F,int & r){
   return true;
 }
 
-// The table: f is recognized by its values at two points (the derivatives of these antiderivatives,
-// computed once).
+// The table: f is recognized by its values at 0.37, 0.61 and -0.43 (a negative point: |sin x| is
+// not sin x), those of the derivatives of these antiderivatives in TABV (computed on the PC:
+// differentiating them on the calculator took 2.7 s the first time).
 static const char TABLE[]="[exp(x),sin(x),-cos(x),tan(x),-cot(x),sec(x),-csc(x),ln(abs(sec(x))),ln(abs(sin(x))),ln(abs(sec(x)+tan(x))),-ln(abs(csc(x)+cot(x))),atan(x),asin(x),sinh(x),cosh(x),tanh(x),(sec(x)*tan(x)+ln(abs(sec(x)+tan(x))))/2]";
-static vecteur * tabF_, * tabV_;
-static NOINL gen at2(const gen & g,const gen & x,double p){ return evalf(sub(g,x,p),1,CTX); }
-static NOINL bool near(const gen & a,const gen & b){
-  return a.type==_DOUBLE_ && b.type==_DOUBLE_ && fabs(a._DOUBLE_val-b._DOUBLE_val)<TOL*(1+fabs(b._DOUBLE_val));
-}
+static const double TABV[][3]={
+  {1.447734615,1.840431399,0.6505090947},{0.9323273456,0.8196480178,0.9089657497},
+  {0.361615432,0.5728674601,-0.4168708024},{1.150437832,1.488487576,1.210333243},
+  {7.647264093,3.047134971,5.754360199},{0.4160160736,0.8527060971,-0.5045525903},
+  {7.129753433,2.497578139,5.230516333},{0.3878631617,0.6989188623,-0.4586210235},
+  {2.578228867,1.430781245,-2.180449541},{1.07258465,1.220035891,1.100151464},
+  {2.765368708,1.745604472,-2.398824754},{0.879584836,0.7288098535,0.8439530762},
+  {1.076389473,1.261986643,1.107629601},{1.069234473,1.191891134,1.093883309},
+  {0.378500142,0.6485402649,-0.4433742144},{0.8746898675,0.7039257003,0.8357146367},
+  {1.23394196,1.816008267,1.331549889}};
+static const double TABX[3]={0.37,0.61,-0.43};
+static vecteur * tabF_;
 static NOINL bool table(const gen & f,gen & F){
-  gen x0(identificateur("x"));
   if (!tabF_){
     gen l(TABLE,CTX);
     if (l.type!=_VECT) return false;
     tabF_=new vecteur(*l._VECTptr);
-    tabV_=new vecteur;
-    EACH(it,*tabF_){
-      gen d=D(*it,x0);
-      tabV_->push_back(makevecteur(at2(d,x0,0.37),at2(d,x0,0.61),at2(d,x0,-0.43)));
-    }
   }
-  gen y1=at2(f,X,0.37),y2=at2(f,X,0.61),y3=at2(f,X,-0.43); // (a negative point: |sin x| is not sin x)
-  const_iterateur wi=tabV_->begin();
-  EACH(it,*tabF_){
-    const gen & w=*wi++;
-    if (near(w[0],y1) && near(w[1],y2) && near(w[2],y3)){ F=sub(*it,x0,X); return true; }
+  double y[3];
+  for (int k=0;k<3;++k){
+    gen v=evalf(sub(f,X,TABX[k]),1,CTX);
+    if (v.type!=_DOUBLE_) return false;
+    y[k]=v._DOUBLE_val;
+  }
+  for (unsigned i=0;i<tabF_->size();++i){
+    int k=0;
+    while (k<3 && fabs(y[k]-TABV[i][k])<TOL*(1+fabs(TABV[i][k]))) ++k;
+    if (k==3){ F=sub((*tabF_)[i],gen(identificateur("x")),X); return true; }
   }
   return false;
 }
