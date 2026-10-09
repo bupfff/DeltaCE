@@ -1019,7 +1019,11 @@ static gen isteps(const gen & f0,int lev){
   gen fe=ev(f);
   if (basic(fe,F,r)){ S(r,f,F); return F; }
   if (even_trig(fe) && !is_undef(F=trigid(f,lev))) return F;
-  if (powers_only(fe) && !is_undef(F=expandit(fe,lev))) return F;
+  if (powers_only(fe)){ // expanded, unless that makes it long: x^2 (x^3+1)^5 is u = x^3+1
+    gen d=_degree(makesequence(fe,X),CTX);
+    if ((d.type!=_INT_ || d.val>6) && !is_undef(F=usub(f,lev))) return F;
+    if (!is_undef(F=expandit(fe,lev))) return F;
+  }
   if (splits(fe) && !is_undef(F=expandit(fe,lev))) return F;
   if (!is_undef(F=usub(f,lev))) return F;
   if (!is_undef(F=ratfrac(fe,lev))) return F;
