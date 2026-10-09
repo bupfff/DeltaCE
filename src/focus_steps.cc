@@ -138,6 +138,11 @@ static int add_math(const char * s, int n, int x, int y, int w, int lv0, int kin
     if (it && lead) { it->num = 1; it->eqx = 0; }
     return L.asc + L.desc;
   }
+  const int e = lead ? -1 : top(s, '=');
+  if (e > 0 && e < n) { // too wide: its left side, then "= the right side" below (a product had no
+    const int h1 = add_math(s, e, x, y, w, lv0, kind); // place to break: clipped at both edges)
+    return h1 + 4 + add_math(s + e + 1, n - e - 1, x, y + h1 + 4, w, lv0, kind, 1);
+  }
   short at[24];
   const int nc = cuts(s, n, at, 24), lr = lead ? eqw(LVWRAP) : 0;
   while (a < n) {

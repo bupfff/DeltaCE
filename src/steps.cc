@@ -1460,8 +1460,17 @@ static NOINL gen word(const char * w){ return gen(identificateur(w)); }
 static NOINL bool same(const gen & a,const gen & b){ return is_zero(rn(ev(a-b))); }
 // giac's sum left as is, infinite or no value: a divergent one (or one giac cannot do)
 static NOINL bool undone(const gen & G){ return is_inf(G) || is_undef(G) || G.type==_STRNG || has_op(G,*at_bounded_function) || is(G,at_sum); }
-// sum(t,n,a,inf): the divergence test, telescoping, a p-series (or a limit comparison with one),
-// a geometric series, else the partial sums' limit
+// the p-series conclusion, p = e: converges for p > 1 (giac's value; sum(1/n^2) left as is by giac,
+// pi^2/6 is FlowCE's, in the answer), diverges for p <= 1
+static NOINL gen pser(const gen & op,const gen & G,const gen & e){
+  const bool cv=is_strictly_greater(e,1,CTX);
+  if (cv?is_inf(G):!is_inf(G) && !is(G,at_sum)) return undef;
+  S(R_PSER,word("p"),e);
+  if (cv && !is(G,at_sum)) S(R_EQV,op,G);
+  return !cv?word("diverges"):is(G,at_sum)?word("converges"):G;
+}
+// sum(t,n,a,inf): the divergence test, telescoping, a p-series, a geometric series, the partial
+// sums' limit, else a limit comparison with a p-series (convergence only)
 static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   if (v.size()!=4 || ev(v[3])!=plus_inf) return undef;
   const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N"),G=ev(op);
@@ -1486,19 +1495,7 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   bool ps=!w.empty();
   EACH(it,w){ gen b=*it,ei=bexp(b); ps=ps && b==x; e=e+ei; } // c/n^p (1/n^(3/2) is 1/(n*sqrt(n)))
   e=ev(-e);
-  if (!ps){ // like 1/n^p: lim t n^p finite and not 0 (a limit comparison)
-    e=ev(-Linf(rn(ev(symb_ln(abs(t,CTX))/symb_ln(x))),x));
-    L=finv(e) && is_strictly_positive(e,CTX)?ev(Linf(t*pow(x,e,CTX),x)):gen(0);
-    ps=finv(L) && is_strictly_positive(L,CTX);
-    if (ps) S(R_LCMP,Linf(symb_prod(v[0],pow(x,e,CTX)),x),L);
-  }
-  if (ps && is_strictly_positive(e,CTX)){ // p-series (sum(1/n^2): giac's is left as is, pi^2/6 is FlowCE's)
-    const bool cv=is_strictly_greater(e,1,CTX);
-    if (cv?is_inf(G):!is_inf(G) && !is(G,at_sum)) return undef;
-    S(R_PSER,word("p"),e);
-    if (cv && !is(G,at_sum)) S(R_EQV,op,G);
-    return !cv?word("diverges"):is(G,at_sum)?word("converges"):G;
-  }
+  if (ps && is_strictly_positive(e,CTX)) return pser(op,G,e);
   gen r=_simplify(ev(sub(t,x,x+1)/t),CTX); // (2^n/2^(n+1): ratnormal left it)
   if (!dep(r) && is_strictly_greater(1,evalf(abs(r,CTX),1,CTX),CTX)){ // geometric
     gen t0=ev(sub(t,x,a));
@@ -1510,15 +1507,26 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   }
   gen pf=shape(t,SH_FRAC)?_partfrac(makesequence(t,x),CTX):t; // (x: the index here)
   SN=ev(SYM(at_sum,makesequence(t,x,a,N)));
-  if (!elementary(SN) || SN.type==_STRNG) return undef; // (1/n^2: Psi)
-  SN=rn(SN);
-  val=ev(Linf(SN,N));
-  if (!same(val,G) && !(is_inf(val) && is_inf(G))) return undef;
-  const bool sp=pf!=t && pf.is_plus();
-  if (sp) S(R_PFRAC,v[0],pf);
-  S(sp?R_PSUMT:R_PSUM,SYM(at_sum,makesequence(sp?pf:v[0],x,a,N)),SN);
-  S(R_SLIM,Linf(SN,N),val);
-  S(R_EQV,op,val);
+  if (elementary(SN) && SN.type!=_STRNG){
+    SN=rn(SN);
+    val=ev(Linf(SN,N));
+    if (same(val,G) || (is_inf(val) && is_inf(G))){
+      const bool sp=pf!=t && pf.is_plus();
+      if (sp) S(R_PFRAC,v[0],pf);
+      S(sp?R_PSUMT:R_PSUM,SYM(at_sum,makesequence(sp?pf:v[0],x,a,N)),SN);
+      S(R_SLIM,Linf(SN,N),val);
+      S(R_EQV,op,val);
+      return val;
+    }
+  }
+  // like 1/n^p: lim t n^p finite and not 0 (a limit comparison: converges or not)
+  e=ev(-Linf(rn(ev(symb_ln(abs(t,CTX))/symb_ln(x))),x));
+  L=finv(e) && is_strictly_positive(e,CTX)?ev(Linf(t*pow(x,e,CTX),x)):gen(0);
+  if (!finv(L) || !is_strictly_positive(L,CTX)) return undef;
+  size_t m=mark();
+  S(R_LCMP,Linf(symb_prod(v[0],pow(x,e,CTX)),x),L);
+  val=pser(op,G,e);
+  if (is_undef(val)) cut(m);
   return val;
 }
 // series(f,x,a,n): f's derivatives, their values at a, the Taylor polynomial (giac's without O)
