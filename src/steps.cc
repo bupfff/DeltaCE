@@ -22,7 +22,7 @@ enum {
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
   R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
-  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_NRULES
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -101,6 +101,9 @@ static const char * const RULES[]={
   "Indeterminate form",0,"A,B",
   "Alternating series test: the size decreases to 0",0,"A=B",
   "Ratio test: below 1, the series converges",0,"A=B",
+  "Root test: below 1, the series converges",0,"A=B",
+  "Log of a quotient","ln(a/b)=ln(a)-ln(b)","A=B",
+  "Integral test: same behavior as the integral",0,"A",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -1529,6 +1532,9 @@ static NOINL gen ratio_of(const gen & f,const gen & t,const gen & x){
   gen n=_numer(t,CTX),d=_denom(t,CTX);
   return symb_prod(subst(f,x,x+1,true,CTX),is_one(n)?d:symb_prod(d,symb_inv(n)));
 }
+// g at n as a decimal (0 if not real): compared as decimals (giac's is_strictly_positive is
+// false for 4.5e-7, the term n e^(-n^2) at 4)
+static NOINL double at_(const gen & g,const gen & n){ gen y=evalf(sub(g,X,n),1,CTX); return y.type==_DOUBLE_?y._DOUBLE_val:0; }
 // 1 if the index is in an exponent of g (2^n, n^n), else 0
 static NOINL gen nexp(const gen & g){ return g.is_pow() && dep(arg(g,1))?gen(1):first_of(g,nexp); }
 // the sums linear in N (*nn_) written out: 2(N+1)-1 as 2N+1, N+1+1 as N+2
@@ -1552,18 +1558,19 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   // f(n)-f(n+k), k up to 3, as typed or in partial fractions: telescoping, S_N the first terms
   // less the last (1/(n(n+2)): 1+1/2-1/(N+1)-1/(N+2))
   gen pf=shape(t,SH_FRAC)?pfrac(t):t,s=t.is_plus()?t:pf; // (X: the index here)
+  if (is(t,at_ln)) s=symb_plus(symb_ln(_numer(arg(t),CTX)),symb_neg(symb_ln(_denom(arg(t),CTX)))); // ln(n/(n+1))
   if (s.is_plus() && arg(s).type==_VECT && arg(s)._VECTptr->size()==2){
     gen u=arg(s,0),w=arg(s,1);
     for (int i=0;i<6;++i,std::swap(u,w)) if (same(sub(u,x,x+1+i/2),-w)){
       vecteur q;
-      for (int j=0;j<=i/2;++j) q.push_back(sub(u,x,a+j));
+      for (int j=0;j<=i/2;++j){ gen y=sub(u,x,a+j); if (!is_zero(y)) q.push_back(y); } // (ln(1))
       nn_=&N;
-      for (int j=1;j<=1+i/2;++j) q.push_back(symb_neg(linn(subst(u,x,N+j,true,CTX))));
+      for (int j=1;j<=1+i/2;++j){ gen y=linn(subst(u,x,N+j,true,CTX)); q.push_back(y.is_neg()?arg(y):symb_neg(y)); } // (atan: no --)
       SN=symb_plus(q);
       val=ev(Linf(SN,N));
       if (!same(val,G) && !is(G,at_sum) && !(is_inf(val) && is_inf(G))) return undef; // (S_N is exact)
-      if (s!=t) S(R_PFRAC,v[0],pf);
-      S(R_PSUMT,SYM(at_sum,makesequence(s!=t?pf:v[0],x,a,N)),SN);
+      if (s!=t) S(is(t,at_ln)?R_LNQ:R_PFRAC,v[0],s);
+      S(R_PSUMT,SYM(at_sum,makesequence(s!=t?s:v[0],x,a,N)),SN);
       S(R_SLIM,Linf(SN,N),val);
       return is_inf(val)?word("diverges"):val;
     }
@@ -1601,10 +1608,17 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
     vecteur o(c);
     EACH(jt,w) if (jt!=it) o.push_back(*jt);
     gen b=ev(prodof(o));
-    if (is_strictly_positive(-evalf(sub(b,x,a+3),1,CTX),CTX)) b=ev(-b);
-    for (int k=3;k<12;++k) if (!is_strictly_greater(evalf(sub(b,x,a+k),1,CTX),evalf(sub(b,x,a+k+1),1,CTX),CTX)) return undef;
+    if (at_(b,a+3)<0) b=ev(-b);
+    for (int k=3;k<12;++k) if (!(at_(b,a+k)>at_(b,a+k+1))) return undef;
     S(R_AST,Linf(b,x),0);
     return cvg(op,G);
+  }
+  // b^n: the root test, lim (a_n)^(1/n) = lim b below 1 ((n/(2n+1))^n, 1/ln(n)^n)
+  gen u=t.is_inv()?arg(t):t;
+  if (!is_inf(G) && u.is_pow() && (arg(u,1)==x || is_zero(ev(arg(u,1)+x)))){
+    gen b=(arg(u,1)==x)!=t.is_inv()?arg(u,0):symb_inv(arg(u,0));
+    L=ev(Linf(b,x));
+    if (finv(L) && is_strictly_greater(1,abs(L,CTX),CTX)){ S(R_ROOT,Linf(b,x),L); return cvg(op,G); }
   }
   // n! or the index in an exponent: the ratio test, lim |a(n+1)/a(n)| below 1 (2^n/n!, n!/n^n)
   if (dep(r) && !is_inf(G) && (has_op(t,*at_factorial) || !is_zero(nexp(t)))){
@@ -1619,12 +1633,21 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   // like 1/n^p: lim t n^p finite and not 0 (a limit comparison: converges or not)
   e=ev(-Linf(rn(ev(symb_ln(abs(t,CTX))/symb_ln(x))),x));
   L=finv(e) && is_strictly_positive(e,CTX)?ev(Linf(t*pow(x,e,CTX),x)):gen(0);
-  if (!finv(L) || !is_strictly_positive(L,CTX)) return undef;
   size_t m=mark();
-  S(R_LCMP,Linf(symb_prod(v[0],pow(x,e,CTX)),x),L);
-  val=pser(op,G,e);
-  if (is_undef(val)) cut(m);
-  return val;
+  if (finv(L) && is_strictly_positive(L,CTX)){
+    S(R_LCMP,Linf(symb_prod(v[0],pow(x,e,CTX)),x),L);
+    val=pser(op,G,e);
+    if (!is_undef(val)) return val;
+    cut(m);
+  }
+  // positive and decreasing (from a+3 on): the integral test, the integral's steps below it
+  // (1/(n ln(n)): u = ln(x), +infinity, diverges)
+  for (int k=3;k<9;++k){ double y=at_(t,a+k); if (!(y>0 && y>at_(t,a+k+1))) return undef; }
+  gen I=SYM(at_integrate,makesequence(v[0],x,a,plus_inf));
+  S(R_ITEST,I,0);
+  ++depth_; val=one(I); --depth_;
+  if (is_undef(val) || (is_inf(val)?finv(G) && !is(G,at_sum):is_inf(G))){ cut(m); return undef; } // (as giac's sum)
+  return is_inf(val)?word("diverges"):cvg(op,G);
 }
 // series(f,x,a,n): f's derivatives, their values at a, the Taylor polynomial (giac's without O)
 static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
