@@ -40,6 +40,8 @@ void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus);
 // after eval: msg gets a plain message instead of the result (or stays empty); graw: g before
 // positive_first (the long-polynomial check of answer_print)
 void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen & graw);
+// a definite integral without a value: the console's message (0 if it has one)
+const char * answer_diverges(const giac::gen & g,const answer_ctx & a);
 // the text shown for g (not a graph, taille(g) < 256), in textbook form
 std::string answer_print(const giac::gen & g,const giac::gen & graw,const answer_ctx & a);
 

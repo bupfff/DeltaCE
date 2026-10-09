@@ -3290,6 +3290,37 @@ void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus){
   g=a.tabled?tab:is_zero(parts)?ga:parts; // (parts: evaluated and normalized as giac's answers)
 }
 
+// A definite integral without a value. undef: through an asymptote (int(2x/(x^2-4),x,0,4)) or to
+// infinity (int(x/(x^2+1),x,-inf,inf)). +-infinity over finite bounds: the integrand is unbounded;
+// over an infinite one, unbounded too if its denominator vanishes inside (3/(2x-8) from 0 to
+// infinity said +infinity: from 0 to 4 it is -infinity), else it diverges to that infinity.
+const char * answer_diverges(const giac::gen & g,const answer_ctx & a){
+  using namespace giac;
+  if (!a.definite || !(is_undef(g) || g==plus_inf || g==minus_inf))
+    return 0;
+  const vecteur & v=*a.gin._SYMBptr->feuille._VECTptr; // f, x, a, b
+  const gen lo=eval(v[2],1,contextptr),hi=eval(v[3],1,contextptr);
+  const bool imp=is_inf(lo) || is_inf(hi);
+  const char * const unb="diverges (the integrand is unbounded on the interval)";
+  if (is_undef(g))
+    return imp?"diverges (the improper integral does not converge)":unb;
+  if (!imp)
+    return unb;
+  if (v[1].type==_IDNT){
+    const gen s=_solve(makesequence(_denom(eval(v[0],1,contextptr),contextptr),v[1]),contextptr);
+    if (s.type==_VECT)
+      for (const_iterateur it=s._VECTptr->begin();it!=s._VECTptr->end();++it){
+        const gen r=evalf(*it,1,contextptr);
+        if (r.type==_DOUBLE_ && (is_inf(lo) || is_greater(r,lo,contextptr)) && (is_inf(hi) || is_greater(hi,r,contextptr)) && !(r==lo) && !(r==hi))
+          return unb;
+      }
+  }
+  return g==plus_inf?"diverges (to +infinity)":"diverges (to -infinity)";
+}
+
+#if defined FLOWCE_STEPS || defined HOSTGIAC
+giac::gen steps_derivative(const giac::gen & f,const giac::gen & x,const giac::context * contextptr); // steps.cc
+#endif
 void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen & graw){
   using namespace giac;
   answer_simplify(); // autosimplify(0) typed: the status bar shows it with this answer

@@ -42,11 +42,9 @@ std::string khicas_do_run(const char * s){
       if (msg.empty()) // focus_on
         result_approx(g);
     }
-    if (a.definite && msg.empty() && is_undef(g)){ // as main.cc
-      const vecteur & v=*a.gin._SYMBptr->feuille._VECTptr; // f, x, a, b
-      msg=is_inf(eval(v[2],1,contextptr)) || is_inf(eval(v[3],1,contextptr))?
-        "diverges (the improper integral does not converge)":"diverges (the integrand is unbounded on the interval)";
-    }
+    const char * dv=msg.empty()?answer_diverges(g,a):0; // as main.cc
+    if (dv)
+      msg=dv;
     if (!msg.empty())
       printed=msg;
     else {
