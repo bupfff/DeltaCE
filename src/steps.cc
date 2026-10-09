@@ -248,9 +248,14 @@ static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen
   double c=0.71;
   EACH(it,ids){ if (*it!=x && evalf(*it,1,CTX).type!=_DOUBLE_){ d=sub(d,*it,c); f=sub(f,*it,c); } c+=0.17; } // (pi keeps its value)
   static const double pts[]={0.13,0.37,0.61,0.89,0.37,-0.61,1.29,-2.4,2.13,3.7,5.3,-7.9,11.3};
+  // the points: inside [lo,hi], the fixed ones, then next to the real ones while fewer than 3 are
+  // (sqrt(sec(3x^2-7x)) is real only near some of them)
+  vecteur ps;
+  for (int i=lo?0:4;i<(only?4:13);++i) ps.push_back(i<4?ev(*lo+(*hi-*lo)*pts[i]):gen(pts[i]));
+  unsigned nf=ps.size();
   int real=0,cplx=0;
-  for (int i=lo?0:4;i<(only?4:13) && real<5;++i){
-    gen p=i<4?ev(*lo+(*hi-*lo)*pts[i]):gen(pts[i]);
+  for (unsigned i=0;i<ps.size() && real<5 && (i<nf || real<3);++i){
+    gen p=ps[i];
     gen z=evalf(sub(f,x,p),1,CTX),y;
     if (z.type!=_DOUBLE_ && z.type!=_CPLX) continue; // f not defined there
     y=evalf(sub(d,x,p),1,CTX);
@@ -260,7 +265,11 @@ static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen
 #ifdef HOSTGIAC
     if (getenv("STEPDBG")) fprintf(stderr,"  same_num at %s: f=%s diff=%s %s\n",p.print(CTX).c_str(),z.print(CTX).c_str(),y.print(CTX).c_str(),ok?"ok":"DIFFERENT");
 #endif
-    if (z.type==_DOUBLE_){ if (!ok) return false; ++real; }
+    if (z.type==_DOUBLE_){
+      if (!ok) return false;
+      ++real;
+      if (ps.size()<nf+8){ ps.push_back(p+0.011); ps.push_back(p-0.013); }
+    }
     else cplx+=ok;
   }
   return real+cplx>=3;
