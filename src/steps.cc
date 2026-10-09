@@ -67,7 +67,7 @@ static const char * const RULES[]={
   "Substitution t = tan(x/2)","[sin(x)=2*t/(1+t^2),cos(x)=(1-t^2)/(1+t^2),dx=2/(1+t^2)*dt]","integrate(A,V)=integrate(B,C)",
   "Split where the inside changes sign",0,"A=B",
   "Improper integral: a limit",0,"A=B",
-  "No antiderivative in elementary functions: the decimal value",0,"A=B",
+  "No elementary antiderivative: the decimal value",0,"A=B",
   "Evaluate from a to b","integrate(f,x,a,b)=F(b)-F(a)","A=B",
   "",0,"A=B",
   "Compute",0,"A",
@@ -83,14 +83,14 @@ static const char * const RULES[]={
   "Write the power with e","u^v=e^(v*ln(u))","A=B",
   "The denominator goes to 0, the numerator does not",0,"A=B",
   "The one-sided limits differ: no limit",0,"A,B",
-  "Squeeze theorem: a bounded factor times one going to 0",0,"A=B",
+  "Squeeze theorem: bounded times going to 0",0,"A=B",
   "Limit of a continuous function","limit(f(u),x,a)=f(limit(u,x,a))","A=B",
   "One fraction",0,"A=B",
   "Factor out the fastest term",0,"A=B",
   "Derivatives",0,"A=B",
   "Their values at the center",0,"A=B",
   "Taylor polynomial","T(x)=sum(f^(k)(a)/k!*(x-a)^k,k,0,n)","A=B",
-  "Divergence test: the terms do not go to 0, the series diverges",0,"A=B",
+  "Divergence test: the terms do not go to 0",0,"A=B",
   "Ratio of consecutive terms",0,"A=B",
   "Geometric series with |r| < 1","sum(a*r^k,k,0,inf)=a/(1-r)","A=B",
   "Partial sum",0,"A=B",
@@ -107,6 +107,7 @@ const char * steps_formula(const step_t & s){ return RULES[3*s.rule+1]; }
 static gen dname(const gen & v){ return gen(identificateur(std::string("d")+v.print(context0))); }
 
 static gen mergek(const gen & g);
+static NOINL gen radicand(const gen & g);
 static vecteur * phm_;
 gen steps_math(const step_t & s,GIAC_CONTEXT){
   if (!phm_){ // (giac's results are read as vectors only after a check: ON leaves error values)
@@ -205,7 +206,10 @@ static NOINL gen mergek(const gen & g){
   gen h=map_of(g,mergek),b,b2;
   if (h.is_inv() && (is(arg(h),at_cos) || is(arg(h),at_sin))) return SYM(is(arg(h),at_cos)?at_sec:at_csc,arg(arg(h))); // sec x, not 1/cos x
   // textbook notation: (x^(1/9))^-2 as x^(-2/9) ...
-  if (h.is_pow() && arg(h,0).is_pow() && isnum(arg(h,1)) && isnum(arg(arg(h,0),1))) h=symb_pow(arg(arg(h,0),0),arg(arg(h,0),1)*arg(h,1));
+  if (h.is_pow() && arg(h,0).is_pow() && isnum(arg(h,1)) && isnum(arg(arg(h,0),1))){ // ... (sqrt(x+1))^2 as x+1
+    const gen e=arg(arg(h,0),1)*arg(h,1),b=arg(arg(h,0),0);
+    h=is_one(e)?b:symb_pow(b,e);
+  }
   if (!h.is_prod() || arg(h).type!=_VECT) return h;
   vecteur v,w,den; gen k=1;
   flat(at_prod,h,v);
@@ -300,8 +304,8 @@ static NOINL gen norm(const gen & g){
     flat(&u,SYM(&u,a),v); return SYM(&u,gen(v,_SEQ__VECT));
   }
   if (u==at_neg && a.type<_IDNT) return -a;
-  if (u==at_sqrt && a.is_pow() && arg(a,0).type==_IDNT) // sqrt(x^7) is x^(7/2)
-    return symb_pow(arg(a,0),ev(arg(a,1)/2));
+  if (u==at_sqrt) // sqrt(x^7) is x^(7/2); a power: giac prints x-sqrt(x+1) as x-(sqrt(x+1))
+    return a.is_pow() && arg(a,0).type==_IDNT?symb_pow(arg(a,0),ev(arg(a,1)/2)):symb_pow(a,plus_one_half);
   return SYM(&u,a);
 }
 
@@ -416,8 +420,8 @@ static gen dsteps(const gen & f){
       ++depth_; gen dn=dsteps(n),dd=dsteps(d); --depth_;
       gen r=(dn*d-n*dd)/symb_pow(d,2);
       S(R_EQD,f,r);
-      gen r2=rn(r);
-      if (taille(r2,200)<taille(r,200)){ S(R_EQD,f,r2); r=r2; }
+      gen r2=rn(r); // (not over a root: giac's ratnormal left (-x^2+x^2+1)/(x^2+1)^(3/2))
+      if (taille(r2,200)<taille(r,200) && is_zero(radicand(d))){ S(R_EQD,f,r2); r=r2; }
       return r;
     }
     return dprod(num);
@@ -754,7 +758,6 @@ static NOINL bool rooted(const gen & g,const gen & u){
   if (a.type==_VECT){ EACH(it,*a._VECTptr) if (rooted(*it,u)) return true; return false; }
   return rooted(a,u);
 }
-static NOINL gen radicand(const gen & g);
 static NOINL gen trigsub(const gen & f,int lev);
 // x in g only in powers x^j, j a multiple of k (g a function of x^k)
 static NOINL bool ofpow(const gen & g,int k){

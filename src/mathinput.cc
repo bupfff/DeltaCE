@@ -624,8 +624,12 @@ static void cons(int n, int x, int y, int sm) {
     dtext("=", 1, 1, bx + B.w, bb);
     sl(2, bx + B.w + ew, bb, 1);
     sl(3, (t - D.w) / 2, st - 1 - D.ds, 1);
-    sl(0, t + 2, 0, sm);
-    cw = t + 4 + A.w;
+    i = needp(sn[0]); // a sum in parentheses: the sum of (1-(-1)^n), not of 1, minus (-1)^n
+    t += 2;
+    if (i) { dec(MI_LPAREN, sm, t, -ca, h + 1, ca + cd); t += h + 1; }
+    sl(0, t, 0, sm);
+    if (i) { dec(MI_RPAREN, sm, t + A.w, -ca, h + 1, ca + cd); t += h + 1; }
+    cw = t + 2 + A.w;
   } break;
   case K_SER: { // series(f,x,a,n), as lim: column "taylor" over "x->a deg n" (small); then f
     int bx, bb, tw = lw("taylor", 6, sm), aw = lw("", 1, 1), dw = lw(" deg ", 5, 1);
@@ -657,8 +661,12 @@ static void cons(int n, int x, int y, int sm) {
       if (*sg == '-') dec(MI_HLINE, 1, sx + 1, sy - sf.asc / 3, sw - 1, BAR); else dtext(sg, 1, 1, sx, sy);
       if (gm != GM_MEASURE) sl(3, -30000, 0, 1);
     }
-    sl(0, t + h, 0, sm);
-    cw = t + h + A.w + 2;
+    i = needp(sn[0]); // the limit of (1-(-1)^n), not of 1, minus (-1)^n
+    t += h;
+    if (i) { dec(MI_LPAREN, sm, t, -ca, h + 1, ca + cd); t += h + 1; }
+    sl(0, t, 0, sm);
+    if (i) { dec(MI_RPAREN, sm, t + A.w, -ca, h + 1, ca + cd); t += h + 1; }
+    cw = t + A.w + 2;
   } break;
   }
 }
