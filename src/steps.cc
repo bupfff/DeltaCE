@@ -78,6 +78,7 @@ const char * steps_formula(const step_t & s){ return RULES[3*s.rule+1]; }
 // d followed by a name (du, dx): identifiers keep their char pointer, the string one copies it
 static gen dname(const gen & v){ return gen(identificateur(std::string("d")+v.print(context0))); }
 
+static gen mergek(const gen & g);
 gen steps_math(const step_t & s,GIAC_CONTEXT){
   gen t(RULES[3*s.rule+2],contextptr);
   // by parts: u and v, unless the variable is one of them (after a substitution u): p and q
@@ -91,7 +92,7 @@ gen steps_math(const step_t & s,GIAC_CONTEXT){
   from.push_back(gen(identificateur("W"))); to.push_back(W);
   from.push_back(gen(identificateur("dU"))); to.push_back(dname(U));
   from.push_back(gen(identificateur("dW"))); to.push_back(dname(W));
-  return subst(t,from,to,true,contextptr);
+  return mergek(subst(t,from,to,true,contextptr));
 }
 
 // ---------------------------------------------------------------- state and helpers
@@ -134,6 +135,29 @@ static NOINL void flat(const unary_function_ptr * u,const gen & g,vecteur & v){
   }
   else if (u==at_prod && g.is_neg()){ v.push_back(-1); flat(u,arg(g),v); }
   else v.push_back(g);
+}
+// for display: the numbers of each product multiplied together (2*1/3 is 2/3, 1*dx is dx)
+static bool isnum(const gen & g){ return g.type<_IDNT || g.type==_FRAC; }
+static NOINL gen mergek(const gen & g){
+  if (g.type!=_SYMB) return g;
+  gen a=arg(g);
+  if (a.type==_VECT){
+    vecteur v=*a._VECTptr;
+    for (unsigned i=0;i<v.size();++i) v[i]=mergek(v[i]);
+    a=gen(v,a.subtype);
+  }
+  else a=mergek(a);
+  gen h=symbolic(g._SYMBptr->sommet,a);
+  if (!h.is_prod() || a.type!=_VECT) return h;
+  vecteur v,w; gen k=1;
+  flat(at_prod,h,v);
+  for (unsigned i=0;i<v.size();++i){
+    if (isnum(v[i])) k=k*v[i];
+    else if (v[i].is_inv() && isnum(arg(v[i]))) k=k/arg(v[i]);
+    else w.push_back(v[i]);
+  }
+  if (!is_one(k) || w.empty()) w.insert(w.begin(),k);
+  return w.size()==1?w[0]:symb_prod(w);
 }
 // constant factors in c, the others in v
 static NOINL void factors(const gen & f,vecteur & c,vecteur & v){
