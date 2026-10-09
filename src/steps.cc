@@ -1181,8 +1181,10 @@ static gen one_(const gen & op){
     S(R_IMPROPER,op,SYM2(at_binary_minus,Lb,La));
     val=ev(ev(Lb)-ev(La));
   }
-  else {
-    S(R_FTC,op,SYM2(at_binary_minus,Fb,Fa));
+  else { // F(b) - F(a), written F(b) + h for F(a) = -h (1 + 1, not 1 - -1); a 0 term goes
+    gen h=negpart(Fa);
+    gen nh=is_undef(h)?symb_neg(Fa):h;
+    S(R_FTC,op,is_zero(Fa)?Fb:is_zero(Fb)?nh:symb_plus(Fb,nh));
     val=ev(Fb-Fa);
   }
   val=_simplify(val,CTX);
