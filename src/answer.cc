@@ -1096,6 +1096,7 @@ static giac::gen trig_powers(const giac::gen & f0,const giac::gen & x,int depth=
 }
 
 static giac::gen usub(const giac::gen & F,const giac::gen & x); // (below)
+static giac::gen linsub(const giac::gen & f,const giac::gen & x);
 // f at x=v in decimals; false if not a real number (a pole: NaN)
 static __attribute__((noinline)) bool at(const giac::gen & f,const giac::gen & x,double v,double & y){
   const giac::gen e=giac::evalf(giac::subst(f,x,giac::gen(v),false,contextptr),1,contextptr);
@@ -1112,6 +1113,8 @@ static giac::gen table_integral(const giac::gen & g){
   // evaluated ((cos(x)^3+sin(x))/cos(x)^2 is a product)
   const gen f=eval(g._SYMBptr->feuille._VECTptr->front(),1,contextptr),& x=g._SYMBptr->feuille._VECTptr->back();
   r=trig_powers(f,x);
+  if (is_zero(r))
+    r=linsub(f,x);
   return is_zero(r)?usub(f,x):r;
 }
 
@@ -1637,6 +1640,40 @@ static giac::gen power_sum(const giac::gen & g){
   // length (a minute on the calculator) and leaves these as they are (n^2/2^n: giac's 6)
   return contains(f,at_factorial) || contains(f,at_ln) || contains(f,at_sin) || contains(f,at_cos) || contains(f,at_tan)?
     sym1(at_sum,makesequence(f,n,a,plus_inf)):gen(0);
+}
+
+// a polynomial (or a constant) times (a x+c)^n, n >= 3: u = a x+c, as textbooks do it: each term k u^j of the
+// polynomial written in u (dx = du/a) gives k u^(j+n+1)/(j+n+1), u kept as a x+c. 8x(2x+1)^2026 is
+// (2x+1)^2028/1014-2(2x+1)^2027/2027 (giac expanded the power: 49 s and 790 MB on the PC, a crash
+// on the calculator), x(2x+1)^5 is (2x+1)^7/56-(2x+1)^6/24, not (192x^7+...)/42. 0 if none.
+static giac::gen linsub(const giac::gen & f,const giac::gen & x){
+  using namespace giac;
+  const vecteur fs=f.is_symb_of_sommet(at_prod) && f._SYMBptr->feuille.type==_VECT?*f._SYMBptr->feuille._VECTptr:vecteur(1,f);
+  for (unsigned i=0;i<fs.size();++i){
+    const gen & w=fs[i];
+    if (!w.is_symb_of_sommet(at_pow) || w._SYMBptr->feuille.type!=_VECT || w._SYMBptr->feuille._VECTptr->size()!=2)
+      continue;
+    const gen b=w._SYMBptr->feuille._VECTptr->front(),e=w._SYMBptr->feuille._VECTptr->back();
+    gen a,c,r=1,F=0;
+    if (e.type!=_INT_ || e.val<3 || b==x || !is_linear_wrt(b,x,a,c,contextptr) || is_zero(a) || !free_of(a,x) || !free_of(c,x))
+      continue;
+    for (unsigned j=0;j<fs.size();++j) // the other factors: a polynomial of x
+      if (j!=i)
+        r=r*fs[j];
+    const gen u(identificateur(" u"));
+    const gen q=_coeff(makesequence(expand(subst(r,x,(u-c)/a,false,contextptr)/a,contextptr),u),contextptr);
+    if (q.type!=_VECT || q._VECTptr->empty()) // (5(2x+1)^2026 too: usub's check of it took 48 s)
+      continue;
+    int j=int(q._VECTptr->size())-1+e.val+1; // the highest power first
+    for (const_iterateur it=q._VECTptr->begin();it!=q._VECTptr->end();++it,--j){
+      if (!free_of(*it,x) || !free_of(*it,u))
+        return 0;
+      if (!is_zero(*it))
+        F=F+*it*sym2(at_pow,b,j)/j;
+    }
+    return F;
+  }
+  return 0;
 }
 
 // the integrand F (evaluated) is c*b'(x)*b(x)^e for one of its powers b^e (1/b: e=-1), a
