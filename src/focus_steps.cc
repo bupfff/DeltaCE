@@ -30,7 +30,7 @@ static bool starts(const char * s, const char * p) { return !strncmp(s, p, strle
 // a calculation the steps screen can show: a derivative, an integral or a limit
 int focus_steps_able(const char * s) {
   while (*s == ' ') ++s;
-  return starts(s, "diff(") || starts(s, "integrate(") || starts(s, "int(") || starts(s, "derive(") || starts(s, "limit(");
+  return starts(s, "diff(") || starts(s, "integrate(") || starts(s, "int(") || starts(s, "derive(") || starts(s, "limit(") || starts(s, "series(") || starts(s, "sum(");
 }
 
 // The page: items laid out once (page coordinates: y from the top of the page), drawn in bands.
@@ -268,9 +268,10 @@ static void lay_steps(const char * head, const std::vector<step_t> & v, const ch
     const int b = NP;
     if (put(K_BOX, 0, X - 4, y, W + 8, 0, 0, 0)) {
       ++GRP;
-      static const char DNE[] = "does not exist"; // (a limit: its text answer)
-      const int h = starts(ans, DNE) ? (put(K_TITLE, (char *)DNE, X + (W - ui_text_width(&ui_tb12, DNE, -1)) / 2, y + 14, 0, 16, 13, 0), 16)
-                                     : add_math(ans, strlen(ans), X, y + 14, W - 12 - (plusc ? 44 : 0), 2, K_ANS);
+      static const char DNE[] = "does not exist", DIV[] = "diverges"; // (a limit's, a series' text answer)
+      const char * tx = starts(ans, DNE) ? DNE : starts(ans, DIV) ? DIV : 0;
+      const int h = tx ? (put(K_TITLE, (char *)tx, X + (W - ui_text_width(&ui_tb12, tx, -1)) / 2, y + 14, 0, 16, 13, 0), 16)
+                       : add_math(ans, strlen(ans), X, y + 14, W - 12 - (plusc ? 44 : 0), 2, K_ANS);
       if (plusc && NP > b + 1) { // + C after the last line
         item & l = P[NP - 1];
         l.num = ui_text_width(FACE[0][l.lv], "+ ", -1) + ui_text_width(FACE[1][l.lv], "C", -1);

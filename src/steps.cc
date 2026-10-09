@@ -21,7 +21,8 @@ enum {
   R_PARTS, R_PARTSV, R_PARTS2, R_CYCLE, R_PFRAC, R_TRIGID, R_PYTH, R_EXPAND, R_SQUARE, R_SIMP, R_TSUB,
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
-  R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_NRULES
+  R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -86,6 +87,17 @@ static const char * const RULES[]={
   "Limit of a continuous function","limit(f(u),x,a)=f(limit(u,x,a))","A=B",
   "One fraction",0,"A=B",
   "Factor out the fastest term",0,"A=B",
+  "Derivatives",0,"A=B",
+  "Their values at the center",0,"A=B",
+  "Taylor series","f(x)=sum(f^(k)(a)/k!*(x-a)^k,k,0,n)","A=B",
+  "Divergence test: the terms do not go to 0, the series diverges",0,"A=B",
+  "Ratio of consecutive terms",0,"A=B",
+  "Geometric series with |r| < 1","sum(a*r^k,k,0,inf)=a/(1-r)","A=B",
+  "Partial sum",0,"A=B",
+  "Partial sum: the middle terms cancel",0,"A=B",
+  "Its limit",0,"A=B",
+  "p-series: converges for p > 1, diverges for p <= 1","sum(1/n^p,n,1,inf)","A=B",
+  "Limit comparison with the p-series",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -219,6 +231,7 @@ static NOINL gen mergek(const gen & g){
       if (pass==(d?2:polyf(*it)?0:1)) u.push_back(*it);
     }
   if (!den.empty()) u.push_back(symb_inv(prodof(den)));
+  if (is_minus_one(k) && u.size()>1){ u.erase(u.begin()); return symb_neg(prodof(u)); } // -x^3, not -1*x^3
   return prodof(u);
 }
 // constant factors in c, the others in v
@@ -1121,7 +1134,7 @@ static gen isteps(const gen & f0,int lev){
     S(R_SUMI,f,symb_plus(iv));
     ++depth_;
     EACH(it,v){
-      gen G=isteps(*it,lev+1);
+      gen G=it->is_neg()?ev(-isteps(arg(*it),lev+1)):isteps(*it,lev+1); // (-h: -integral of h, shown)
       if (is_undef(G)){ --depth_; cut(m); return G; }
       rv.push_back(G);
     }
@@ -1130,9 +1143,13 @@ static gen isteps(const gen & f0,int lev){
     S(R_EQI,f,F);
     return F;
   }
-  if (f.is_neg()){
+  if (f.is_neg()){ // -h: the minus out, shown (the card after integrates h)
+    size_t m=mark();
+    S(R_CONSTI,f,-1,arg(f));
     F=isteps(arg(f),lev);
-    return is_undef(F)?F:ev(-F);
+    if (is_undef(F)){ cut(m); return F; }
+    F=ev(-F); S(R_EQI,f,F);
+    return F;
   }
   vecteur c,v; factors(f,c,v);
   gen k=ev(prodof(c));
@@ -1180,7 +1197,7 @@ static gen isteps(const gen & f0,int lev){
 }
 
 // ---------------------------------------------------------------- entry
-static bool calc_op(const gen & g){ return is(g,at_derive) || is(g,at_integrate) || is(g,at_limit); }
+static bool calc_op(const gen & g){ return is(g,at_derive) || is(g,at_integrate) || is(g,at_limit) || is(g,at_series) || is(g,at_sum); }
 // d/dx of an integral with x in its bounds: f(b) b' - f(a) a' (the fundamental theorem)
 static bool ftc1able(const gen & g){
   if (!is(g,at_derive) || arg(g).type!=_VECT || arg(g)._VECTptr->size()!=2) return false;
@@ -1198,7 +1215,7 @@ static gen inner(const gen & g){
 }
 // no antiderivative in elementary functions: giac's has an integral or a special function left
 static bool elementary(const gen & G){
-  static const char * const special[]={"erf","Si","Ci","Ei","integrate","LambertW","gammad",0};
+  static const char * const special[]={"erf","Si","Ci","Ei","integrate","LambertW","gammad","Psi","Zeta","sum(",0};
   if (is_undef(G)) return false;
   std::string s=G.print(CTX);
   for (int i=0;special[i];++i) if (strstr(s.c_str(),special[i])) return false;
@@ -1437,6 +1454,99 @@ static gen realroot(const gen & g){
   }
   return h;
 }
+// ---------------------------------------------------------------- series and sums
+static NOINL gen Linf(const gen & f,const gen & n){ return SYM(at_limit,makesequence(f,n,plus_inf)); }
+static NOINL gen word(const char * w){ return gen(identificateur(w)); }
+static NOINL bool same(const gen & a,const gen & b){ return is_zero(rn(ev(a-b))); }
+// giac's sum left as is, infinite or no value: a divergent one (or one giac cannot do)
+static NOINL bool undone(const gen & G){ return is_inf(G) || is_undef(G) || G.type==_STRNG || has_op(G,*at_bounded_function) || is(G,at_sum); }
+// sum(t,n,a,inf): the divergence test, telescoping, a p-series (or a limit comparison with one),
+// a geometric series, else the partial sums' limit
+static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
+  if (v.size()!=4 || ev(v[3])!=plus_inf) return undef;
+  const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N"),G=ev(op);
+  gen L=ev(Linf(t,x)),val,SN;
+  if (!is_zero(L) && (finv(L) || is_inf(L) || has_op(L,*at_bounded_function))){ // the terms do not go to 0
+    S(R_SDIV,Linf(v[0],x),L);
+    return undone(G)?word("diverges"):gen(undef);
+  }
+  if (t.is_plus() && arg(t).type==_VECT && arg(t)._VECTptr->size()==2){ // f(n)-f(n+1): telescoping
+    gen u=arg(t,0),w=arg(t,1);
+    for (int k=0;k<2;++k,std::swap(u,w)) if (same(sub(u,x,x+1),-w)){
+      SN=symb_plus(sub(u,x,a),symb_neg(subst(u,x,N+1,true,CTX)));
+      val=ev(Linf(SN,N));
+      if (!same(val,G) && !is(G,at_sum) && !(is_inf(val) && is_inf(G))) return undef; // (S_N is exact)
+      S(R_PSUMT,SYM(at_sum,makesequence(v[0],x,a,N)),SN);
+      S(R_SLIM,Linf(SN,N),val);
+      return is_inf(val)?word("diverges"):val;
+    }
+  }
+  vecteur c,w; factors(t,c,w);
+  gen e=0;
+  bool ps=!w.empty();
+  EACH(it,w){ gen b=*it,ei=bexp(b); ps=ps && b==x; e=e+ei; } // c/n^p (1/n^(3/2) is 1/(n*sqrt(n)))
+  e=ev(-e);
+  if (!ps){ // like 1/n^p: lim t n^p finite and not 0 (a limit comparison)
+    e=ev(-Linf(rn(ev(symb_ln(abs(t,CTX))/symb_ln(x))),x));
+    L=finv(e) && is_strictly_positive(e,CTX)?ev(Linf(t*pow(x,e,CTX),x)):gen(0);
+    ps=finv(L) && is_strictly_positive(L,CTX);
+    if (ps) S(R_LCMP,Linf(symb_prod(v[0],pow(x,e,CTX)),x),L);
+  }
+  if (ps && is_strictly_positive(e,CTX)){ // p-series (sum(1/n^2): giac's is left as is, pi^2/6 is FlowCE's)
+    const bool cv=is_strictly_greater(e,1,CTX);
+    if (cv?is_inf(G):!is_inf(G) && !is(G,at_sum)) return undef;
+    S(R_PSER,word("p"),e);
+    if (cv && !is(G,at_sum)) S(R_EQV,op,G);
+    return !cv?word("diverges"):is(G,at_sum)?word("converges"):G;
+  }
+  gen r=_simplify(ev(sub(t,x,x+1)/t),CTX); // (2^n/2^(n+1): ratnormal left it)
+  if (!dep(r) && is_strictly_greater(1,evalf(abs(r,CTX),1,CTX),CTX)){ // geometric
+    gen t0=ev(sub(t,x,a));
+    val=ev(t0/(1-r));
+    S(R_SRAT,symb_prod(subst(v[0],x,x+1,true,CTX),symb_inv(v[0])),r);
+    S(R_SGEOM,op,symb_prod(t0,symb_inv(symb_plus(1,symb_neg(r)))));
+    S(R_EQV,op,val);
+    return same(val,G)?val:gen(undef);
+  }
+  gen pf=shape(t,SH_FRAC)?_partfrac(makesequence(t,x),CTX):t; // (x: the index here)
+  SN=ev(SYM(at_sum,makesequence(t,x,a,N)));
+  if (!elementary(SN) || SN.type==_STRNG) return undef; // (1/n^2: Psi)
+  SN=rn(SN);
+  val=ev(Linf(SN,N));
+  if (!same(val,G) && !(is_inf(val) && is_inf(G))) return undef;
+  const bool sp=pf!=t && pf.is_plus();
+  if (sp) S(R_PFRAC,v[0],pf);
+  S(sp?R_PSUMT:R_PSUM,SYM(at_sum,makesequence(sp?pf:v[0],x,a,N)),SN);
+  S(R_SLIM,Linf(SN,N),val);
+  S(R_EQV,op,val);
+  return val;
+}
+// series(f,x,a,n): f's derivatives, their values at a, the Taylor polynomial (giac's without O)
+static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
+  if (v.size()<4 || v[3].type!=_INT_ || v[3].val<1 || v[3].val>8) return undef;
+  const gen a=ev(v[2]),h=a==0?x:symb_plus(x,symb_neg(a)); // x - a
+  const int n=v[3].val;
+  vecteur ds(1,ev(v[0])),qs,gt,kp;
+  gen P=0;
+  for (int k=1;k<=n && !interrupted;++k){ // (normal form only when shorter: -1/(x+1)^2)
+    gen d=D(ds.back(),x),d2=rn(d);
+    if (taille(d2,200)<taille(d,200)) d=d2;
+    S(k>1?R_EQV:R_TDER,Dx(ds.back()),d); ds.push_back(d);
+  }
+  for (int k=0;k<=n && !interrupted;++k){ // f(a) + f'(a) (x-a) + f''(a)/2! (x-a)^2 ...
+    gen c=ev(sub(ds[k],x,a));
+    S(k?R_EQV:R_TVAL,subst(ds[k],x,a,true,CTX),c);
+    if (is_zero(c)) continue;
+    qs.push_back(k?symb_prod(k>1?symb_prod(c,symb_inv(SYM(at_factorial,k))):c,k>1?symb_pow(h,k):h):c);
+    P=P+c/factorial(k)*pow(h,k,CTX);
+  }
+  P=ev(P);
+  flat(at_plus,ev(op),gt);
+  EACH(it,gt) if (!has_op(*it,*at_order_size)) kp.push_back(*it);
+  if (interrupted || !same(symb_plus(kp),P)) return undef;
+  S(R_TAYLOR,qs.empty()?gen(0):symb_plus(qs),P);
+  return P;
+}
 // One calculus operation, with none inside: its value (undef: no steps)
 static gen one_(const gen & op){
   const vecteur & v=*arg(op)._VECTptr;
@@ -1452,6 +1562,8 @@ static gen one_(const gen & op){
     if (L.type==_IDNT) return G.type==_STRNG || G==unsigned_inf || is_undef(G)?L:gen(undef);
     return L==G || (finv(L) && finv(G) && is_zero(evalf(L-G,1,CTX)))?L:gen(undef);
   }
+  if (is(op,at_sum)) return ssteps(op,v,x);
+  if (is(op,at_series)) return tsteps(op,v,x);
   if (is(op,at_derive)){
     gen r;
     if (ftc1able(op)){
