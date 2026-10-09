@@ -585,8 +585,12 @@ bool console_draw2d(const char * s,int top,int height,int ymin){
 static const char * form_line; // text of the result being cycled (its str pointer)
 static answer_forms * forms;   // its forms
 static int form_idx;           // the form shown: 0 the original, k form k-1 of forms->order
-const char * console_form_name="exact"; // the form of console_form_line (Focus chip)
-const char * console_form_line(){ return form_line; }
+const char * console_form_name="exact"; // the form of the line F4 cycles (Focus chip)
+// s (a history line) is the result F4 cycles: its address, with the form's text still (a cleared
+// line can give its address to the next result, whose F4 then cycled the old forms)
+bool console_form_of(const char * s){
+  return form_line && s==form_line && !strcmp(s,(form_idx?forms->text[form_idx-1]:forms->orig).c_str());
+}
 static void form_busy(){ statuslinemsg("computing..."); }
 void console_cycle_form(int l){
   using namespace giac;
@@ -595,7 +599,7 @@ void console_cycle_form(int l){
   stdostream * savelog=logptr(contextptr);
   logptr(0,contextptr);
   dconsole_mode=0; // giac's notes ("Warning: unable to find oo integer solutions...") are not shown
-  if ((const char *)Line[l].str!=form_line){ // another result: its forms
+  if (!console_form_of((const char *)Line[l].str)){ // another result: its forms
     const std::string orig((const char *)Line[l].str);
     answer_forms_start(*forms,orig,*console_approx() && orig==console_approx_for);
     form_idx=0;

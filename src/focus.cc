@@ -23,8 +23,8 @@ extern "C" int os_get_angle_unit();
 extern "C" int os_key_flags();      // k_csdk.c: 1 2nd, 2 alpha, 4 alpha lock, 8 lowercase
 bool console_edit2d();              // console.cc: the edit line is math (not Python)
 int console_caret();                // console.cc: caret index in the edit line, -1 if in the history
-extern const char * console_form_name; // main.cc: the form F4 last gave console_form_line()
-const char * console_form_line();
+extern const char * console_form_name; // main.cc: the form F4 last gave (console_form_of)
+bool console_form_of(const char * s);
 extern const char * console_approx_for; // main.cc: the decimal value of that printed result
 extern bool answer_simplify_on;     // answer.cc: Simplify answers (mode) is on, as last read
 const char * console_approx();
@@ -434,7 +434,7 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     // the footer: the decimal value of an exact result, then the forms chip (the form shown;
     // F4 cycles them, main.cc console_cycle_form), centered together as in the prototype
     if (!is_text(r)) {
-      const char * fn = (const char *)Line[e.out].str == console_form_line() ? console_form_name : "exact";
+      const char * fn = console_form_of((const char *)Line[e.out].str) ? console_form_name : "exact";
       if (fn[0] == 'e' && strchr(r, '.') && !r[strspn(r, "0123456789.-+e")]) fn = "decimal"; // 2.00927
       const char * ap = !strcmp((const char *)Line[e.out].str, console_approx_for) ? console_approx() : "";
       char abuf[40] = "";
