@@ -181,18 +181,34 @@ static NOINL bool polyf(const gen & g){
   EACH(it,*arg(g)._VECTptr) if (!polyf(*it)) return false;
   return true;
 }
+// b^e of g (e = 1 when g is no power)
+static NOINL gen pexp(const gen & g,gen & b){
+  if (!g.is_pow()){ b=g; return 1; }
+  b=arg(g,0);
+  return arg(g,1);
+}
 static NOINL gen mergek(const gen & g){
   if (g.type==_VECT){ vecteur v=*g._VECTptr; EACHW(it,v) *it=mergek(*it); return gen(v,g.subtype); } // (u=..., du=...)
   if (g.type!=_SYMB) return g;
-  gen h=map_of(g,mergek);
+  gen h=map_of(g,mergek),b,b2;
+  if (h.is_inv() && (is(arg(h),at_cos) || is(arg(h),at_sin))) return SYM(is(arg(h),at_cos)?at_sec:at_csc,arg(arg(h))); // sec x, not 1/cos x
+  // textbook notation: (x^(1/9))^-2 as x^(-2/9) ...
+  if (h.is_pow() && arg(h,0).is_pow() && isnum(arg(h,1)) && isnum(arg(arg(h,0),1))) h=symb_pow(arg(arg(h,0),0),arg(arg(h,0),1)*arg(h,1));
   if (!h.is_prod() || arg(h).type!=_VECT) return h;
-  vecteur v,w; gen k=1;
+  vecteur v,w,den; gen k=1;
   flat(at_prod,h,v);
   EACH(it,v){
+    gen e=pexp(*it,b);
     if (isnum(*it)) k=k*(*it);
-    else if (it->is_inv() && isnum(arg(*it))) k=k/arg(*it);
-    else w.push_back(*it);
+    else if (it->is_inv()){ if (isnum(arg(*it))) k=k/arg(*it); else den.push_back(arg(*it)); } // ... one denominator,
+    else if (isnum(e) && is_strictly_positive(-e,CTX)) den.push_back(is_minus_one(e)?b:symb_pow(b,-e));
+    else { // ... x*x^(1/3) as x^(4/3)
+      bool m=false;
+      EACHW(jt,w){ gen e2=pexp(*jt,b2); if (!m && b2==b && isnum(e) && isnum(e2)){ e=e+e2; *jt=is_one(e)?b:symb_pow(b,e); m=true; } }
+      if (!m) w.push_back(*it);
+    }
   }
+  if (k.type==_FRAC && !den.empty()){ den.insert(den.begin(),k._FRACptr->den); k=k._FRACptr->num; } // dx/(2 sqrt(x))
   // the polynomial factors first, as the textbooks write them (2x e^(x^2), not 2 e^(x^2) x), the
   // differential last (e^x dx)
   vecteur u;
@@ -202,6 +218,7 @@ static NOINL gen mergek(const gen & g){
       const bool d=it->type==_IDNT && it->_IDNTptr->id_name[0]=='d' && it->_IDNTptr->id_name[1] && !it->_IDNTptr->id_name[2];
       if (pass==(d?2:polyf(*it)?0:1)) u.push_back(*it);
     }
+  if (!den.empty()) u.push_back(symb_inv(prodof(den)));
   return prodof(u);
 }
 // constant factors in c, the others in v
@@ -492,7 +509,7 @@ static NOINL gen subs(const gen & f,const gen & uu,const gen & ux,const gen & du
 static NOINL gen bexp(gen & w){
   gen e=1;
   if (w.is_inv()){ w=arg(w); e=-1; }
-  if (w.is_pow()){ e=ev(e*arg(w,1)); w=arg(w,0); }
+  while (w.is_pow()){ e=ev(e*arg(w,1)); w=arg(w,0); } // (giac's x^(2/5) is (x^(1/5))^2)
   return e;
 }
 // c x^a x^b...: the power rule (or 1/x). Read from the factors: giac's normal of several roots
@@ -984,12 +1001,13 @@ static NOINL gen splitfrac(const gen & fe,int lev){
   }
   return undef;
 }
-// a shorter integrand: tan(x)(cot(x)-cos(x)) is 1-sin(x)
-static NOINL gen simp(const gen & fe,int lev){
+// a shorter integrand: tan(x)(cot(x)-cos(x)) is 1-sin(x) (f shown as typed: giac's evaluation
+// of sqrt(1-cos(2x)) is already sqrt(2)abs(sin(x)), and the step read A = A)
+static NOINL gen simp(const gen & f,const gen & fe,int lev){
   if (taille(fe,64)>48) return undef;
   gen t=_simplify(fe,CTX);
   if (t==fe || is_undef(t) || taille(t,64)>=taille(fe,64)) return undef;
-  return via(R_SIMP,fe,t,lev);
+  return via(R_SIMP,f,t,lev);
 }
 // the square roots and their powers q^(k/2) of g as powers of root (root^2 = q)
 static NOINL gen radsub(const gen & g,const gen & q,const gen & root){
@@ -1098,7 +1116,7 @@ static gen isteps(const gen & f0,int lev){
   if (f.is_plus() && arg(f).type==_VECT){ // term by term
     const vecteur & v=*arg(f)._VECTptr;
     vecteur iv,rv;
-    EACH(it,v) iv.push_back(Ix(*it));
+    EACH(it,v) iv.push_back(it->is_neg()?symb_neg(Ix(arg(*it))):Ix(*it)); // (-h: its card is h's)
     size_t m=mark();
     S(R_SUMI,f,symb_plus(iv));
     ++depth_;
@@ -1158,7 +1176,7 @@ static gen isteps(const gen & f0,int lev){
   if (!is_undef(F=square(fe,lev))) return F;
   if (!is_undef(F=expandit(fe,lev))) return F;
   if (!is_undef(F=trigfrac(f,lev))) return F;
-  return simp(fe,lev);
+  return simp(f,fe,lev);
 }
 
 // ---------------------------------------------------------------- entry
@@ -1395,6 +1413,21 @@ static gen lsteps(const gen & f0,int lev){
   v=glim(f); // every part has a limit: put together
   return finv(v) || is_inf(v)?Ls(R_LLAW,f,v):gen(undef);
 }
+// F without a jump in [a,b]: between 48 points F moves at most about h max|f| (F(b)-F(a) was 0
+// for 1/(5+3cos x) on [0,2pi]: its tan(x/2) antiderivative jumps at pi). Undefined points: no check.
+static NOINL bool nojump(const gen & F,const gen & f,const gen & x,const gen & a,const gen & b){
+  gen A=evalf(a,1,CTX),B=evalf(b,1,CTX);
+  if (A.type!=_DOUBLE_ || B.type!=_DOUBLE_) return true;
+  double h=(B._DOUBLE_val-A._DOUBLE_val)/48,v[48],m=0; // (the largest |f| of all: cos(99x)sin(101x))
+  for (int i=0;i<48;++i){
+    gen t=A._DOUBLE_val+(i+0.37)*h,u=evalf(sub(F,x,t),1,CTX),y=evalf(sub(f,x,t),1,CTX);
+    if (u.type!=_DOUBLE_ || y.type!=_DOUBLE_) return true;
+    v[i]=u._DOUBLE_val;
+    if (fabs(y._DOUBLE_val)>m) m=fabs(y._DOUBLE_val);
+  }
+  for (int i=1;i<48;++i) if (fabs(v[i]-v[i-1])>3*fabs(h)*m+1e-3) return false;
+  return true;
+}
 static gen realroot(const gen & g){
   if (g.type!=_SYMB) return g;
   gen h=map_of(g,realroot);
@@ -1482,9 +1515,10 @@ static gen one_(const gen & op){
     S(R_IMPROPER,op,symb_plus(Lb,negof(La)));
     val=ev(ev(Lb)-ev(La));
   }
-  else { // F(b) - F(a), written F(b) + h for F(a) = -h (1 + 1, not 1 - -1); a 0 term goes
-    gen nh=negof(Fa);
-    S(R_FTC,op,is_zero(Fa)?Fb:is_zero(Fb)?nh:symb_plus(Fb,nh));
+  else { // F(b) - F(a) with the numbers put in, F(a) = 0 left out; an antiderivative jumping in
+    if (!nojump(F,ev(v[0]),x,a,b)){ cut(m0); return undef; } // [a,b] gives no steps
+    gen Qb=subst(F,x,b,true,CTX),Qa=subst(F,x,a,true,CTX);
+    S(R_FTC,op,is_zero(Fa)?Qb:symb_plus(Qb,symb_neg(Qa)));
     val=ev(Fb-Fa);
   }
   val=_simplify(val,CTX);
