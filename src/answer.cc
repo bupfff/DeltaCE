@@ -2991,6 +2991,58 @@ static bool floor_const(const giac::gen & g,const giac::gen & x){ // x in floors
   }
   return g.is_symb_of_sommet(giac::at_floor) || (g.type==giac::_SYMB?floor_const(g._SYMBptr->feuille,x):!(g==x));
 }
+// k ln(c h) or k ln|c h| (k and c constants, c > 0) as k ln(h): k ln(c) goes into + C. The integral
+// of 1/(5x) is ln|x|/5, as textbooks write it (giac: ln(5|x|)/5); x ln(5x) stays (x ln(5) varies)
+static giac::gen ln_split(const giac::gen & g,const giac::gen & x){
+  using namespace giac;
+  if (g.type!=_SYMB)
+    return g;
+  const gen & f=g._SYMBptr->feuille;
+  if (g.is_symb_of_sommet(at_plus) && f.type==_VECT){
+    vecteur v(*f._VECTptr);
+    for (unsigned i=0;i<v.size();++i)
+      v[i]=ln_split(v[i],x);
+    return symbolic(g._SYMBptr->sommet,gen(v,f.subtype));
+  }
+  if (g.is_symb_of_sommet(at_neg))
+    return -ln_split(f,x);
+  if (g.is_symb_of_sommet(at_prod) && f.type==_VECT){ // a constant times one ln
+    vecteur v(*f._VECTptr);
+    int l=-1;
+    for (unsigned i=0;i<v.size();++i)
+      if (!free_of(v[i],x)){
+        if (l>=0 || !v[i].is_symb_of_sommet(at_ln))
+          return g;
+        l=i;
+      }
+    if (l<0)
+      return g;
+    v[l]=ln_split(v[l],x);
+    return symbolic(at_prod,gen(v,f.subtype));
+  }
+  if (!g.is_symb_of_sommet(at_ln))
+    return g;
+  const bool ab=f.is_symb_of_sommet(at_abs);
+  const gen & a=ab?f._SYMBptr->feuille:f;
+  if (!a.is_symb_of_sommet(at_prod) || a._SYMBptr->feuille.type!=_VECT)
+    return g;
+  vecteur h;
+  bool c=false;
+  const vecteur & w=*a._SYMBptr->feuille._VECTptr;
+  for (unsigned i=0;i<w.size();++i){
+    if (!free_of(w[i],x))
+      h.push_back(w[i]);
+    else if (!(ab || is_strictly_positive(w[i],contextptr)))
+      return g;
+    else
+      c=true;
+  }
+  if (!c || h.empty())
+    return g;
+  const gen r=h.size()==1?h.front():symbolic(at_prod,gen(h,_SEQ__VECT));
+  return sym1(at_ln,ab?sym1(at_abs,r):r);
+}
+
 static giac::gen drop_constants(const giac::gen & g,const giac::gen & x){
   using namespace giac;
   if (g.type!=_SYMB || is_undef(g) || contains(g,at_integrate) || taille(g,200)>=200)
@@ -3258,6 +3310,8 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
     }
     trace_step("drop_constants",g);
   }
+  if (a.ivar.type==_IDNT) // (the table's too: 1/(5x) by usub)
+    g=ln_split(g,a.ivar);
   focus_phase=84;
   if (interrupted)
     return;
