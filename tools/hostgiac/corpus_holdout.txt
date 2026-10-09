@@ -1,0 +1,330 @@
+# FlowCE held-out calculus test set: 215 textbook problems, collected 2026-10-08. Do not tune on these.
+# Sources (nothing from Paul's Online Math Notes or OpenStax):
+#   APEX Calculus (G. Hartman et al.), PreTeXt edition: https://spot.pcc.edu/math/APEX/
+#   Active Calculus, 2nd ed. (M. Boelkins): https://activecalculus.org/single/
+#   Active Calculus - Multivariable, 2nd ed.: https://activecalculus.org/multi/
+#   MIT OpenCourseWare 18.01SC (Fall 2010) problem-set handouts and 18.01 (Fall 2006) course reader,
+#     "18.01 Exercises" (D. Jerison, MIT): https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/
+#   CLP-2 Integral Calculus (Feldman, Rechnitzer, Yeager, UBC): https://personal.math.ubc.ca/~CLP/CLP2/
+# Format: one problem per line, giac/Xcas syntax. Exercise variables are renamed to x (t for parametric
+# curves, y for the second variable of a partial derivative, k for summation indices); e is exp(1).
+# Higher derivatives are nested diff; parametric dy/dx is diff(y,t)/diff(x,t); a one-sided limit has a
+# 4th argument, 1 = from the right, -1 = from the left; Taylor problems are series(f,x,a,n) with n the
+# degree (or number of terms) the exercise asks for.
+# "# non-elementary" on the line before a problem: its answer has no elementary closed form (3 problems).
+# Checked: no duplicates (also none against tools/hostgiac/*.txt, tools/emu/cases/*.tsv and the step-solver
+# lists), balanced parentheses, explicit *, every line evaluates in giac.
+
+# ============================== DERIVATIVES (40) ==============================
+# ---- first derivatives (27)
+# source: APEX Calculus, Sec. 2.4 The Product and Quotient Rules, Exercises 20, 34, 35
+diff(x^5/(cos(x)-2*x^2),x)
+diff((x^2*sin(x)+3)/(x^2*cos(x)+2),x)
+diff(x^2*exp(x)*tan(x),x)
+# source: APEX Calculus, Sec. 2.5 The Chain Rule, Exercises 31, 35
+diff((x^2+x)^5*(3*x^4+2*x)^3,x)
+diff(sin(4*x+1)/(5*x-9)^3,x)
+# source: APEX Calculus, Sec. 2.6 Implicit Differentiation (logarithmic differentiation), Exercise 38
+diff((2*x)^(x^2),x)
+# source: APEX Calculus, Sec. 2.7 Derivatives of Inverse Functions, Exercise 21
+diff(asin(x)/acos(x),x)
+# source: APEX Calculus, Sec. 6.6 Hyperbolic Functions, Exercises 19, 21
+diff(acosh(2*x^2),x)
+diff(atanh(cos(x)),x)
+# source: Active Calculus, Sec. 2.3 The product and quotient rules, Activity 2.3.4(b), Exercise 13
+diff(cos(x)/(x^6*6^x),x)
+diff(x^x*acos(x),x)
+# source: Active Calculus, Sec. 2.4 Derivatives of other trigonometric functions, Exercise 10
+diff(x*tan(x)/(x^2*sec(x)+1)+3*exp(x)+1,x)
+# source: Active Calculus, Sec. 2.5 The chain rule, Activity 2.5.3(d), Exercises 4, 10
+diff(2^(x^2*sec(x)),x)
+diff(exp(exp(x^3)),x)
+diff((7*x^2+4*x+5)^(1/4),x)
+# source: Active Calculus, Sec. 2.6 Derivatives of inverse functions, Activity 2.6.4(c),(f), Exercise 8(c)
+diff((asin(5*x)+atan(4-x))^27,x)
+diff(atan(ln(x)/(1+x^2)),x)
+diff(atan(3*x)^2*asin(7*x)^4,x)
+# source: MIT OCW 18.01SC, Problem Set 1 handout (18.01 Exercises, Unit 1 Differentiation), 1F-2, 1I-1(l),(m), 1J-1(i),(l),(r)
+diff(x^10*(x^2+1)^10,x)
+diff(1/ln(x),x)
+diff((1-exp(x))/(1+exp(x)),x)
+diff(ln(x^2*sin(x)),x)
+diff(sec(sqrt(1-x^2)),x)
+diff(tan(x/(x+1))^2,x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5 Integration techniques), 5A-3(a),(c),(g)
+diff(asin((x-1)/(x+1)),x)
+diff(ln(x+sqrt(x^2+1)),x)
+diff(atan(x/sqrt(1-x^2)),x)
+# ---- higher-order derivatives (5)
+# source: APEX Calculus, Sec. 2.4 The Product and Quotient Rules, Exercises 46 (fourth derivative), 47 (second derivative)
+diff(diff(diff(diff(x*sin(x),x),x),x),x)
+diff(diff(csc(x),x),x)
+# source: MIT OCW 18.01SC, Problem Set 1 handout (18.01 Exercises, Unit 1), 1G-1(a),(b) (y''), 1G-4 (n-th derivative of 1/(x+1), here n = 3)
+diff(diff(3*x^2+2*x+4*sqrt(x),x),x)
+diff(diff(x/(x+5),x),x)
+diff(diff(diff(1/(x+1),x),x),x)
+# ---- partial derivatives (5)
+# source: APEX Calculus, Sec. 12.3 Partial Derivatives, Exercises 17 (f_y), 19 (f_x)
+diff(cos(5*x*y^3),y)
+diff(sqrt(4*x*y^2+1),x)
+# source: Active Calculus - Multivariable, Sec. 11.4 First-Order Partial Derivatives, Exercises 8 (f_x), 13 (z_y)
+diff(ln(x+sqrt(x^2+y^2)),x)
+diff((5*x^2*y^6-y^6)/(16*x*y-7),y)
+# source: Active Calculus - Multivariable, Sec. 11.5 Second-Order Partial Derivatives, Exercise 4 (f_xy)
+diff(diff(sin(4*x/y),x),y)
+# ---- parametric dy/dx (3)
+# source: APEX Calculus, Sec. 9.3 Calculus and Parametric Equations, Exercises 9, 12
+diff(tan(t),t)/diff(sec(t),t)
+diff(exp(t/10)*sin(t),t)/diff(exp(t/10)*cos(t),t)
+# source: MIT OCW 18.01SC, Problem Set 6 handout (18.01 Exercises, Unit 3 Integration), 3F-6 (y = cos(u)^3-3*cos(u), x = sin(u)^4, u written t)
+diff(cos(t)^3-3*cos(t),t)/diff(sin(t)^4,t)
+
+# ============================== INDEFINITE INTEGRALS (80) ==============================
+# ---- basic (10)
+# source: APEX Calculus, Sec. 5.1 Antiderivatives and Indefinite Integration, Exercises 14, 19, 22, 23, 24
+integrate(1/(3*x^2),x)
+integrate(sec(x)*tan(x)+csc(x)*cot(x),x)
+integrate(5^x/2,x)
+integrate((2*x+3)^2,x)
+integrate((x^2+3)*(x^3-2*x),x)
+# source: APEX Calculus, Sec. 5.3 Riemann Sums (review), Exercise 44; Sec. 6.1 Substitution, Exercise 38
+integrate(5*8^x,x)
+integrate((x^3+x^2+x+1)/x,x)
+# source: MIT OCW 18.01SC, Problem Set 6 handout (18.01 Exercises, Unit 3 Integration), 3A-2(a),(b),(k)
+integrate(2*x^4+3*x^2+x+8,x)
+integrate(sqrt(x)+1/sqrt(x),x)
+integrate(x/(x+5),x)
+# ---- u-substitution (20)
+# source: APEX Calculus, Sec. 6.1 Substitution, Exercises 9, 11, 12, 27, 36, 47, 50, 56, 65, 69
+integrate(x/sqrt(x+3),x)
+integrate(exp(sqrt(x))/sqrt(x),x)
+integrate(x^4/sqrt(x^5+1),x)
+integrate(exp(x^2-2*x+1)*(x-1),x)
+integrate(1/(x*ln(x^2)),x)
+integrate(5/sqrt(x^4-16*x^2),x)
+integrate(2/sqrt(-x^2+6*x+7),x)
+integrate(x^2*csc(x^3+1)^2,x)
+integrate(x/(x^4+81),x)
+integrate((3*x-2)/(x^2-2*x+10),x)
+# source: Active Calculus, Sec. 5.3 Integration by substitution, Activity 5.3.2(d),(e), Activity 5.3.3(b), Exercises 1, 2, 9, 10
+integrate(csc(2*x+1)*cot(2*x+1),x)
+integrate(1/sqrt(1-16*x^2),x)
+integrate(exp(x)*sin(exp(x)),x)
+integrate(-2*sec(4*x)*tan(4*x)/sec(4*x)^2,x)
+integrate(-6*csc(5*x)^2*exp(cot(5*x)),x)
+integrate(-2*(1+tan(x))^5*sec(x)^2,x)
+integrate(3*cot(x)*ln(sin(x)),x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5 Integration techniques), 5B-4, 5B-9, 5B-13
+integrate(cos(x)/(2+3*sin(x)),x)
+integrate(exp(x)*(1+exp(x))^(-1/3),x)
+integrate(x^2/(1+x^6),x)
+# ---- integration by parts (15)
+# source: APEX Calculus, Sec. 6.2 Integration by Parts, Exercises 15, 22, 23, 24, 27, 34, 36
+integrate(exp(5*x)*cos(5*x),x)
+integrate((x-2)*ln(x),x)
+integrate(x*ln(x-1),x)
+integrate(x*ln(x^2),x)
+integrate(ln(x+1)^2,x)
+integrate(x*csc(x)*cot(x),x)
+integrate(exp(2*x)*cos(exp(x)),x)
+# source: APEX Calculus, Sec. 6.6 Hyperbolic Functions, Exercises 42, 43
+integrate(asinh(x),x)
+integrate(atanh(x),x)
+# source: Active Calculus, Sec. 5.4 Integration by parts, Activity 5.4.3(c), Activity 5.4.4(d), Exercises 3, 5, 11
+integrate(x^3*sin(x^2),x)
+integrate(x^2*exp(3*x),x)
+integrate(x^2*ln(7*x),x)
+integrate(x*(x+1)^(1/5),x)
+integrate(x^7*cos(x^4),x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5), 5F-3
+integrate(asin(4*x),x)
+# ---- trigonometric integrals (10)
+# source: APEX Calculus, Sec. 6.3 Trigonometric Integrals, Exercises 9, 12, 14, 20, 23, 25, 27
+integrate(sin(x)^6*cos(x)^5,x)
+integrate(sin(5*x)*cos(3*x),x)
+integrate(sin(3*x)*sin(7*x),x)
+integrate(tan(x)^3*sec(x)^4,x)
+integrate(tan(x)^5*sec(x)^5,x)
+integrate(sec(x)^5,x)
+integrate(tan(x)^2*sec(x)^3,x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5), 5C-2, 5C-4, 5C-7
+integrate(sin(x/2)^3,x)
+integrate(cos(3*x)^3,x)
+integrate(sin(4*x)^2*cos(4*x)^2,x)
+# ---- trigonometric substitution (8)
+# source: APEX Calculus, Sec. 6.4 Trigonometric Substitution, Exercises 9, 16, 24, 25
+integrate(sqrt(x^2-16),x)
+integrate(sqrt(x^2-11)/x,x)
+integrate(sqrt(5-x^2)/(7*x^2),x)
+integrate(x^2/sqrt(x^2+3),x)
+# source: Active Calculus, Sec. 5.5 Other options for finding algebraic antiderivatives, Activity 5.5.3(d), Exercise 7(a)
+integrate(1/(x^2*sqrt(49-36*x^2)),x)
+integrate(1/(x*sqrt(9*x^2+25)),x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5), 5D-10, 5D-11 (completing the square)
+integrate(1/(x^2+4*x+13)^(3/2),x)
+integrate(x*sqrt(-8+6*x-x^2),x)
+# ---- partial fractions (10)
+# source: APEX Calculus, Sec. 6.5 Partial Fraction Decomposition, Exercises 13, 14, 17, 22
+integrate((9*x^2+11*x+7)/(x*(x+1)^2),x)
+integrate((-12*x^2-x+33)/((x-1)*(x+3)*(3-2*x)),x)
+integrate(x^3/(x^2-x-20),x)
+integrate((6*x^2+8*x-4)/((x-3)*(x^2+6*x+10)),x)
+# source: Active Calculus, Sec. 5.5 Other options for finding algebraic antiderivatives, Activity 5.5.2(c), Exercise 6(a),(c)
+integrate((x-2)/(x^4+x^2),x)
+integrate((x^3+x+1)/(x^4-1),x)
+integrate((x^2-x-1)/(x-3)^3,x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5), 5E-4, 5E-6, 5E-10(g)
+integrate((3*x^2+4*x-11)/((x^2-1)*(x-2)),x)
+integrate((2*x-9)/((x^2+9)*(x+2)),x)
+integrate(x^3/((x+1)^2*(x-1)),x)
+# ---- miscellaneous (7)
+# source: APEX Calculus, Sec. 6.6 Hyperbolic Functions, Exercises 29, 37, 38
+integrate(tanh(2*x),x)
+integrate(2*x/sqrt(x^4-4),x)
+integrate(sqrt(x)/sqrt(1+x^3),x)
+# source: APEX Calculus, Sec. 6.1 Substitution, Exercise 61
+integrate((3*x^3+4*x^2+2*x-22)/(x^2+3*x+5),x)
+# source: Active Calculus, Sec. 5.5 Other options for finding algebraic antiderivatives, Exercise 7(c),(d)
+integrate(exp(x)*sqrt(4+exp(2*x)),x)
+integrate(tan(x)/sqrt(9-cos(x)^2),x)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5), 5C-10
+integrate((tan(x)+cot(x))^2,x)
+
+# ============================== DEFINITE INTEGRALS (30, 7 improper) ==============================
+# source: APEX Calculus, Sec. 5.4 The Fundamental Theorem of Calculus, Exercises 13, 28
+integrate(2*cos(x)-2*sin(x),x,0,pi)
+integrate(csc(x)*cot(x),x,pi/6,pi/3)
+# source: APEX Calculus, Sec. 6.1 Substitution, Exercises 80, 85
+integrate(x*sqrt(x-2),x,2,6)
+integrate(1/(x^2-6*x+10),x,2,4)
+# source: APEX Calculus, Sec. 6.2 Exercise 49; Sec. 6.3 Exercise 30; Sec. 6.4 Exercise 28; Sec. 6.5 Exercise 29
+integrate(exp(2*x)*cos(x),x,-pi/2,pi/2)
+integrate(sin(x)^2*cos(x)^7,x,-pi/2,pi/2)
+integrate(sqrt(x^2+4),x,0,2)
+integrate((x^2+5*x-5)/((x-10)*(x^2+4*x+5)),x,-1,1)
+# source: APEX Calculus, Sec. 6.8 Improper Integration, Exercises 7, 22, 28
+integrate(exp(5-2*x),x,0,inf)
+integrate(1/sqrt(abs(x)),x,-2,1)
+integrate(x^2*ln(x),x,0,1)
+# source: Active Calculus, Sec. 4.4 The Fundamental Theorem of Calculus, Activity 4.4.3(b), Exercises 9, 10
+integrate(2*sin(x)-4*cos(x)+sec(x)^2-pi,x,0,pi/3)
+integrate((x^8-x^4)/x^6,x,1,4)
+integrate(x*(sqrt(x)+x^(1/4)),x,0,1)
+# source: Active Calculus, Sec. 5.3 Integration by substitution, Activity 5.3.4(b),(c), Exercise 7
+integrate(exp(-x)*(2*exp(-x)+3)^9,x,0,1)
+integrate(cos(1/x)/x^2,x,2/pi,4/pi)
+integrate(exp(-cos(x))*sin(x),x,3*pi,3*pi/2)
+# source: Active Calculus, Sec. 6.5 Improper integrals, Activity 6.5.3(d), Exercises 1, 2
+integrate(3/(x+2)^(5/4),x,4,inf)
+integrate(x^2*exp(-x^3),x,0,inf)
+integrate(exp(3*x)/(1+exp(3*x)),x,-inf,2)
+# source: MIT OCW 18.01SC, Problem Set 6 handout (18.01 Exercises, Unit 3 Integration), 3C-2(a), 3E-3(b),(d)
+integrate(sqrt(3*x+5),x,0,2)
+integrate(sin(x)/(2+cos(x))^3,x,0,pi)
+integrate(1/(x^2-34*x+289),x,18,19)
+# source: MIT OCW 18.01SC, Problem Set 9 handout (18.01 Exercises, Unit 5), 5B-14, 5B-15, 5C-12, 5E-12(c)
+integrate(sin(x)^3*cos(x),x,0,pi/3)
+integrate(ln(x)^(3/2)/x,x,1,exp(1))
+integrate(sin(x)*cos(2*x),x,0,pi)
+integrate(1/(1+sin(x))^2,x,0,pi)
+# source: MIT OCW 18.01 (Fall 2006) course reader, 18.01 Exercises, Unit 6, 6B-7(k)
+integrate(exp(-2*x)*cos(x),x,0,inf)
+# source: Active Calculus, Sec. 8.5 Finding and using Taylor series, Exercise 7(a),(c) (the Fresnel integral C(0.5))
+# non-elementary
+integrate(cos(x^2),x,0,1/2)
+# source: APEX Calculus, Sec. 8.8 Taylor Series, Exercise 31 (approximated there with a Taylor series)
+# non-elementary
+integrate(sin(x^2),x,0,sqrt(pi))
+
+# ============================== LIMITS (30) ==============================
+# source: APEX Calculus, Sec. 1.3 Finding Limits Analytically, Exercises 31, 36
+limit((x^2+6*x-16)/(x^2-3*x+2),x,2)
+limit(sin(x)*cos(1/x^2),x,0)
+# source: APEX Calculus, Sec. 1.4 One-Sided Limits, Exercise 23
+limit((x^2-16)/(x^2-4*x-32),x,-4)
+# source: APEX Calculus, Sec. 1.6 Limits Involving Infinity, Exercise 15(a)
+limit((x^2-1)/(x^2-x-6),x,3,-1)
+# source: APEX Calculus, Sec. 6.7 L'Hospital's Rule, Exercises 12, 26, 50, 52, 39, 41, 47
+limit((sin(x)-cos(x))/cos(2*x),x,pi/4)
+limit((x^3-5*x^2+3*x+9)/(x^3-7*x^2+15*x-9),x,3)
+limit(1/ln(x)-1/(x-1),x,1,1)
+limit(x*tan(1/x),x,inf)
+limit((2*x)^x,x,0,1)
+limit(sin(x)^x,x,0,1)
+limit((1+x^2)^(1/x),x,inf)
+# source: Active Calculus, Sec. 1.2 The notion of limit, Exercises 4, 7, 8, 9
+limit((sqrt(9+x)-3)/x,x,0)
+limit(1/(x+8)+(x-8)/(x^2-64),x,8)
+limit((16-x^4)/(x^2-4),x,2)
+limit(-abs(x+3)/(x+3),x,-3,1)
+# source: Active Calculus, Sec. 3.2 Using derivatives to evaluate limits, Activity 3.2.2(c),(d), Activity 3.2.4(b),(d), Exercises 2, 8, 10
+limit(2*ln(x)/(1-exp(x-1)),x,1)
+limit((sin(x)-x)/(cos(2*x)-1),x,0)
+limit((exp(x)+x)/(2*exp(x)+x^2),x,inf)
+limit(tan(x)/(x-pi/2),x,pi/2,-1)
+limit(sin(15*x)/tan(2*x),x,0)
+limit(sqrt(8+11*x^2)/(4+8*x),x,inf)
+limit(sqrt(x^2+10)-sqrt(x^2-4),x,inf)
+# source: MIT OCW 18.01SC, Problem Set 1 handout (18.01 Exercises, Unit 1), 1D-1(d),(g), 1J-2
+limit(4*x^2/(2-x),x,2,1)
+limit(4*x^2/(x-2)-4*x,x,inf)
+limit(cos(x)/(x-pi/2),x,pi/2)
+# source: MIT OCW 18.01 (Fall 2006) course reader, 18.01 Exercises, Unit 6, 6A-1(j), 6A-2(g),(j)
+limit(ln(sin(x/2))/(x-pi)^2,x,pi)
+limit((1+3*x)^(10/x),x,0,1)
+limit((x/sin(x))^(1/x^2),x,0,1)
+# source: MIT OCW 18.01 (Fall 2006) course reader, 18.01 Exercises, Unit 7, 7D-3(c),(d)
+limit((sqrt(1+x)-1-x/2)/sin(x)^2,x,0)
+limit((cos(x)-1)/(ln(1+x)-x),x,0)
+
+# ============================== SUMS AND SERIES (20) ==============================
+# source: APEX Calculus, Sec. 5.3 Riemann Sums, Exercises 19, 21, 26
+sum(3*k^2-2*k,k,1,10)
+sum(-4*k^3+10*k^2-7*k+11,k,1,10)
+sum(k^3,k,16,25)
+# source: APEX Calculus, Sec. 5.3 Riemann Sums, Exercises 35, 38: the n-subinterval Right Hand Rule sum for integrate(x^3,x,0,1) and Left Hand Rule sum for integrate(2*x^2-3,x,1,4)
+sum((k/n)^3*(1/n),k,1,n)
+sum((2*(1+3*(k-1)/n)^2-3)*(3/n),k,1,n)
+# source: Active Calculus, Sec. 8.3 Geometric sums, Exercise 3(B), Activity 8.3.3(d),(e), Exercise 6
+sum((1/3)^k,k,5,13)
+sum(5*(3/4)^k,k,0,inf)
+sum(-2*(-2/3)^k,k,1,inf)
+sum(2^(k+4)/9^(k-1),k,1,inf)
+# source: APEX Calculus, Sec. 8.2 Infinite Series, Exercises 46, 43, 28, 29, 41
+sum(sin(1)^k,k,0,inf)
+sum(1/(k*(k+3)),k,1,inf)
+sum(2/(2*k+8)^2,k,1,inf)
+sum(1/(2*k),k,1,inf)
+sum(ln(k/(k+1)),k,1,inf)
+# source: APEX Calculus, Sec. 8.2 Infinite Series, Exercise 21 (p-series with p = 5)
+# non-elementary
+sum(1/k^5,k,1,inf)
+# source: CLP-2 Integral Calculus, Sec. 3.2 Series, Exercise 18
+sum(cos(pi/k)-cos(pi/(k+1)),k,3,inf)
+# source: MIT OCW 18.01 (Fall 2006) course reader, 18.01 Exercises, Unit 7, 7A-1(d),(e),(f), 7A-4(a)
+sum(ln(2^(1/k)),k,1,inf)
+sum(2^(k-1)/3^k,k,1,inf)
+sum((-1)^k/3^k,k,0,inf)
+sum(1/sqrt(k)-1/sqrt(k+1),k,1,inf)
+
+# ============================== TAYLOR / MACLAURIN POLYNOMIALS (15) ==============================
+# source: APEX Calculus, Sec. 8.7 Taylor Polynomials, Exercises 7, 13, 15, 18, 19, 20
+series(x*exp(x),x,0,5)
+series(sqrt(x),x,1,4)
+series(cos(x),x,pi/4,6)
+series(1/x^2,x,1,8)
+series(1/(x^2+1),x,-1,3)
+series(x^2*cos(x),x,pi,2)
+# source: APEX Calculus, Sec. 8.8 Taylor Series, Exercise 30 (first 4 terms)
+series(sqrt(1+x)*cos(x),x,0,3)
+# source: Active Calculus, Sec. 8.2 Taylor polynomials, Exercises 3 (T_3), 9(a)
+series(ln(x+1),x,7,3)
+series(sin(x),x,pi/2,6)
+# source: Active Calculus, Sec. 8.5 Finding and using Taylor series, Activity 8.5.2(d),(e), Exercise 6 (c_0 to c_4)
+series(x^2*ln(1+x^4),x,0,14)
+series((exp(3*x)-1)/(3*x),x,0,4)
+series(2*x*atan(5*x),x,0,4)
+# source: MIT OCW 18.01 (Fall 2006) course reader, 18.01 Exercises, Unit 7, 7D-1(b), 7D-2(g),(h)
+series(cos(sqrt(x)),x,0,3)
+series(cos(x)^2,x,0,6)
+series(sin(x)/(1-x),x,0,3)
