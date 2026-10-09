@@ -148,7 +148,31 @@ static NOINL void S(int r,const gen & a,const gen & b){ S(r,a,b,zero); }
 static NOINL size_t mark(){ return out_->size(); }
 static NOINL void cut(size_t m){ out_->resize(m); }
 static NOINL gen ev(const gen & g){ return eval(g,1,CTX); }
-static NOINL gen rn(const gen & g){ return ratnormal(g,CTX); }
+// a power of a sum over 40 ((2x+1)^2026): normal and ratnormal would expand it (8x (2x+1)^2026's last
+// line held 1.25 MB of heap on the PC: the calculator ran out of memory and quit); kept as written
+// (any: a power over 40 of anything but a variable, ln(n)^80: giac's limit expanded it, 93 MB)
+static NOINL bool bigp(const gen & g,bool any=false){
+  if (g.type!=_SYMB) return false;
+  const gen & a=g._SYMBptr->feuille;
+  if (g.is_symb_of_sommet(at_pow) && a.type==_VECT && a._VECTptr->size()==2 && (any?a[0].type!=_IDNT:a[0].is_symb_of_sommet(at_plus)) && a[1].type==_INT_ && (a[1].val>40 || a[1].val<-40)) return true;
+  if (a.type==_VECT){ for (const_iterateur it=a._VECTptr->begin();it!=a._VECTptr->end();++it) if (bigp(*it,any)) return true; return false; }
+  return bigp(a,any);
+}
+static NOINL gen rn(const gen & g){ return bigp(g)?g:ratnormal(g,CTX); }
+// the radicands of g's fractional powers (normal over two of them, giac's algebraic extensions, took
+// 4.7 MB and 20 s on the PC for sqrt(sin x)/(sqrt(sin x)+sqrt(cos x)); ratnormal over one leaves
+// sqrt(3)^2 or x+2x: normal for it)
+static NOINL int nrad(const gen & g){
+  vecteur rs,ps=lop(g,at_pow);
+  for (const_iterateur it=ps.begin();it!=ps.end();++it){ const gen & a=it->_SYMBptr->feuille; if (a.type==_VECT && a[1].type==_FRAC && !equalposcomp(rs,a[0])) rs.push_back(a[0]); }
+  return rs.size();
+}
+// ratnormal, then normal if shorter over one radicand: 3/(8x^2 sqrt(x)), not (x+2x)/(8x^2 sqrt(x) x)
+static NOINL gen rn1(const gen & g){
+  gen r=rn(g);
+  if (nrad(r)==1 && !bigp(r)){ gen s=normal(r,CTX); if (taille(s,200)<taille(r,200)) r=s; }
+  return r;
+}
 static NOINL gen D(const gen & g,const gen & x){ return ev(derive(g,x,CTX)); }
 static NOINL bool dep(const gen & g,const gen & x){
   return g.type==_IDNT ? g==x : (g.type==_SYMB || g.type==_VECT) && depend(g,*x._IDNTptr);
@@ -340,6 +364,7 @@ static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen
     gen p=ps[i];
     gen z=evalf(sub(f,x,p),1,CTX),y;
     if (z.type!=_DOUBLE_ && z.type!=_CPLX) continue; // f not defined there
+    if (z.type==_DOUBLE_ && !(z._DOUBLE_val-z._DOUBLE_val==0)) continue; // or too big ((2x+1)^2026 at 0.37)
     y=evalf(sub(d,x,p),1,CTX);
     if (y.type!=_DOUBLE_ && y.type!=_CPLX) continue;
     double ay=evalf_double(abs(y,CTX),1,CTX)._DOUBLE_val,az=evalf_double(abs(z,CTX),1,CTX)._DOUBLE_val;
@@ -742,9 +767,13 @@ static NOINL bool froot(const gen & g,int skip){
 // trig functions written with u's (sin^2 = 1 - cos^2, sec^2 = 1 + tan^2) and u's function replaced;
 // x as a function of t in what is left (u = sqrt(x): x = t^2).
 static NOINL gen rewrite(const gen & fe,const gen & du,const gen & u,const gen & t){
-  gen h=ev(fe/du),g=rn(complex_subst(h,u,t,CTX));
+  gen h=ev(fe/du),kt=t,k=kern(u,kt),g;
+  // u linear: u replaced by t, then x by (t-b)/a in what is left, quoted (giac's evaluating subst
+  // rebuilt (2x+1)^2026 by pow, which gives up on a sum to that power; x alone in x^2 sqrt(3x-1)
+  // left sqrt(3 (1+t)/3-1))
+  if (k==X) g=rn(ev(quotesubst(quotesubst(h,u,t,CTX),X,kt,CTX)));
+  else g=rn(complex_subst(h,u,t,CTX));
   if (dep(g)){
-    gen kt=t,k=kern(u,kt);
     if (k.is_inv()){ k=arg(k); kt=symb_inv(kt); } // sec, csc
     gen s=is(k,at_sin)?_trigsin(h,CTX):is(k,at_cos)?_trigcos(h,CTX):is(k,at_tan)?_trigtan(h,CTX):sc(h);
     g=rn(complex_subst(s,is(k,at_tan)?k:sc(k),kt,CTX));
@@ -759,7 +788,9 @@ static NOINL gen rewrite(const gen & fe,const gen & du,const gen & u,const gen &
         || (has_op(g,*at_exp) && !has_op(fe,*at_exp) && !has_op(fe,*at_sin) && !has_op(fe,*at_cos))) return undef;
   }
   if (dep(g) || is_undef(g) || has_op(g,*at_rootof) || taille(g,200)>2*taille(fe,200)+20) return undef;
-  gen r=recursive_normal(g,CTX); // only if simpler: it writes 1/sqrt(q) as sqrt(q)/q
+  // only if simpler: it writes 1/sqrt(q) as sqrt(q)/q
+  if (nrad(g)>1) return g;
+  gen r=recursive_normal(g,CTX);
   return has_op(r,*at_rootof) || taille(r,200)>=taille(g,200)?g:r;
 }
 // u under a root or in a denominator (x sqrt(x+2), x/(x+1)^2): a linear u is the textbook way
@@ -770,6 +801,12 @@ static NOINL bool rooted(const gen & g,const gen & u){
   if (g.is_inv() && (a==u || (a.is_pow() && arg(a,0)==u))) return true;
   if (a.type==_VECT){ EACH(it,*a._VECTptr) if (rooted(*it,u)) return true; return false; }
   return rooted(a,u);
+}
+// a factor u^n of g, n >= 3
+static NOINL bool upow(const gen & g,const gen & u){
+  vecteur c,v; factors(g,c,v);
+  EACH(it,v){ gen w=*it,e=bexp(w); if (w==u && e.type==_INT_ && e.val>=3) return true; }
+  return false;
 }
 static NOINL gen trigsub(const gen & f,int lev);
 // x in g only in powers x^j, j a multiple of k (g a function of x^k)
@@ -819,13 +856,17 @@ static NOINL gen usub(const gen & f,int lev){
     bool known=!nr && v2.size()==1 && basic(ev(v2[0]),F,r);
     int s=known?-1:int(taille(g,1000))+(is_zero(radicand(g))?0:10000)+(nr?5000:0);
     var_=old;
-    if (lin && !known && (!rooted(fe,u) || shape(fe,SH_FRAC))) continue; // (a fraction: partial fractions)
+    // a linear u: in a polynomial for u^n, n >= 3 (x (2x+1)^5, 8x (2x+1)^2026: expanding is long or
+    // impossible); never in a rational fraction (partial fractions); else under a root or in a
+    // denominator. Kept, it is the first one tried.
+    const bool lu=lin && !known;
+    if (lu && (shape(fe,0)?!upow(fe,u):shape(fe,SH_FRAC) || !rooted(fe,u))) continue;
     if (known){ // tried at once; right only on a branch (u = sqrt(q)): the next candidates
       gen G=subs(f,uu,u,du,g,lev);
       if (!is_undef(G)) return G;
       continue;
     }
-    ok.push_back(u); gs.push_back(g); sz.push_back(s);
+    ok.push_back(u); gs.push_back(g); sz.push_back(lu?0:s);
   }
   for (bool ts=false;;){
     unsigned b=0;
@@ -1024,6 +1065,12 @@ static NOINL gen square(const gen & fe,int lev){
 }
 // a product of sums of powers of x (no rational fraction): expanding gives powers
 static bool powers_only(const gen & fe){ return !fe.is_plus() && shape(fe,SH_ROOTX); }
+// a factor (a x+b)^n, n >= 3, b != 0
+static NOINL bool lpow(const gen & fe){
+  vecteur c,v; factors(fe,c,v);
+  EACH(it,v){ gen w=*it,e=bexp(w),a,b; if (w.is_plus() && is_linear_wrt(w,X,a,b,CTX) && e.type==_INT_ && e.val>=3) return true; }
+  return false;
+}
 static NOINL gen expandit(const gen & fe,int lev){
   if (fe.is_plus() || taille(fe,64)>48) return undef;
   gen t=expand(fe,CTX);
@@ -1203,9 +1250,13 @@ static gen isteps(const gen & f0,int lev){
   gen fe=ev(f);
   if (basic(fe,F,r)){ S(r,f,F); return F; }
   if (even_trig(fe) && !is_undef(F=trigid(f,lev))) return F;
-  if (powers_only(fe)){ // expanded, unless that makes it long: x^2 (x^3+1)^5 is u = x^3+1
-    gen d=_degree(makesequence(fe,X),CTX);
+  if (powers_only(fe)){ // expanded, unless that makes it long: x^2 (x^3+1)^5 is u = x^3+1, x (2x+1)^5
+    // is u = 2x+1 (a power >= 3 of a linear sum, rooted); giac's degree expands the powers: not
+    // for those (1.25 MB of heap for 8x (2x+1)^2026: the calculator ran out of memory and quit)
+    const bool big=bigp(fe);
+    gen d=big || lpow(fe)?gen(99):_degree(makesequence(fe,X),CTX);
     if ((d.type!=_INT_ || d.val>6) && !is_undef(F=usub(f,lev))) return F;
+    if (big) return undef;
     if (!is_undef(F=expandit(fe,lev))) return F;
   }
   if (splits(f,shape(fe,SH_FRAC)) && (!is_undef(F=splitnum(fe,lev)) || !is_undef(F=splitfrac(f,lev)))) return F;
@@ -1335,7 +1386,7 @@ static gen absarg(const gen & f){
 static int ldir_;
 static gen * la_;
 static NOINL gen Lx(const gen & f){ return SYM(at_limit,ldir_?makesequence(f,X,*la_,ldir_):makesequence(f,X,*la_)); }
-static NOINL gen glim(const gen & g){ return ev(Lx(g)); }
+static NOINL gen glim(const gen & g){ return bigp(g,true)?gen(undef):ev(Lx(g)); }
 static NOINL bool finv(const gen & v){ return v.type!=_STRNG && !has_inf_or_undef(v) && !has_op(v,*at_bounded_function); }
 static NOINL gen Ls(int r,const gen & f,const gen & v0){ gen v=v0.type==_FRAC?v0._FRACptr->num/v0._FRACptr->den:v0; S(r,Lx(f),v); return v; } // lim f = v by rule r (giac's limit gave the fraction 1/-7)
 static gen lsteps(const gen & f,int lev);
@@ -1370,10 +1421,12 @@ static NOINL gen fastest(const gen & g){
 }
 // the conjugate of the sum g holding a square root: its first root term kept, the others' signs
 // changed (sqrt(x+4)-1: sqrt(x+4)+1; sqrt(1+x)-sqrt(1-x): sqrt(1+x)+sqrt(1-x)); 0 if none
+// (square roots only: a cube root is never cleared, (sqrt(x)-x^(1/3))/(x-1) went from conjugate to
+// conjugate until the depth limit, 1.39 MB of heap on the PC)
 static NOINL gen conjof(const gen & g){
   vecteur w,c; flat(at_plus,g,w);
   bool r=false;
-  EACH(it,w){ bool q=!r && froot(ev(*it),0); c.push_back(q?*it:it->is_neg()?arg(*it):symb_neg(*it)); r=r||q; }
+  EACH(it,w){ gen e=ev(*it); if (froot(e,2)) return 0; bool q=!r && froot(e,0); c.push_back(q?*it:it->is_neg()?arg(*it):symb_neg(*it)); r=r||q; }
   return r && w.size()>1?symb_plus(c):gen(0);
 }
 // f's limits from each side, different: no limit (undef if they agree or one is missing)
@@ -1429,9 +1482,12 @@ static gen lq(const gen & f,const gen & n,const gen & d,int lev){
     gen t=fastest(d);
     if (!is_zero(t) && !is_undef(v=lvia(R_LDIV,f,expand(ev(n/t),CTX),expand(ev(d/t),CTX),lev))) return v;
   }
-  if (lev>=8) return undef; // (L'Hopital a few times at most)
-  size_t m=mark(); // the form (0/0 or inf/inf), f' and g', then the rule
+  // L'Hopital a few times at most, not on n! (no textbook derivative: (4n^n+n^3)/(ln(n)^80+2n!) took
+  // 60 s and 93 MB on the PC), nor when the derivatives more than double the fraction
+  if (lev>=8 || has_op(n,*at_factorial) || has_op(d,*at_factorial)) return undef;
   gen n1=D(n,X),d1=D(d,X);
+  if (taille(n1,400)+taille(d1,400)>2*(taille(n,400)+taille(d,400))+20) return undef;
+  size_t m=mark(); // the form (0/0 or inf/inf), f' and g', then the rule
   S(R_LFORM,symb_equal(Lx(n),ln),symb_equal(Lx(d),ld));
   S(R_EQD,n,n1); S(R_EQD,d,d1);
   if (is_undef(v=lvia(R_LHOP,f,n1,d1,lev))) cut(m);
@@ -1873,7 +1929,8 @@ bool steps_of(const gen & input0,std::vector<step_t> & out,GIAC_CONTEXT){
     e=quotesubst(e,t,val,CTX);
   }
   if (out.empty()) return false;
-  S(R_EQV,input0,normal(ev(e),CTX));
+  e=ev(e);
+  S(R_EQV,input0,bigp(e)?e:normal(e,CTX));
   return true;
 }
 #endif
