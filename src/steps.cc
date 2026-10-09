@@ -1495,6 +1495,16 @@ static NOINL gen pser(const gen & op,const gen & G,const gen & e){
   if (cv && !is(G,at_sum)) S(R_EQV,op,G);
   return !cv?word("diverges"):is(G,at_sum)?word("converges"):G;
 }
+// the sums linear in N written out: 2(N+1)-1 as 2N+1, N+1+1 as N+2
+static NOINL gen linn(const gen & g,const gen & N){
+  if (g.type!=_SYMB) return g;
+  gen a,b,h=arg(g);
+  if (g.is_plus() && is_linear_wrt(g,N,a,b,CTX)) return a*N+b;
+  if (h.type!=_VECT) return symbolic(g._SYMBptr->sommet,linn(h,N));
+  vecteur w=*h._VECTptr;
+  EACHW(it,w) *it=linn(*it,N);
+  return symbolic(g._SYMBptr->sommet,gen(w,h.subtype));
+}
 // sum(t,n,a,inf): the divergence test, telescoping, a p-series, a geometric series, the partial
 // sums' limit, else a limit comparison with a p-series (convergence only)
 static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
@@ -1508,7 +1518,7 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   if (t.is_plus() && arg(t).type==_VECT && arg(t)._VECTptr->size()==2){ // f(n)-f(n+1): telescoping
     gen u=arg(t,0),w=arg(t,1);
     for (int k=0;k<2;++k,std::swap(u,w)) if (same(sub(u,x,x+1),-w)){
-      SN=symb_plus(sub(u,x,a),symb_neg(subst(u,x,N+1,true,CTX)));
+      SN=symb_plus(sub(u,x,a),symb_neg(linn(subst(u,x,N+1,true,CTX),N)));
       val=ev(Linf(SN,N));
       if (!same(val,G) && !is(G,at_sum) && !(is_inf(val) && is_inf(G))) return undef; // (S_N is exact)
       S(R_PSUMT,SYM(at_sum,makesequence(v[0],x,a,N)),SN);

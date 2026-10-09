@@ -1528,6 +1528,11 @@ static giac::gen known_sum(const giac::gen & g,std::string & msg){
         return ratnormal(c*cst_pi/2,contextptr);
     }
     if (p>=2 || isalt){ // a decimal value: 200 terms, then the tail (integral of c/n^p)
+      if (!isalt && f.is_symb_of_sommet(at_plus)){ // 1/n-1/(n+1): giac summed each part (both
+        const gen s=_sum(makesequence(ratnormal(f,contextptr),n,a,plus_inf),contextptr); // diverge);
+        if (!contains(s,at_sum)) // as one fraction 1/(n^2+n), 1 (not 1.00001)
+          return s;
+      }
       double s;
       const int N=a.val+200;
       if (!sum200(f,n,a.val,isalt,s))
@@ -3141,6 +3146,8 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
   }
   else
     limit_dne(a.gin,g,msg); // lim 1/x at 0: does not exist (giac: an unsigned infinity)
+  if (msg.empty() && (g==plus_inf || g==minus_inf) && a.gin.is_symb_of_sommet(at_sum)) // a series
+    msg=g==plus_inf?"diverges (to +infinity)":"diverges (to -infinity)"; // that diverges says so
   if (!msg.empty()) // "diverges": g is not shown (evalf below re-ran giac's sum of it: 40 s)
     return;
   // a finite sum: over more than 800 terms giac stops ("Invalid dimension", its list limit), and
