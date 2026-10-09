@@ -850,13 +850,14 @@ static NOINL gen pyth(const gen & fe,int lev){
   return undef;
 }
 // k (A x^2+B x+C)^e with B != 0: complete the square (then a linear substitution)
+// (then u = x+B/(2A), written: the textbook way, and a trig substitution can follow)
 static NOINL gen square(const gen & fe,int lev){
   gen k,q,e,A,B,C;
-  if (!quad(fe,k,q,e,A,B,C) || is_zero(B)) return undef;
-  gen sq=fill("A*(X+B/(2*A))^2+(C-B^2/(4*A))",makevecteur(A,B,C));
+  if (!quad(fe,k,q,e,A,B,C) || is_zero(B) || nsub_>3) return undef;
+  gen sq=fill("A*(X+B/(2*A))^2+(C-B^2/(4*A))",makevecteur(A,B,C)),uu(identificateur(UNAMES[nsub_]));
   size_t m=mark();
   S(R_SQUARE,q,sq);
-  gen F=isteps(k*symb_pow(sq,e),lev+1);
+  gen F=subs(k*symb_pow(sq,e),uu,ev(X+B/(2*A)),1,k*symb_pow(ev(fill("A*T^2+C-B^2/(4*A)",makevecteur(A,B,C,0,0,0,uu))),e),lev);
   if (is_undef(F)) cut(m);
   return F;
 }
