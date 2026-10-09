@@ -22,7 +22,7 @@ enum {
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
   R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
-  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_NRULES
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -99,6 +99,8 @@ static const char * const RULES[]={
   "p-series: converges for p > 1, diverges for p <= 1","sum(1/n^p,n,1,inf)","A=B",
   "Limit comparison with the p-series",0,"A=B",
   "Indeterminate form",0,"A,B",
+  "Alternating series test: the size decreases to 0",0,"A=B",
+  "Ratio test: below 1, the series converges",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -1509,13 +1511,26 @@ static NOINL bool same(const gen & a,const gen & b){ return is_zero(rn(ev(a-b)))
 static NOINL bool undone(const gen & G){ return is_inf(G) || is_undef(G) || G.type==_STRNG || has_op(G,*at_bounded_function) || is(G,at_sum); }
 // the p-series conclusion, p = e: converges for p > 1 (giac's value; sum(1/n^2) left as is by giac,
 // pi^2/6 is FlowCE's, in the answer), diverges for p <= 1
+// a series that converges: its value when giac has one (a last line "= value"), else the word
+static NOINL gen cvg(const gen & op,const gen & G){
+  if (is(G,at_sum) || is_undef(G)) return word("converges");
+  S(R_EQV,op,G);
+  return G;
+}
 static NOINL gen pser(const gen & op,const gen & G,const gen & e){
   const bool cv=is_strictly_greater(e,1,CTX);
   if (cv?is_inf(G):!is_inf(G) && !is(G,at_sum)) return undef;
   S(R_PSER,word("p"),e);
-  if (cv && !is(G,at_sum)) S(R_EQV,op,G);
-  return !cv?word("diverges"):is(G,at_sum)?word("converges"):G;
+  return cv?cvg(op,G):word("diverges");
 }
+// a(n+1)/a(n) as a(n+1) times a(n) upside down: one fraction, 2^(n+1) n!/((n+1)! 2^n), not a
+// fraction over a fraction
+static NOINL gen ratio_of(const gen & f,const gen & t,const gen & x){
+  gen n=_numer(t,CTX),d=_denom(t,CTX);
+  return symb_prod(subst(f,x,x+1,true,CTX),is_one(n)?d:symb_prod(d,symb_inv(n)));
+}
+// 1 if the index is in an exponent of g (2^n, n^n), else 0
+static NOINL gen nexp(const gen & g){ return g.is_pow() && dep(arg(g,1))?gen(1):first_of(g,nexp); }
 // the sums linear in N (*nn_) written out: 2(N+1)-1 as 2N+1, N+1+1 as N+2
 static const gen * nn_;
 static NOINL gen linn(const gen & g){
@@ -1529,7 +1544,8 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   if (v.size()!=4 || ev(v[3])!=plus_inf) return undef;
   const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N"),G=ev(op);
   gen L=ev(Linf(t,x)),val,SN;
-  if (!is_zero(L) && (finv(L) || is_inf(L) || has_op(L,*at_bounded_function))){ // the terms do not go to 0
+  if (!is_zero(L) && (finv(L) || L==plus_inf || L==minus_inf || has_op(L,*at_bounded_function))){ // the terms do not go to 0
+    // (+-infinity itself: giac's limit of 1/n! is 1/((+infinity)!), and is_inf looks inside)
     S(R_SDIV,Linf(v[0],x),has_op(L,*at_bounded_function)?word("DNE"):L); // (no raw bounded_function)
     return undone(G)?word("diverges"):gen(undef);
   }
@@ -1562,7 +1578,7 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   if (!dep(r) && is_strictly_greater(1,evalf(abs(r,CTX),1,CTX),CTX)){ // geometric
     gen t0=ev(sub(t,x,a));
     val=ev(t0/(1-r));
-    S(R_SRAT,symb_prod(subst(v[0],x,x+1,true,CTX),symb_inv(v[0])),r);
+    S(R_SRAT,ratio_of(v[0],t,x),r);
     S(R_SGEOM,op,symb_prod(t0,symb_inv(symb_plus(1,symb_neg(r)))));
     S(R_EQV,op,val);
     return same(val,G)?val:gen(undef);
@@ -1578,6 +1594,26 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
       S(R_SLIM,Linf(SN,N),val);
       S(R_EQV,op,val);
       return val;
+    }
+  }
+  // (-1)^(n+k) b, b > 0 decreasing to 0 (from a+3 on: ln(n)/n): the alternating series test
+  if (!is_inf(G)) EACH(it,w) if (it->is_pow() && is_minus_one(arg(*it,0))){
+    vecteur o(c);
+    EACH(jt,w) if (jt!=it) o.push_back(*jt);
+    gen b=ev(prodof(o));
+    if (is_strictly_positive(-evalf(sub(b,x,a+3),1,CTX),CTX)) b=ev(-b);
+    for (int k=3;k<12;++k) if (!is_strictly_greater(evalf(sub(b,x,a+k),1,CTX),evalf(sub(b,x,a+k+1),1,CTX),CTX)) return undef;
+    S(R_AST,Linf(b,x),0);
+    return cvg(op,G);
+  }
+  // n! or the index in an exponent: the ratio test, lim |a(n+1)/a(n)| below 1 (2^n/n!, n!/n^n)
+  if (dep(r) && !is_inf(G) && (has_op(t,*at_factorial) || !is_zero(nexp(t)))){
+    gen q=_factor(r,CTX),qa=is_strictly_positive(evalf(sub(q,x,a+3),1,CTX),CTX)?q:SYM(at_abs,q);
+    L=ev(Linf(qa,x));
+    if (finv(L) && is_strictly_greater(1,L,CTX)){
+      S(R_SRAT,ratio_of(v[0],t,x),q);
+      S(R_RATIO,Linf(qa,x),L);
+      return cvg(op,G);
     }
   }
   // like 1/n^p: lim t n^p finite and not 0 (a limit comparison: converges or not)
