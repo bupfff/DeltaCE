@@ -1588,7 +1588,7 @@ static gen realroot(const gen & g){
 // ---------------------------------------------------------------- series and sums
 static NOINL gen Linf(const gen & f,const gen & n){ return SYM(at_limit,makesequence(f,n,plus_inf)); }
 static NOINL gen word(const char * w){ return gen(identificateur(w)); }
-static NOINL bool same(const gen & a,const gen & b){ return is_zero(rn(ev(a-b))); }
+static NOINL bool same(const gen & a,const gen & b){ return is_zero(rn1(ev(a-b))); }
 // giac's sum left as is, infinite or no value: a divergent one (or one giac cannot do)
 static NOINL bool undone(const gen & G){ return is_inf(G) || is_undef(G) || G.type==_STRNG || has_op(G,*at_bounded_function) || is(G,at_sum); }
 // the p-series conclusion, p = e: converges for p > 1 (giac's value; sum(1/n^2) left as is by giac,
@@ -1765,7 +1765,7 @@ static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
   vecteur ds(1,ev(v[0])),qs,gt,kp,ts;
   gen P=0;
   for (int k=1;k<=n && !interrupted;++k){ // (normal form only when shorter: -1/(x+1)^2)
-    gen d=D(ds.back(),x),d2=rn(d);
+    gen d=D(ds.back(),x),d2=rn1(d);
     if (taille(d2,200)<taille(d,200)) d=d2;
     S(k>1?R_EQV:R_TDER,Dx(ds.back()),d); ds.push_back(d);
   }
@@ -1805,7 +1805,7 @@ static gen one_(const gen & op){
     if (is_undef(L)) L=lsteps(v[0],0);
     if (interrupted || is_undef(L)) return undef;
     if (L.type==_IDNT) return G.type==_STRNG || G==unsigned_inf || is_undef(G)?L:gen(undef);
-    return L==G || (finv(L) && finv(G) && is_zero(evalf(L-G,1,CTX)))?L:gen(undef);
+    return L==G || (finv(L) && finv(G) && (is_zero(evalf(L-G,1,CTX)) || same_num(L,G,X)))?L:gen(undef); // (x^2/3, abs(x^2)/3)
   }
   if (is(op,at_sum)) return ssteps(op,v,x);
   if (is(op,at_series)) return tsteps(op,v,x);
@@ -1910,12 +1910,31 @@ static gen nest(const gen & g){
   return symbolic(g._SYMBptr->sommet,nest(a));
 }
 
+// taylor(f,x=a,n) and series(f,x=a,n) (giac's own syntax) and taylor(f,x,n,a) (the TI-89's) as the
+// menu's series(f,x,a,n): every form has steps (the course's taylor(sqrt(x),x=4,3) had none)
+static NOINL gen serfix(const gen & g){
+  const bool t=is(g,at_taylor);
+  if (!(t || is(g,at_series)) || arg(g).type!=_VECT || arg(g)._VECTptr->size()<2) return g;
+  const vecteur & v=*arg(g)._VECTptr;
+  gen x=v[1],a=0,n=v.size()>2?v[2]:gen(5);
+  if (is(x,at_equal)){ a=arg(x,1); x=arg(x,0); }
+  else if (!t){ if (v.size()>3) return g; n=5; if (v.size()==3) a=v[2]; } // series(f,x,a,n); series(f,x[,a]): order 5
+  else if (v.size()>3) a=v[3];
+  return x.type==_IDNT?SYM(at_series,makesequence(v[0],x,a,n)):g;
+}
+gen limit_simp(const gen & g); // answer.cc: a ratio with k in exponents simplified first
 // the problem as typed (mergek without its rewrites: one denominator, 1/(n(n+2)), not 1/n/(n+2))
-gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(input))); raw_=false; return r; }
-bool steps_of(const gen & input0,std::vector<step_t> & out,GIAC_CONTEXT){
-  ctx_=contextptr; out_=&out; depth_=0; nsub_=0; in_=&input0;
-  gen e=nest(norm(input0)),x(identificateur("x"));
-  var_=&x;
+gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(serfix(input)))); raw_=false; return r; }
+bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){
+  static gen * in0; // the input as the steps take it (in_ points to it; no static constructor in the app)
+  if (!in0) in0=new gen;
+  gen x(identificateur("x"));
+  ctx_=contextptr; out_=&out; depth_=0; nsub_=0; var_=&x; in_=in0;
+  *in0=serfix(input);
+  gen ls=limit_simp(*in0);
+  if (ls!=*in0){ S(R_SIMP,*in0,ls); *in0=ls; }
+  const gen & input0=*in0;
+  gen e=nest(norm(input0));
   for (int guard=0;guard<8;++guard){
     gen t=inner(e);
     if (is_zero(t)) break;

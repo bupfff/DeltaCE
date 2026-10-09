@@ -419,7 +419,7 @@ static const char * build(const char * in, const char * ans) {
     std::string a2; // the answer box: the steps' value for a sum left as is, a series without O(...)
     if (ans && strstr(ans, "sum(") && !v.empty() && (!*steps_title(v.back()) || !strcmp(steps_title(v.back()), "Its limit")))
       ans = (a2 = v.back().b.print(contextptr)).c_str();
-    else if (ans && starts(p, "series(") && !v.empty()) // (the steps' polynomial: 1-(x-1)+(x-1)^2,
+    else if (ans && (starts(p, "series(") || starts(p, "taylor(")) && !v.empty()) // (the steps' polynomial: 1-(x-1)+(x-1)^2,
       ans = (a2 = v.back().b.print(contextptr)).c_str(); // not giac's 1-x+1+(x-1)^2+O((x-1)^3))
     lay_steps(head.c_str(), v, ans, c == 1);
     if (oom_hit) { giac::ctrl_c = giac::interrupted = false; why = NP ? 0 : "Out of memory"; }

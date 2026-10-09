@@ -3155,6 +3155,46 @@ void answer_set_simplify(bool on){
   giac::_autosimplify(giac::gen(on?1:0),contextptr); // giac's default (regroup), or none
   answer_simplify_on=on;
 }
+// k in the exponent of something without k (the ratio test: |x^(2k+2)/x^(2k)|, (-1)^(k+1)/(-1)^k)
+static bool expo(const giac::gen & g,const giac::gen & k){
+  using namespace giac;
+  if (g.type!=_SYMB)
+    return false;
+  const gen & a=g._SYMBptr->feuille;
+  if (g.is_symb_of_sommet(at_pow) && a.type==_VECT && a._VECTptr->size()==2 && free_of(a[0],k) && !free_of(a[1],k))
+    return true;
+  if (a.type!=_VECT)
+    return expo(a,k);
+  for (const_iterateur it=a._VECTptr->begin();it!=a._VECTptr->end();++it)
+    if (expo(*it,k))
+      return true;
+  return false;
+}
+// the limit of such a ratio simplified first, as students do: giac's limit was undef for the
+// course's radius problems, lim |x^(2k+2)/sqrt(k+1) / (x^(2k)/sqrt(k))| is x^2 (the steps too)
+giac::gen limit_simp(const giac::gen & g){
+  using namespace giac;
+  if (!g.is_symb_of_sommet(at_limit) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()<3)
+    return g;
+  vecteur v=*g._SYMBptr->feuille._VECTptr;
+  const gen f=v[0];
+  if (v[1].type!=_IDNT || !expo(f,v[1]))
+    return g;
+  const bool ab=f.is_symb_of_sommet(at_abs);
+  // evaluated first: simplify of the parsed tree turned (x-2)^(k+1)/(x-2)^k into -x-2
+  gen s=_simplify(eval(ab?f._SYMBptr->feuille:f,1,contextptr),contextptr);
+  if (is_undef(s) || s.type==_STRNG)
+    return g;
+  const vecteur lv=lvar(s); // a rational function (sqrt(k)/sqrt(k+1) stays)
+  bool rat=true;
+  for (const_iterateur it=lv.begin();it!=lv.end();++it)
+    rat=rat && it->type==_IDNT;
+  const gen t=rat?_factor(s,contextptr):s; // (x-2)(2k+3)/(3(2k+1)): simplify expanded it, and the limit was undef
+  if (!is_undef(t) && t.type!=_STRNG)
+    s=t;
+  v[0]=ab?sym1(at_abs,s):s;
+  return symbolic(at_limit,gen(v,_SEQ__VECT));
+}
 void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus){
   using namespace giac;
   if (strstr(buf,"perm(") || strstr(buf,"nPr("))
@@ -3162,6 +3202,7 @@ void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus){
   a.typed_sum=strstr(buf,"sum(");
   a.typed_sec=strstr(buf,"sec(") || strstr(buf,"csc(") || strstr(buf,"cot(");
   a.typed_limit=strstr(buf,"limit(");
+  g=limit_simp(g);
   a.real_in=focus && !has_i(g); // (-8)^(1/3) is -2
   if (a.real_in)
     g=real_roots(g,g.is_symb_of_sommet(at_plot) || g.is_symb_of_sommet(at_plotfunc));
