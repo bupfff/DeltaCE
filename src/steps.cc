@@ -20,7 +20,7 @@ enum {
   R_EQI, R_SUMI, R_CONSTI, R_POWI, R_CONSTANT, R_LNI, R_TABLE, R_ATAN, R_ASIN, R_LNSQ, R_SUB, R_SUBEQ, R_BACK,
   R_PARTS, R_PARTSV, R_PARTS2, R_CYCLE, R_PFRAC, R_TRIGID, R_PYTH, R_EXPAND, R_SQUARE, R_SIMP, R_TSUB,
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
-  R_FTC, R_EQV, R_PART, R_NRULES
+  R_FTC, R_EQV, R_PART, R_ABSI, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -69,6 +69,7 @@ static const char * const RULES[]={
   "Evaluate from a to b","integrate(f,x,a,b)=F(b)-F(a)","A=B",
   "",0,"A=B",
   "Compute",0,"A",
+  "Sign on the interval",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -87,6 +88,7 @@ gen steps_math(const step_t & s,GIAC_CONTEXT){
   from.push_back(gen(identificateur("dV"))); to.push_back(dname(s.v));
   from.push_back(gen(identificateur("dA"))); to.push_back(dname(s.a));
   from.push_back(gen(identificateur("U"))); to.push_back(U);
+  from.push_back(gen(identificateur("W"))); to.push_back(W);
   from.push_back(gen(identificateur("dU"))); to.push_back(dname(U));
   from.push_back(gen(identificateur("dW"))); to.push_back(dname(W));
   return subst(t,from,to,true,contextptr);
@@ -211,23 +213,29 @@ static NOINL gen norm(const gen & g){
   return SYM(&u,a);
 }
 
-// a = f numerically at a few points, the other variables given values (giac's simplify is slow
-// on the calculator)
-static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x){
+// a = f numerically (giac's simplify is slow on the calculator), the other variables given values.
+// Points on both sides of 0 and far out, first inside [lo,hi] when given (only there: only): every point where f is
+// real must agree, 5 of them at most, at least 3 (else complex values agreeing make up the 3; a
+// complex one differing can be a branch of sqrt, not an error).
+static NOINL bool same_num(const gen & a0,const gen & f0,const gen & x,const gen * lo=0,const gen * hi=0,bool only=false){
   gen d=a0-f0,f=f0;
   vecteur ids=lidnt(makevecteur(d,f));
   for (unsigned i=0;i<ids.size();++i)
     if (ids[i]!=x){ d=sub(d,ids[i],0.71+0.17*i); f=sub(f,ids[i],0.71+0.17*i); }
-  static const double pts[]={0.37,1.29,2.13,-0.61,3.7};
-  int good=0;
-  for (int i=0;i<5 && good<3;++i){
-    gen y=evalf(sub(d,x,pts[i]),1,CTX),z=evalf(sub(f,x,pts[i]),1,CTX);
-    if ((y.type!=_DOUBLE_ && y.type!=_CPLX) || (z.type!=_DOUBLE_ && z.type!=_CPLX)) continue;
+  static const double pts[]={0.13,0.37,0.61,0.89,0.37,-0.61,1.29,-2.4,2.13,3.7,5.3,-7.9,11.3};
+  int real=0,cplx=0;
+  for (int i=lo?0:4;i<(only?4:13) && real<5;++i){
+    gen p=i<4?ev(*lo+(*hi-*lo)*pts[i]):gen(pts[i]);
+    gen z=evalf(sub(f,x,p),1,CTX),y;
+    if (z.type!=_DOUBLE_ && z.type!=_CPLX) continue; // f not defined there
+    y=evalf(sub(d,x,p),1,CTX);
+    if (y.type!=_DOUBLE_ && y.type!=_CPLX) continue;
     double ay=evalf_double(abs(y,CTX),1,CTX)._DOUBLE_val,az=evalf_double(abs(z,CTX),1,CTX)._DOUBLE_val;
-    if (!(ay<=TOL*(1+az))) return false;
-    ++good;
+    bool ok=ay<=TOL*(1+az);
+    if (z.type==_DOUBLE_){ if (!ok) return false; ++real; }
+    else cplx+=ok;
   }
-  return good>=2;
+  return real+cplx>=3;
 }
 
 // ---------------------------------------------------------------- derivatives
@@ -348,7 +356,24 @@ static gen dsteps(const gen & f){
 // ---------------------------------------------------------------- integrals
 static gen isteps(const gen & f,int lev);
 static const char * const UNAMES[]={"u","w","z","s"};
-static int nsub_;
+static int nsub_,maxlev_;
+static bool cutlev_; // a search stopped at maxlev_
+static gen * lo_, * hi_; // the variable's interval in a definite integral (0: none)
+static bool absi_; // |g| written g on it: F is checked there only
+// g sampled inside [lo_,hi_] (n points): -1 or 1 if g keeps its sign (0 allowed), else 0; or the
+// range of g (in a and b)
+static NOINL int sampled(const gen & g,int n,gen * a=0,gen * b=0){
+  double mn=1e30,mx=-1e30;
+  for (int i=0;i<n;++i){
+    gen y=evalf(sub(g,X,*lo_+(*hi_-*lo_)*((i+0.5)/n)),1,CTX);
+    if (y.type!=_DOUBLE_) return 0;
+    double d=y._DOUBLE_val;
+    if (d<mn) mn=d;
+    if (d>mx) mx=d;
+  }
+  if (a){ *a=mn; *b=mx; }
+  return mn>=0 && mx>0?1:mx<=0 && mn<0?-1:0;
+}
 
 // f = g by rule r, then the integral of g; undef (and no step) if it fails
 static NOINL gen via(int r,const gen & f,const gen & g,int lev){
@@ -358,11 +383,17 @@ static NOINL gen via(int r,const gen & f,const gen & g,int lev){
   if (is_undef(F)) cut(m);
   return F;
 }
-// the integral of g in the variable t (a substitution's), its steps indented
-static NOINL gen in_var(const gen & g,const gen & t,int lev){
-  gen * old=var_; var_=(gen *)&t; ++depth_; ++nsub_;
+// the integral of g in the variable t = tx (a substitution's), its steps indented; on the interval
+// tx takes there
+static NOINL gen in_var(const gen & g,const gen & t,const gen & tx,int lev){
+  gen * old=var_, * ol=lo_, * oh=hi_, a, b;
+  if (lo_){
+    sampled(tx,9,&a,&b);
+    lo_=a.type==_DOUBLE_?&a:0; hi_=lo_?&b:0;
+  }
+  var_=(gen *)&t; ++depth_; ++nsub_;
   gen G=isteps(g,lev+1);
-  --nsub_; --depth_; var_=old;
+  --nsub_; --depth_; var_=old; lo_=ol; hi_=oh;
   return G;
 }
 // the integral of f by the substitution uu = ux (duu = dux dx), g in uu
@@ -370,9 +401,9 @@ static NOINL gen subs(const gen & f,const gen & uu,const gen & ux,const gen & du
   size_t m=mark();
   S(R_SUB,uu,ux,dux);
   S(R_SUBEQ,f,g,uu);
-  gen G=in_var(g,uu,lev);
-  if (is_undef(G)){ cut(m); return G; }
-  gen F=ev(sub(G,uu,ux));
+  gen G=in_var(g,uu,ux,lev),F=is_undef(G)?G:ev(sub(G,uu,ux));
+  // checked here: a substitution can be right only on a branch (another method then)
+  if (is_undef(F) || !same_num(D(F,X),ev(f),X)){ cut(m); return undef; }
   S(R_BACK,f,F);
   return F;
 }
@@ -421,7 +452,7 @@ static NOINL bool linpow(const gen & g,gen & F,int & r){
 
 // The table: f is recognized by its values at two points (the derivatives of these antiderivatives,
 // computed once).
-static const char TABLE[]="[exp(x),sin(x),-cos(x),tan(x),-cot(x),sec(x),-csc(x),ln(abs(sec(x))),ln(abs(sin(x))),ln(abs(sec(x)+tan(x))),-ln(abs(csc(x)+cot(x))),atan(x),asin(x),sinh(x),cosh(x),tanh(x)]";
+static const char TABLE[]="[exp(x),sin(x),-cos(x),tan(x),-cot(x),sec(x),-csc(x),ln(abs(sec(x))),ln(abs(sin(x))),ln(abs(sec(x)+tan(x))),-ln(abs(csc(x)+cot(x))),atan(x),asin(x),sinh(x),cosh(x),tanh(x),(sec(x)*tan(x)+ln(abs(sec(x)+tan(x))))/2]";
 static vecteur * tabF_, * tabV_;
 static NOINL gen at2(const gen & g,const gen & x,double p){ return evalf(sub(g,x,p),1,CTX); }
 static NOINL bool near(const gen & a,const gen & b){
@@ -434,13 +465,13 @@ static NOINL bool table(const gen & f,gen & F){
     tabV_=new vecteur;
     for (unsigned i=0;i<tabF_->size();++i){
       gen d=D((*tabF_)[i],x0);
-      tabV_->push_back(makevecteur(at2(d,x0,0.37),at2(d,x0,0.61)));
+      tabV_->push_back(makevecteur(at2(d,x0,0.37),at2(d,x0,0.61),at2(d,x0,-0.43)));
     }
   }
-  gen y1=at2(f,X,0.37),y2=at2(f,X,0.61);
+  gen y1=at2(f,X,0.37),y2=at2(f,X,0.61),y3=at2(f,X,-0.43); // (a negative point: |sin x| is not sin x)
   for (unsigned i=0;i<tabF_->size();++i){
     const gen & w=(*tabV_)[i];
-    if (near(w[0],y1) && near(w[1],y2)){ F=sub((*tabF_)[i],x0,X); return true; }
+    if (near(w[0],y1) && near(w[1],y2) && near(w[2],y3)){ F=sub((*tabF_)[i],x0,X); return true; }
   }
   return false;
 }
@@ -484,7 +515,7 @@ static gen sc(const gen & g){ return rn(tan2sincos(g,CTX)); } // tan, sec... in 
 
 // u-substitution candidates: the arguments of functions, the bases of powers, the functions
 // themselves; sin proposes cos (odd powers), cos proposes tan and sec
-static void addc(vecteur & v,const gen & g){ if (dep(g) && g!=X && !equalposcomp(v,g)) v.push_back(g); }
+static void addc(vecteur & v,const gen & g0){ gen g=ev(g0); if (dep(g) && g!=X && !equalposcomp(v,g)) v.push_back(g); }
 static NOINL void cands(const gen & g,vecteur & v){
   if (g.type!=_SYMB) return;
   const unary_function_ptr & u=g._SYMBptr->sommet;
@@ -497,7 +528,7 @@ static NOINL void cands(const gen & g,vecteur & v){
     for (unsigned i=0;i<a._VECTptr->size();++i) cands((*a._VECTptr)[i],v);
     return;
   }
-  addc(v,a);
+  if (u!=at_neg) addc(v,a);
   if (u==at_inv || u==at_neg){ cands(a,v); return; }
   addc(v,g);
   if (u==at_sin) addc(v,symb_cos(a));
@@ -505,12 +536,23 @@ static NOINL void cands(const gen & g,vecteur & v){
   if (u==at_tan) addc(v,symb_inv(symb_cos(a)));
   cands(a,v);
 }
-// x as a function of t = u(x), u built from x with + and * constants, powers, exp, ln
-// (undef otherwise): u = sqrt(x) gives x = t^2
-static NOINL gen xof(const gen & u,const gen & t){
+// u = a k + b with a and b constants: k, t becomes (t - b)/a
+static NOINL gen kern(const gen & u,gen & t){
+  if (u.is_neg()){ t=-t; return kern(arg(u),t); }
+  vecteur c,v,w;
+  bool p=u.is_plus();
+  if (p){ flat(at_plus,u,w); for (unsigned i=0;i<w.size();++i) (dep(w[i])?v:c).push_back(w[i]); }
+  else factors(u,c,v);
+  if (v.size()!=1 || c.empty()) return u;
+  t=p?t-symb_plus(c):t/prodof(c);
+  return kern(v[0],t);
+}
+// x as a function of t = u(x), u built from x with + and * constants, powers, exp, ln, sin, cos,
+// tan (undef otherwise): u = sqrt(x) gives x = t^2
+static NOINL gen xof(const gen & u0,const gen & t0){
+  gen t=t0,u=kern(u0,t);
   if (u==X) return t;
   if (u.type!=_SYMB) return undef;
-  if (u.is_neg()) return xof(arg(u),-t);
   if (u.is_inv()) return xof(arg(u),symb_inv(t));
   if (is(u,at_exp)) return xof(arg(u),symb_ln(t));
   if (is(u,at_ln)) return xof(arg(u),symb_exp(t));
@@ -518,26 +560,29 @@ static NOINL gen xof(const gen & u,const gen & t){
   if (is(u,at_cos)) return xof(arg(u),SYM(at_acos,t));
   if (is(u,at_tan)) return xof(arg(u),SYM(at_atan,t));
   if (u.is_pow() && !dep(arg(u,1))) return xof(arg(u,0),symb_pow(t,ev(symb_inv(arg(u,1)))));
-  vecteur c,v;
-  if (u.is_plus()){ // u = w + c
-    vecteur w; flat(at_plus,u,w);
-    for (unsigned i=0;i<w.size();++i) (dep(w[i])?v:c).push_back(w[i]);
-    return v.size()==1?xof(v[0],t-symb_plus(c)):gen(undef);
-  }
-  factors(u,c,v); // u = c w
-  return v.size()==1 && !c.empty()?xof(v[0],t/prodof(c)):gen(undef);
+  return undef;
 }
-// f dx as g(t) dt with t = u (du = u' dx); undef if it can't. What is left of x after u's
-// occurrences are replaced is replaced by x as a function of t (u = sqrt(x): x = t^2).
+static NOINL bool atrig(const gen & g){ return has_op(g,*at_asin) || has_op(g,*at_acos) || has_op(g,*at_atan); }
+// f dx as g(t) dt with t = u (du = u' dx); undef if it can't. Tried in turn: u replaced by t; the
+// trig functions written with u's (sin^2 = 1 - cos^2, sec^2 = 1 + tan^2) and u's function replaced;
+// x as a function of t in what is left (u = sqrt(x): x = t^2).
 static NOINL gen rewrite(const gen & fe,const gen & du,const gen & u,const gen & t){
-  gen g=rn(complex_subst(ev(fe/du),u,t,CTX));
-  if (dep(g)) g=rn(complex_subst(sc(fe/du),sc(u),t,CTX));
+  gen h=ev(fe/du),g=rn(complex_subst(h,u,t,CTX));
+  if (dep(g)){
+    gen kt=t,k=kern(u,kt);
+    if (k.is_inv()){ k=arg(k); kt=symb_inv(kt); } // sec, csc
+    gen s=is(k,at_sin)?_trigsin(h,CTX):is(k,at_cos)?_trigcos(h,CTX):is(k,at_tan)?_trigtan(h,CTX):sc(h);
+    g=rn(complex_subst(s,is(k,at_tan)?k:sc(k),kt,CTX));
+  }
   if (dep(g)){ // x = u^-1(t)
     gen xs=xof(u,t);
     if (!is_undef(xs)) g=rn(ev(sub(g,X,xs)));
+    // an inverse trig function left: x itself was there (x sin x with u = cos x), not a substitution
+    if (atrig(g) && !atrig(fe)) return undef;
   }
   if (dep(g) || is_undef(g) || has_op(g,*at_rootof) || taille(g,200)>2*taille(fe,200)+20) return undef;
-  return recursive_normal(g,CTX);
+  gen r=recursive_normal(g,CTX); // only if simpler: it writes 1/sqrt(q) as sqrt(q)/q
+  return has_op(r,*at_rootof) || taille(r,200)>=taille(g,200)?g:r;
 }
 // u under a root or in a denominator (x sqrt(x+2), x/(x+1)^2): a linear u is the textbook way
 static NOINL bool rooted(const gen & g,const gen & u){
@@ -547,6 +592,16 @@ static NOINL bool rooted(const gen & g,const gen & u){
   if (g.is_inv() && (a==u || (a.is_pow() && arg(a,0)==u))) return true;
   if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i) if (rooted((*a._VECTptr)[i],u)) return true; return false; }
   return rooted(a,u);
+}
+static NOINL gen radicand(const gen & g);
+static NOINL gen trigsub(const gen & f,int lev);
+// a fractional power other than a square root in g
+static NOINL bool oddroot(const gen & g){
+  if (g.type!=_SYMB) return false;
+  if (g.is_pow() && arg(g,1).type==_FRAC && arg(g,1)._FRACptr->den!=2) return true;
+  const gen & a=arg(g);
+  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i) if (oddroot((*a._VECTptr)[i])) return true; return false; }
+  return oddroot(a);
 }
 static NOINL gen usub(const gen & f,int lev){
   if (nsub_>3) return undef;
@@ -568,24 +623,34 @@ static NOINL gen usub(const gen & f,int lev){
     if (is_undef(g) || is_inf(g) || is_zero(g)) continue;
     // the new integral in the table: taken at once (a textbook substitution lands there; the other
     // candidates can cost giac minutes, x = u^(1/4) in roots...). A linear u otherwise only under
-    // roots (x sqrt(x+2)), else the simplest new integral
+    // roots (x sqrt(x+2)), else the simplest new integral; a root of something else than u left
+    // (sqrt(u-4)) after the trig substitution
     vecteur c2,v2; gen * old=var_; var_=&uu; factors(g,c2,v2);
     bool known=v2.size()==1 && basic(ev(v2[0]),F,r);
+    int s=known?-1:int(taille(g,1000))+(is_zero(radicand(g))?0:10000);
     var_=old;
     if (lin && !known && !rooted(fe,u)) continue;
-    ok.push_back(u); gs.push_back(g); sz.push_back(known?-1:int(taille(g,1000)));
-    if (known) break;
+    if (known){ // tried at once; right only on a branch (u = sqrt(q)): the next candidates
+      gen G=subs(f,uu,u,du,g,lev);
+      if (!is_undef(G)) return G;
+      continue;
+    }
+    ok.push_back(u); gs.push_back(g); sz.push_back(s);
   }
-  while (!ok.empty()){
+  for (bool ts=false;;){
     unsigned b=0;
     for (unsigned i=1;i<ok.size();++i) if (sz[i]<sz[b]) b=i;
-    gen u=ok[b],g=gs[b]; int s=sz[b];
+    if (!ts && (ok.empty() || sz[b]>=10000)){
+      ts=true; gen F=trigsub(f,lev);
+      if (!is_undef(F)) return F;
+    }
+    if (ok.empty()) return undef;
+    gen u=ok[b],g=gs[b]; int s=sz[b]%10000;
     ok.erase(ok.begin()+b); gs.erase(gs.begin()+b); sz.erase(sz.begin()+b);
     if (s>int(taille(fe,1000))+6) continue; // not simpler (taille is unsigned)
     gen F=subs(f,uu,u,D(u,X),g,lev);
     if (!is_undef(F)) return F;
   }
-  return undef;
 }
 
 // LIATE rank of a factor (lower: the better u)
@@ -612,12 +677,13 @@ static NOINL bool parts1(const gen & f,int lev,gen & u,gen & dv,gen & du,gen & V
   if (best<0 || (v.size()==1 && br>1)) return false;
   if (v.size()==2){
     int o=liate(v[1-best]);
-    if ((br==3 && o==3) || o<br || (o>4 && br>2)) return false; // trig times trig: identities
+    // trig times trig: identities; a polynomial times another function: x only (x sec(x)^2)
+    if ((br==3 && o==3) || o<br || (o>4 && (br>2 || (br==2 && dep(D(v[best],X)))))) return false;
   }
   u=v[best]; dv=v.size()==2?v[1-best]:gen(1);
   du=D(u,X);
   size_t m=mark(); unsigned char d=depth_; int b=budget_;
-  V=isteps(dv,lev+3);
+  V=isteps(dv,maxlev_-1); // (a substitution at most)
   cut(m); depth_=d; budget_=b-4;
   if (is_undef(V)) return false;
   V=ev(V); k=ev(prodof(c)); rest=rn(V*du);
@@ -700,7 +766,7 @@ static NOINL gen trigfrac(const gen & f,int lev){
   if (dep(g)) return undef;
   size_t m=mark();
   S(R_WEIER,f,g,t);
-  gen G=in_var(g,t,lev);
+  gen G=in_var(g,t,symb_tan(X/2),lev);
   if (is_undef(G)){ cut(m); return G; }
   gen F=ev(sub(G,t,symb_tan(X/2)));
   S(R_BACK,f,F);
@@ -714,7 +780,8 @@ static NOINL gen pyth(const gen & fe,int lev){
     if (!w.is_pow() || !is(arg(w,0),at_tan) || arg(w,1).type!=_INT_) continue;
     int n=arg(w,1).val;
     if (n<2 && n>-2) continue;
-    return via(R_PYTH,fe,fill(n>0?"expand(A/W*tan(B)^C*(1/cos(B)^2-1))":"expand(A/W*tan(B)^C*(1/sin(B)^2-1))",makevecteur(fe,arg(arg(w,0)),n>0?n-2:n+2,0,0,w)),lev);
+    vecteur r(c); for (unsigned j=0;j<v.size();++j) if (j!=i) r.push_back(v[j]); // the other factors
+    return via(R_PYTH,fe,fill(n>0?"expand(A*tan(B)^C*(1/cos(B)^2-1))":"expand(A*tan(B)^C*(1/sin(B)^2-1))",makevecteur(prodof(r),arg(arg(w,0)),n>0?n-2:n+2)),lev);
   }
   return undef;
 }
@@ -784,26 +851,50 @@ static NOINL gen trigsub(const gen & f,int lev){
   if (k<0) return undef;
   gen t(identificateur("t"));
   vecteur w=*fill(TSUB[k],makevecteur(sqrt(ev(k==1?C/A:-C/A),CTX),A,C,0,q,0,t))._VECTptr;
-  gen dx=D(w[0],t),g=sc(ev(sub(radsub(fe,q,w[1]),X,w[0])*dx));
+  gen dx=D(w[0],t),g=sc(ev(sub(radsub(fe,q,w[1]),X,w[0])*dx)),g2=_trigcos(g,CTX);
+  if (taille(g2,200)<taille(g,200)) g=g2; // sin^2 + cos^2 = 1
   if (dep(g)) return undef;
   size_t m=mark();
   S(R_TSUB,t,w[0],dx);
   S(R_TSUBR,SYM2(at_pow,q,gen(1)/2),w[1]);
   S(R_TSUBEQ,f,g,t);
-  gen G=in_var(g,t,lev);
+  gen G=in_var(g,t,w[4],lev);
   if (is_undef(G)){ cut(m); return G; }
   { gen * old=var_; var_=&t; S(R_TRI,w[2],w[3]); var_=old; } // sin(2t) = 2 sin t cos t...
-  gen F=rn(ev(sub(sub(sub(sc(_texpand(G,CTX)),symb_sin(t),w[2]),symb_cos(t),w[3]),t,w[4])));
+  // sec t, tan t... straight from the triangle: (x sqrt(x^2+1)+ln(x+sqrt(x^2+1)))/2, not one fraction
+  gen F=ev(sub(sub(sub(sub(_texpand(G,CTX),symb_tan(t),rn(w[2]/w[3])),symb_sin(t),w[2]),symb_cos(t),w[3]),t,w[4])),F2=rn(F);
+  if (taille(F2,200)<taille(F,200)) F=F2;
   S(R_EQI,f,F);
   return F;
 }
 
+// (a+b)/c split in fractions, unless a+b is c's derivative (times a constant): (2x+2)/sqrt(x^2+2x+5)
+static NOINL bool splits(const gen & fe){
+  gen n=_numer(fe,CTX),d=_denom(fe,CTX);
+  if (!n.is_plus() || d.is_plus() || !dep(d)) return false;
+  if (d.is_pow()) d=arg(d,0);
+  return dep(rn(n/D(d,X)));
+}
+static gen absarg(const gen & f);
 static gen isteps(const gen & f0,int lev){
-  if (lev>7 || --budget_<0 || ctrl_c || interrupted) return undef;
+  if (lev>maxlev_){ cutlev_=true; return undef; }
+  if (--budget_<0 || ctrl_c || interrupted) return undef;
   gen f=norm(f0),F;
 #ifdef HOSTGIAC
   if (getenv("STEPDBG")) fprintf(stderr,"%*sisteps %d budget %d in %s: %s\n",2*lev,"",lev,budget_,X.print(CTX).c_str(),f.print(CTX).c_str());
 #endif
+  if (lo_){ // |g| keeping its sign on the interval: g or -g (else no steps)
+    gen g=absarg(f);
+    if (!is_zero(g)){
+      int s=sampled(g,17);
+      if (!s) return undef;
+      bool ab=absi_;
+      absi_=true;
+      F=via(R_ABSI,f,sub(f,symb_abs(g),s>0?g:-g),lev);
+      if (is_undef(F)) absi_=ab;
+      return F;
+    }
+  }
   if (!dep(f)){ F=f*X; S(R_CONSTANT,f,F); return F; }
   if (f.is_plus() && arg(f).type==_VECT){ // term by term
     const vecteur & v=*arg(f)._VECTptr;
@@ -847,7 +938,7 @@ static gen isteps(const gen & f0,int lev){
   if (basic(fe,F,r)){ S(r,f,F); return F; }
   if (even_trig(fe) && !is_undef(F=trigid(f,lev))) return F;
   if (powers_only(fe) && !is_undef(F=expandit(fe,lev))) return F;
-  if (_numer(fe,CTX).is_plus() && !_denom(fe,CTX).is_plus() && dep(_denom(fe,CTX)) && !is_undef(F=expandit(fe,lev))) return F; // (a+b)/c
+  if (splits(fe) && !is_undef(F=expandit(fe,lev))) return F;
   if (!is_undef(F=usub(f,lev))) return F;
   if (!is_undef(F=ratfrac(fe,lev))) return F;
   if (!is_undef(F=splitnum(fe,lev))) return F;
@@ -855,7 +946,6 @@ static gen isteps(const gen & f0,int lev){
   if (!is_undef(F=parts(f,lev))) return F;
   if (!is_undef(F=trigid(f,lev))) return F;
   if (!is_undef(F=square(fe,lev))) return F;
-  if (!is_undef(F=trigsub(f,lev))) return F;
   if (!is_undef(F=expandit(fe,lev))) return F;
   if (!is_undef(F=trigfrac(f,lev))) return F;
   return simp(fe,lev);
@@ -880,6 +970,24 @@ static bool elementary(const gen & G){
   std::string s=G.print(CTX);
   for (int i=0;special[i];++i) if (strstr(s.c_str(),special[i])) return false;
   return true;
+}
+// sqrt(p^2 r) = |p| sqrt(r) for the first square root of f with a square in its radicand, factored
+// with cos^2 = 1 - sin^2, or sin^2 = 1 - cos^2, or as it is (f itself if none)
+static NOINL gen sqout(const gen & f){
+  gen q=radicand(f);
+  if (is_zero(q)) return f;
+  for (int k=0;k<3;++k){
+    gen q2=_factor(k==2?q:k?_trigcos(q,CTX):_trigsin(q,CTX),CTX),out=1,in=1;
+    vecteur c,v; factors(q2,c,v);
+    for (unsigned i=0;i<v.size();++i){
+      gen b=v[i]; int e=1;
+      if (b.is_pow() && arg(b,1).type==_INT_){ e=arg(b,1).val; b=arg(b,0); }
+      if (e>=2) out=out*pow(symb_abs(b),e/2,CTX);
+      if (e%2) in=in*b;
+    }
+    if (out!=1) return ev(radsub(f,q,out*sqrt(ev(prodof(c)*in),CTX)));
+  }
+  return f;
 }
 static gen one(const gen & op);
 // integrate(f,x,a,b) with |g| in f: one integral per interval where g keeps its sign
@@ -925,16 +1033,37 @@ static gen one_(const gen & op){
     gen r=dsteps(v[0]);
     return !interrupted && same_num(ev(r),D(v[0],x),x)?r:gen(undef);
   }
-  budget_=150;
-  gen a,b;
-  if (v.size()==4){
+  gen a,b,F,f=v[0],lo,hi;
+  bool fin=v.size()==4;
+  size_t m0=mark();
+  if (fin){
     a=ev(v[2]); b=ev(v[3]);
-    gen g=absarg(v[0]);
-    if (!is_zero(g) && !is_inf(a) && !is_inf(b)) return absplit(op,g,a,b);
+    fin=!is_inf(a) && !is_inf(b);
+    gen g=absarg(f);
+    if (!is_zero(g) && fin) return absplit(op,g,a,b);
   }
-  gen F=isteps(v[0],0);
+  if (fin){ // the interval (|g| keeping its sign there is g or -g); a root hiding a square shows |g|
+    bool sw=is_strictly_greater(a,b,CTX); lo=sw?b:a; hi=sw?a:b; lo_=&lo; hi_=&hi;
+    gen fe=ev(f);
+    gen f2=sqout(fe);
+    if (f2==fe && !is_zero(radicand(fe)) && !oddroot(fe)){ // (x^(1/3): rootof)
+      f2=_simplify(fe,CTX);
+      if (!has_op(f2,*at_abs) || has_op(f2,*at_rootof) || taille(f2,200)>taille(fe,200)) f2=fe;
+    }
+    if (f2!=fe){ S(R_SIMP,v[0],f2); f=f2; }
+  }
+  // the short solutions first: the methods are tried a few levels deep, then deeper
+  size_t m=mark();
+  for (maxlev_=3;maxlev_<9;maxlev_+=2){
+    budget_=150; nsub_=0; cutlev_=false;
+    F=isteps(f,0);
+    if (!is_undef(F) || interrupted || !cutlev_) break; // (nothing deeper to find)
+    cut(m);
+  }
   if (interrupted) return undef; // (ON, or too long: giac's state after an interruption is fragile)
-  if (is_undef(F) || !same_num(D(F,x),ev(v[0]),x)){
+  // F checked inside [a,b] too; only there if |g| was written g there
+  if (is_undef(F) || !same_num(D(F,x),ev(v[0]),x,fin?&a:0,fin?&b:0,absi_)){
+    cut(m0);
     if (v.size()!=4 || elementary(_integrate(makesequence(v[0],x),CTX))) return undef;
     gen val=evalf(op,1,CTX); // no elementary antiderivative: the decimal value
     S(R_NOELEM,op,val);
@@ -955,7 +1084,13 @@ static gen one_(const gen & op){
   S(R_EQV,op,val);
   return val;
 }
-static gen one(const gen & op){ gen * old=var_; gen r=one_(op); var_=old; return r; }
+static gen one(const gen & op){
+  gen * old=var_, * ol=lo_, * oh=hi_; bool ab=absi_;
+  lo_=hi_=0; absi_=false;
+  gen r=one_(op);
+  var_=old; lo_=ol; hi_=oh; absi_=ab;
+  return r;
+}
 
 // diff(f,x,2) and diff(f,x,y) as nested derivatives
 static gen nest(const gen & g){
