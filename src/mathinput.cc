@@ -535,12 +535,16 @@ static void cons(int n, int x, int y, int sm) {
   switch (k) {
   case K_FRAC: { // bar at the axis, parts centered, gaps g (classic: 1 px bar, 2 px gaps)
     int g = GAP, b = BAR;
-    if (sm && M->wf) { // proportional fonts: a fraction in an exponent is inline, a/b
-      int sw = lw("/", 1, sm);
-      sl(0, 0, 0, sm);
-      dtext("/", 1, sm, A.w, 0);
-      sl(1, A.w + sw, 0, sm);
-      cw = A.w + sw + B.w;
+    if (sm && M->wf) { // proportional fonts: a fraction in an exponent is inline, a/b; a sum in
+      const int sw = lw("/", 1, sm), q = lw("(", 1, sm), pa = needp(sn[0]) ? q : 0, pb = needp(sn[1]) ? q : 0;
+      if (pa) { dtext("(", 1, sm, 0, 0); dtext(")", 1, sm, pa + A.w, 0); } // parentheses: 1/(N+1), not 1/N+1
+      sl(0, pa, 0, sm);
+      t = 2 * pa + A.w;
+      dtext("/", 1, sm, t, 0);
+      t += sw;
+      if (pb) { dtext("(", 1, sm, t, 0); dtext(")", 1, sm, t + pb + B.w, 0); }
+      sl(1, t + pb, 0, sm);
+      cw = t + 2 * pb + B.w;
       break;
     }
     cw = mx(A.w, B.w) + 2 * g;
@@ -553,6 +557,11 @@ static void cons(int n, int x, int y, int sm) {
     int eg = M->wf ? mx(1, a / 10) : 0; // proportional fonts: a hair between base and exponent
     if (b) { if (gm == GM_MEASURE) { by0 = mn(by0, -ba); by1 = mx(by1, T[b].ds); } }
     else dtext("e", 1, sm, 0, 0);
+    if (!b && (M->flags & MI_F_IMPLDOT) && T[sn[0]].b == T[sn[0]].a + 1 && ch(T[sn[0]].a) == '1') { // a result's e^1: e
+      if (gm != GM_MEASURE) sl(0, -30000, 0, 1);
+      cw = bw;
+      break;
+    }
     sl(0, bw + eg, -(ba * 45 / 100) - A.ds, 1);
     cw = bw + eg + A.w;
   } break;

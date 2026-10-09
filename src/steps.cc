@@ -89,7 +89,7 @@ static const char * const RULES[]={
   "Factor out the fastest term",0,"A=B",
   "Derivatives",0,"A=B",
   "Their values at the center",0,"A=B",
-  "Taylor series","f(x)=sum(f^(k)(a)/k!*(x-a)^k,k,0,n)","A=B",
+  "Taylor polynomial","T(x)=sum(f^(k)(a)/k!*(x-a)^k,k,0,n)","A=B",
   "Divergence test: the terms do not go to 0, the series diverges",0,"A=B",
   "Ratio of consecutive terms",0,"A=B",
   "Geometric series with |r| < 1","sum(a*r^k,k,0,inf)=a/(1-r)","A=B",
@@ -1352,6 +1352,18 @@ static NOINL gen sides(const gen & f){
   S(R_LDNE,symb_equal(L,l),symb_equal(R,r));
   return gen(identificateur("DNE"));
 }
+// at +infinity, sqrt(q)/x^k in the terms of g as sqrt(q/x^(2k)): sqrt(1+1/x^2), not sqrt(x^2+1)/x
+static NOINL gen rootin(const gen & g){
+  if (*la_!=plus_inf) return g;
+  vecteur t; flat(at_plus,g,t);
+  EACHW(it,t){
+    vecteur c,w; factors(*it,c,w);
+    gen q=0,k=0;
+    EACH(jt,w){ gen b=*jt,e=bexp(b); if (b==X && is_strictly_positive(-e,CTX)) k=-e; else if (e==gen(1)/2) q=b; }
+    if (!is_zero(q) && !is_zero(k)) *it=symb_prod(prodof(c),symb_pow(expand(ev(q/pow(X,2*k,CTX)),CTX),gen(1)/2));
+  }
+  return t.size()==1?t[0]:symb_plus(t);
+}
 static gen lq(const gen & f,const gen & n,const gen & d,int lev){
   if (lev>12 || --budget_<0 || interrupted) return undef;
   gen ln=glim(n),ld=glim(d),a=*la_,v;
@@ -1366,14 +1378,23 @@ static gen lq(const gen & f,const gen & n,const gen & d,int lev){
   // 0/0, inf/inf: the fraction simplified (factor and cancel), defined at a (at infinity: shorter)
   gen fe=ev(f),h=rn(fe);
   if (h!=fe && (is_inf(a)?taille(h,200)<taille(fe,200):finv(ev(sub(h,X,a)))) && !is_undef(v=lvia(R_LALG,f,h,1,lev))) return v;
-  // a square root in a sum: times its conjugate over itself
-  gen c=conjof(n);
+  // a finite point: a square root in a sum, times its conjugate over itself
+  gen c=is_inf(a)?gen(0):conjof(n);
   const bool top=!is_zero(c);
-  if (!top) c=conjof(d);
+  if (!top && !is_inf(a)) c=conjof(d);
   if (!is_zero(c) && !is_undef(v=lvia(R_LCONJ,f,top?rn(expand(ev(n*c),CTX)):symb_prod(n,c),top?symb_prod(d,c):rn(expand(ev(d*c),CTX)),lev))) return v;
-  // at infinity, numerator and denominator over the fastest term below
-  gen t=is_inf(a) && d.is_plus()?fastest(d):gen(0);
-  if (!is_zero(t) && !is_undef(v=lvia(R_LDIV,f,expand(ev(n/t),CTX),expand(ev(d/t),CTX),lev))) return v;
+  // at infinity, numerator and denominator over the highest power of x below, x^p, p its growth
+  // (x/sqrt(x^2+1): 1/sqrt(1+1/x^2); L'Hopital went around in circles)
+  gen p=is_inf(a)?glim(rn(ev(symb_ln(abs(d,CTX))/symb_ln(abs(X,CTX))))):gen(0);
+  if (finv(p) && is_strictly_positive(p,CTX)){
+    gen t=pow(X,p,CTX),n2=rootin(expand(ev(n/t),CTX)),d2=rootin(expand(ev(d/t),CTX));
+    // (over a denominator x^p itself: only when the numerator comes apart, (x+cos(x))/x; e^x/x stays)
+    if ((!is_one(d2) || n2.is_plus()) && !is_undef(v=lvia(R_LDIV,f,n2,d2,lev))) return v;
+  }
+  else if (is_inf(a) && d.is_plus()){ // no power of x (e^x below): over its fastest term
+    gen t=fastest(d);
+    if (!is_zero(t) && !is_undef(v=lvia(R_LDIV,f,expand(ev(n/t),CTX),expand(ev(d/t),CTX),lev))) return v;
+  }
   return lev<8?lvia(R_LHOP,f,D(n,X),D(d,X),lev):gen(undef); // (L'Hopital a few times at most)
 }
 static gen lsteps(const gen & f0,int lev){
@@ -1421,7 +1442,7 @@ static gen lsteps(const gen & f0,int lev){
     EACH(it,t){ gen l=glim(*it); if (l==plus_inf) pi=true; else if (l==minus_inf) mi=true; else if (!finv(l)) pi=mi=true; }
     if (pi && mi){ // infinity - infinity (or a term without a limit, csc(x)-1/x at 0): the
       gen c=conjof(f),h=rn(f),d=_denom(h,CTX); // conjugate, one fraction, the fastest term out
-      if (!is_zero(c) && !is_undef(v=lvia(R_LCONJ,f,rn(ev(f*c)),c,lev))) return v;
+      if (!is_zero(c) && !is_undef(v=lvia(R_LCONJ,f,rn(expand(ev(f*c),CTX)),c,lev))) return v;
       if (dep(d) && !is_undef(v=lvia(R_LFRAC,f,_numer(h,CTX),d,lev))) return v;
       gen tt=is_inf(a)?fastest(f):gen(0);
       return is_zero(tt)?gen(undef):lvia(R_LDOM,f,symb_prod(tt,expand(ev(f/tt),CTX)),1,lev);
@@ -1476,7 +1497,7 @@ static NOINL gen ssteps(const gen & op,const vecteur & v,const gen & x){
   const gen a=ev(v[2]),t=ev(v[0]),N=word(x==word("N")?"M":"N"),G=ev(op);
   gen L=ev(Linf(t,x)),val,SN;
   if (!is_zero(L) && (finv(L) || is_inf(L) || has_op(L,*at_bounded_function))){ // the terms do not go to 0
-    S(R_SDIV,Linf(v[0],x),L);
+    S(R_SDIV,Linf(v[0],x),has_op(L,*at_bounded_function)?word("DNE"):L); // (no raw bounded_function)
     return undone(G)?word("diverges"):gen(undef);
   }
   if (t.is_plus() && arg(t).type==_VECT && arg(t)._VECTptr->size()==2){ // f(n)-f(n+1): telescoping
@@ -1542,8 +1563,8 @@ static NOINL gen tsteps(const gen & op,const vecteur & v,const gen & x){
     S(k>1?R_EQV:R_TDER,Dx(ds.back()),d); ds.push_back(d);
   }
   for (int k=0;k<=n && !interrupted;++k){ // f(a) + f'(a) (x-a) + f''(a)/2! (x-a)^2 ...
-    gen c=ev(sub(ds[k],x,a));
-    S(k?R_EQV:R_TVAL,subst(ds[k],x,a,true,CTX),c);
+    gen c=ev(sub(ds[k],x,a)),q=subst(ds[k],x,a,true,CTX);
+    if (!k || q!=c) S(k?R_EQV:R_TVAL,q,c); // (e^x at 1: no line "e = e")
     if (is_zero(c)) continue;
     qs.push_back(k?symb_prod(k>1?symb_prod(c,symb_inv(SYM(at_factorial,k))):c,k>1?symb_pow(h,k):h):c);
     P=P+c/factorial(k)*pow(h,k,CTX);
