@@ -501,6 +501,28 @@ static NOINL bool quadform(const gen & f,gen & F,int & r){
 }
 
 // a basic integral: power, 1/x, a^x, the table, the quadratic formulas
+// the argument of g's first function of x (the exponent of a^(...)), 0 if none
+static NOINL gen firstarg(const gen & g){
+  if (g.type!=_SYMB) return 0;
+  const gen & a=arg(g);
+  if (g.is_pow() && !dep(arg(g,0))) return arg(g,1);
+  if (a.type==_VECT){ for (unsigned i=0;i<a._VECTptr->size();++i){ gen w=firstarg((*a._VECTptr)[i]); if (!is_zero(w)) return w; } return 0; }
+  if (g.is_inv() || g.is_neg()) return firstarg(a);
+  return dep(a)?a:gen(0);
+}
+static bool basic(const gen & f,gen & F,int & r);
+// h(a x+b) with h(x) a basic integral: H(a x+b)/a, in one step (no written u = 4x)
+static NOINL bool linin(const gen & f,gen & F,int & r){
+  gen w=firstarg(f),a,b,t(identificateur(" l"));
+  if (is_zero(w) || w==X || !is_linear_wrt(w,X,a,b,CTX)) return false;
+  gen h=sub(f,w,t),H;
+  if (dep(h)) return false; // x outside a x+b
+  gen * old=var_; var_=&t;
+  bool ok=basic(h,H,r);
+  var_=old;
+  if (ok){ F=ev(sub(H,t,w)/a); r=R_TABLE; }
+  return ok;
+}
 static bool basic(const gen & f,gen & F,int & r){
   if (f==X){ F=symb_pow(X,2)/2; r=R_POWI; return true; }
   if (f.type!=_SYMB) return false;
@@ -508,7 +530,7 @@ static bool basic(const gen & f,gen & F,int & r){
   if (f.is_pow() && !dep(arg(f,0)) && arg(f,1)==X){ F=f/ln(arg(f,0),CTX); r=R_TABLE; return true; }
   if (quadform(f,F,r)) return true;
   r=R_TABLE;
-  return taille(f,40)<=32 && table(f,F);
+  return taille(f,40)<=32 && (table(f,F) || linin(f,F,r));
 }
 
 static gen sc(const gen & g){ return rn(tan2sincos(g,CTX)); } // tan, sec... in sin and cos
