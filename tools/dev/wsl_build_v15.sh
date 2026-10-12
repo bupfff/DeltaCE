@@ -1,5 +1,5 @@
 #!/bin/bash
-# WSL side of tools/dev/build.sh for the CE toolchain v15 variants (en-v15, en-steps-v15), called by
+# WSL side of tools/dev/build.sh for the CE toolchain v15 variants (en-v15, en-steps-v15, en-units-v15), called by
 # wsl_build.sh. Args: <windows-repo-path-in-wsl> <variant> <repo-commit> <giac-commit>
 # Toolchain: $CEDEV15 (default /home/bell/cedev15/x/CEdev); own source tree $KB/src15, so the v14.2
 # objects are not mixed in. The app is linked twice with GNU ld (the toolchain's application linker
@@ -26,6 +26,7 @@ cd "$SRC"
 case "$VARIANT" in
   en-v15) ARGS="APPLANG=en" ;;
   en-steps-v15) ARGS="APPLANG=en STEPS=1" ;;
+  en-units-v15) ARGS="APPLANG=en UNITS=1" ;;
   *) echo "unknown variant $VARIANT"; exit 2 ;;
 esac
 if [ "$(cat obj/.variant 2>/dev/null)" != "$VARIANT" ]; then rm -rf obj bin; mkdir -p obj; echo "$VARIANT" > obj/.variant; fi
