@@ -3183,30 +3183,38 @@ void answer_set_simplify(bool on){
   giac::_autosimplify(giac::gen(on?1:0),contextptr); // giac's default (regroup), or none
   answer_simplify_on=on;
 }
-// k in the exponent of something without k (the ratio test: |x^(2k+2)/x^(2k)|, (-1)^(k+1)/(-1)^k)
-static bool expo(const giac::gen & g,const giac::gen & k){
+// where k is in the exponent of something without k (the ratio test: |x^(2k+2)/x^(2k)|,
+// (-1)^(k+1)/(-1)^k): 1 in a numerator, 2 in a denominator (of a/b as typed, or of inv()), 3 both
+static int expo(const giac::gen & g,const giac::gen & k,bool den){
   using namespace giac;
   if (g.type!=_SYMB)
-    return false;
+    return 0;
   const gen & a=g._SYMBptr->feuille;
+  if (g.is_symb_of_sommet(at_inv))
+    return expo(a,k,!den);
+  if (g.is_symb_of_sommet(at_division) && a.type==_VECT && a._VECTptr->size()==2)
+    return expo(a[0],k,den)|expo(a[1],k,!den);
   if (g.is_symb_of_sommet(at_pow) && a.type==_VECT && a._VECTptr->size()==2 && free_of(a[0],k) && !free_of(a[1],k))
-    return true;
+    return den?2:1;
   if (a.type!=_VECT)
-    return expo(a,k);
-  for (const_iterateur it=a._VECTptr->begin();it!=a._VECTptr->end();++it)
-    if (expo(*it,k))
-      return true;
-  return false;
+    return expo(a,k,den);
+  int r=0;
+  for (const_iterateur it=a._VECTptr->begin();it!=a._VECTptr->end() && r!=3;++it)
+    r|=expo(*it,k,den);
+  return r;
 }
 // the limit of such a ratio simplified first, as students do: giac's limit was undef for the
-// course's radius problems, lim |x^(2k+2)/sqrt(k+1) / (x^(2k)/sqrt(k))| is x^2 (the steps too)
+// course's radius problems, lim |x^(2k+2)/sqrt(k+1) / (x^(2k)/sqrt(k))| is x^2 (the steps too).
+// Only a ratio of such powers (the ratio test's a(k+1)/a(k)): with k in the exponents of one side
+// only, simplify and factor gain nothing and took seconds on the calculator (lim (3^x-2^x)/x at 0:
+// 1.6 -> 4.7 s, lim (3^x+2^x)^(1/x) at infinity 12.7 -> 15.5 s)
 __attribute__((noinline)) giac::gen limit_simp(const giac::gen & g){ // (one copy: the steps call it too)
   using namespace giac;
   if (!g.is_symb_of_sommet(at_limit) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()<3)
     return g;
   vecteur v=*g._SYMBptr->feuille._VECTptr;
   const gen f=v[0];
-  if (v[1].type!=_IDNT || !expo(f,v[1]))
+  if (v[1].type!=_IDNT || expo(f,v[1],false)!=3)
     return g;
   const bool ab=f.is_symb_of_sommet(at_abs);
   // evaluated first: simplify of the parsed tree turned (x-2)^(k+1)/(x-2)^k into -x-2
