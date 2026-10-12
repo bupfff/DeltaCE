@@ -458,16 +458,19 @@ const char * select_var(){
     return dichotomic_search(python_builtins,sizeof(python_builtins)/sizeof(char*),s)!=-1;
   }
 
-// Out of memory (allocator_custom.c): giac is asked to stop, as if ON was pressed, and unwinds.
+// Out of memory (allocator_custom.c): giac is asked to stop, as if ON was pressed, and unwinds;
+// oom_stop also stops its expansion and simplification loops at once (they would go on and run
+// out of memory again)
 extern "C" {
   extern void * oom_reserve;
   extern volatile char oom_hit, oom_soft;
-  void oom_interrupt(){ giac::ctrl_c=giac::interrupted=true; }
+  void oom_interrupt(){ giac::ctrl_c=giac::interrupted=giac::oom_stop=true; }
 }
 // the reserve given back when memory runs out (8 KB, OOM_RESERVE): taken again after each
 // evaluation while memory allows
 void oom_rearm(){ // (focus_steps.cc too)
   oom_hit=0;
+  giac::oom_stop=false;
   if (!oom_reserve){
     oom_soft=1;
     oom_reserve=malloc(8192);
