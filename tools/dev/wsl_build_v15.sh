@@ -43,6 +43,8 @@ link() { # <load address>
 }
 : > "$LOG/build_$VARIANT.log"
 link 0
+# v15's frame bias miscompiles functions with variable-length arrays: refuse such a build
+python3 tools/dev/v15_biascheck.py obj/lto.s || { echo "[build] REFUSED (tools/dev/v15_biascheck.py)"; exit 1; }
 LA=$(python3 app_tools/pack_app.py size bin/body.bin)
 n1=$(stat -c %s bin/body.bin)
 link "$LA"

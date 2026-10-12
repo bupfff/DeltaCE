@@ -266,7 +266,8 @@ const char * select_var(){
   if (g.type!=giac::_VECT)
     return "";
   giac::vecteur & v=*g._VECTptr;
-  MenuItem smallmenuitems[v.size()+4];
+  vector<MenuItem> smallmenuitems_v(v.size()+4); // (no variable-length array: the CE toolchain v15 frame bias miscompiles them)
+  MenuItem * smallmenuitems=&smallmenuitems_v.front();
   vector<std::string> vs(v.size()+1);
   int i,total=0;
   constexpr const char typ[]="idzDcpiveSfEsFRmuMwgPF";

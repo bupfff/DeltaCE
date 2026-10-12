@@ -1107,7 +1107,8 @@ int doCatalogMenu(char* insertText, const char* title, int category,const char *
     bool isall=category==CAT_CATEGORY_ALL;
     bool isopt=false;//category==CAT_CATEGORY_OPTIONS;
     int nitems = isall? allcmds:(CAT_COMPLETE_COUNT);//CAT_COMPLETE_COUNT;
-    MenuItem menuitems[nitems];
+    vector<MenuItem> menuitems_v(nitems); // (no variable-length array: the CE toolchain v15 frame bias miscompiles them)
+    MenuItem * menuitems=&menuitems_v.front();
     int cur = 0,curmi = 0,i=0,menusel=-1,cmdl=cmdname?strlen(cmdname):0;
     while(cur<nitems) {
       if (!isall && menusel<0 && cmdname && !strncmp(cmdname,completeCat[cur].name,cmdl))
