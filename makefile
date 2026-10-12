@@ -64,10 +64,16 @@ CXXFLAGS = -std=c++14 -fno-rtti -fno-threadsafe-statics -Wall -Wextra -Oz -Iustl
 LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -inline-threshold=-10
 
 # CE toolchain v15 (clang 19, GNU as/ld; tools/dev/wsl_build.sh *-v15): src/toolchain_compat.h first
-# in every C++ file (giac's #define std ustl and v15's headers)
+# in every C++ file (giac's #define std ustl and v15's headers). At the LTO step, the frame pointer
+# bias, new in v15: in a function with a big frame, ix points inside it rather than at its top,
+# so more locals are reached with a one-byte offset (ix-129 and beyond take several instructions):
+# giac's big functions shrink by 10%. With it, an inline threshold of -20 (v14.2's -10 was best
+# there). The app: 2,485,287 B, 8.4% less than with v14.2 (2,712,385 B); v15 with v14.2's flags
+# is 2.6% bigger.
 CEDEV_MAJOR := $(firstword $(subst ., ,$(patsubst v%,%,$(shell cedev-config --version 2>/dev/null))))
 ifeq ($(shell [ "0$(CEDEV_MAJOR)" -ge 15 ] && echo y),y)
 CXXFLAGS += -include src/toolchain_compat.h
+LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -inline-threshold=-20 -mllvm -z80-frame-bias-policy=auto
 endif
 
 # giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB
