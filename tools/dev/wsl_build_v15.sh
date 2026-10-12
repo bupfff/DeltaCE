@@ -36,7 +36,7 @@ LDX="--defsym=___heapbot=___heap_low --defsym=___heaptop=___heap_high"
 t0=$(date +%s)
 link() { # <load address>
   rm -f bin/DEMO.obj
-  make -j"$(nproc)" $ARGS APPLICATION=YES EXTRA_LDFLAGS="$LDX" OUTPUT_MAP=YES LOAD_ADDR="$1" bin/DEMO.obj >> "$LOG/build_$VARIANT.log" 2>&1 \
+  make -j"$(nproc)" $ARGS APPLICATION=YES EXTRA_LDFLAGS="$LDX" OUTPUT_MAP=YES STRIP_CMD=: LOAD_ADDR="$1" bin/DEMO.obj >> "$LOG/build_$VARIANT.log" 2>&1 \
     || { echo "[build] FAILED - last errors:"; grep -E "error|undefined" "$LOG/build_$VARIANT.log" | head -20; exit 1; }
   "$BU/z80-none-elf-objcopy" -O binary bin/DEMO.obj bin/body.bin
 }
