@@ -63,6 +63,13 @@ CXXFLAGS = -std=c++14 -fno-rtti -fno-threadsafe-statics -Wall -Wextra -Oz -Iustl
 # evalf...) stays a call, smaller than its copies on the eZ80: 33 KB less
 LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -inline-threshold=-10
 
+# CE toolchain v15 (clang 19, GNU as/ld; tools/dev/wsl_build.sh *-v15): src/toolchain_compat.h first
+# in every C++ file (giac's #define std ustl and v15's headers)
+CEDEV_MAJOR := $(firstword $(subst ., ,$(patsubst v%,%,$(shell cedev-config --version 2>/dev/null))))
+ifeq ($(shell [ "0$(CEDEV_MAJOR)" -ge 15 ] && echo y),y)
+CXXFLAGS += -include src/toolchain_compat.h
+endif
+
 # giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB
 # less; FlowCE's own files keep the default inlining
 INLFILE = -mllvm -inline-threshold=-10

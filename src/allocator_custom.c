@@ -334,3 +334,11 @@ void* _custom_realloc(void* ptr, const size_t size)
 
     return p;
 }
+
+#if __clang_major__ >= 19
+// CE toolchain v15: with ALLOCATOR = CUSTOM the program provides malloc, free and realloc (v14.2's
+// libc mapped them to _custom_malloc... itself, lib/libc/allocator.src)
+void* malloc(size_t) __attribute__((alias("_custom_malloc")));
+void free(void*) __attribute__((alias("_custom_free")));
+void* realloc(void*, size_t) __attribute__((alias("_custom_realloc")));
+#endif

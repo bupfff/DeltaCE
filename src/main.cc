@@ -1380,12 +1380,16 @@ void stop(const char * s)
 {
   python_free();
 #if KHICAS_STACK
+#if __clang_major__ >= 19 // CE toolchain v15: GNU as
+  asm("ld  sp, (0xD19888)");
+#else
   asm("assume	adl = 1\n\t"
     "ld  sp, ($D19888)\n\t"
     : /* output */
     : /* input */
     : /* clobbered registers */
   );
+#endif
 #endif
   lcd_Control = 0b100100101101; // TI-OS default
   exit(1);
@@ -1516,6 +1520,10 @@ int main(){
   if (pcmain<appstart || pcmain>=0x3b0000)
     return 1;
 #if KHICAS_STACK
+#if __clang_major__ >= 19 // CE toolchain v15: GNU as
+  asm("ld  (0xD19888), sp\n\t"
+      "ld  sp, 0xD2A800");
+#else
   asm("assume	adl = 1\n\t"
       "ld  ($D19888), sp\n\t"
       "ld  sp, $D2a800\n\t"
@@ -1523,6 +1531,7 @@ int main(){
       :  /* input */
       : /* clobbered registers */
     );
+#endif
 #endif
   sdk_init();
   mp_stack_ctrl_init();
@@ -1551,12 +1560,16 @@ int main(){
   python_free();
   sdk_end();
 #if KHICAS_STACK
+#if __clang_major__ >= 19 // CE toolchain v15: GNU as
+  asm("ld  sp, (0xD19888)");
+#else
   asm("assume	adl = 1\n\t"
       "ld  sp, ($D19888)\n\t"
       :        /* output */
       :  /* input */
       : /* clobbered registers */
     );
+#endif
 #endif
   return 0;
 }
