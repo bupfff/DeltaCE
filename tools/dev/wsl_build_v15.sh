@@ -53,8 +53,11 @@ python3 app_tools/pack_app.py pack bin/body.bin "$ENTRY" "$LA" bin/_DEMO.bin > /
 rm -f bin/AppIns*.8xv bin/AppIns*.bin
 python3 app_tools/make_segments.py bin/_DEMO.bin bin >/dev/null || { echo "[build] make_segments failed"; exit 1; }
 rm -f "$OUT"/AppIns*.8xv
-# the emulator tools read a map in the fasmg format: name = address
+# the emulator tools read a map in the fasmg format: name = address. v15 aligns short on 2 bytes
+# (v14.2: 1), so the console's struct line (console.h) takes 14 bytes, not 13: told to the tools
+# (tools/emu/cemu.py line_record) as a pseudo-symbol
 "$BU/z80-none-elf-nm" bin/DEMO.obj | awk 'NF==3 {printf "%s = %06X\n", $3, strtonum("0x" $1)}' > bin/DEMO.map
+echo "__flowce_line_size = 00000E" >> bin/DEMO.map
 cp bin/AppIns*.8xv bin/_DEMO.bin bin/DEMO.map "$OUT"/
 echo "$SUPER $GIAC" > "$OUT/SNAPSHOT"
 size=$(stat -c %s bin/_DEMO.bin)

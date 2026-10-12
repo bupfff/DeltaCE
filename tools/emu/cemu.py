@@ -64,6 +64,14 @@ def map_symbol(name, variant='en', mapfile=None):
     return None
 
 
+def line_record(mapfile=None, variant='en'):
+    """(size, offset of start_col) of the console's struct line (console.h: str, readonly, type,
+    start_col, disp_len). The CE toolchain v15 aligns short on 2 bytes: 14 B, start_col at 8 (its
+    builds' maps carry __flowce_line_size, tools/dev/wsl_build_v15.sh); v14.2 packs it: 13 B, 7."""
+    n = map_symbol('__flowce_line_size', variant, mapfile) or 13
+    return n, 7 + (n - 13)
+
+
 class Emu:
     def __init__(self, image=None, rom=None, shotdir='/tmp', verbose=False):
         args = [HEADLESS] + (['--image', image] if image else ['--rom', rom or ROM])
@@ -217,11 +225,12 @@ class Emu:
         p24 = lambda v: bytes([v & 255, v >> 8 & 255, v >> 16 & 255])
         b = text.replace('π', 'pi').encode('utf-8')        # the pi key types pi
         self.poke(u24(self.peek(el, 3)), b + bytes(1))
-        rec = u24(self.peek(ln, 3)) + 13 * u24(self.peek(ll, 3))  # struct line: str, readonly, type, start_col, disp_len
+        size, col = line_record(self.mapfile)                    # struct line: str, readonly, type, start_col, disp_len
+        rec = u24(self.peek(ln, 3)) + size * u24(self.peek(ll, 3))
         n = len(b)
         sc = max(0, n - 38)                                      # COL_DISP_MAX - 1
-        self.poke(rec + 7, p24(sc))
-        self.poke(rec + 10, p24(n))
+        self.poke(rec + col, p24(sc))
+        self.poke(rec + col + 3, p24(n))
         self.poke(cur, p24(n - sc))                              # Cursor.x (Cursor.y: the edit line's row)
 
     # The ROM dump is from a friend's TI-84 Plus CE on OS 5.8.2.0029; the user's own calculator runs

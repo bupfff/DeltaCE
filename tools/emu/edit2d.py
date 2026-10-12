@@ -13,7 +13,7 @@ Env: GAP (ms after each key, default 250).
 """
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cemu import Emu, KB, CHARKEYS, map_symbol
+from cemu import Emu, KB, CHARKEYS, map_symbol, line_record
 
 
 def keyseq(text):
@@ -52,10 +52,11 @@ def edit_line(e, mapfile):
     cx, cy = s24(c, 0), s24(c, 3)
     start = s24(e.peek(sl, 3))
     lines = u24(e.peek(ln, 3))
-    rec = e.peek(lines + 13 * (start + cy), 13)  # struct line: str, readonly, type, start_col, disp_len
+    size, col = line_record(mapfile)              # struct line: str, readonly, type, start_col, disp_len
+    rec = e.peek(lines + size * (start + cy), size)
     if u24(rec, 0) != p:
         return text, None                         # the cursor is not on the edit line
-    return text, s24(rec, 7) + cx
+    return text, s24(rec, col) + cx
 
 
 def main():

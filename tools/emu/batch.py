@@ -20,7 +20,7 @@ stopped the calculator (HANG: no answer, keypad not polled after ON).
 """
 import os, re, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cemu import Emu, KB, map_symbol
+from cemu import Emu, KB, map_symbol, line_record
 
 args = sys.argv[1:]
 state, out, files = args.pop(0), args.pop(0), []
@@ -101,7 +101,7 @@ class Calc:
 
     def text(self, k):
         """the history line k's text"""
-        p, s = self.u24(self.u24(self.ln) + 13 * k), b''
+        p, s = self.u24(self.u24(self.ln) + line_record(self.e.mapfile)[0] * k), b''
         while p and len(s) < 8192:
             b = self.e.peek(p + len(s), 256)
             s += b
