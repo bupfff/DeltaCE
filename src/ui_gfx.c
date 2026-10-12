@@ -19,6 +19,7 @@ int ui_cx0 = 0, ui_cy0 = 0, ui_cx1 = UI_W, ui_cy1 = UI_H;
 static int band_y0 = 0, band_y1 = UI_H; // the rows drawing may touch
 static unsigned char * strip;
 static int strip_rows;
+static char band_busy, strip_given; // a band is being drawn; the strip went to a calculation
 
 void ui_clip(int x0, int y0, int x1, int y1) {
   ui_cx0 = x0 < 0 ? 0 : x0; ui_cy0 = y0 < band_y0 ? band_y0 : y0;
@@ -29,17 +30,28 @@ void ui_noclip(void) { ui_cx0 = 0; ui_cy0 = band_y0; ui_cx1 = UI_W; ui_cy1 = ban
 // The strip is allocated once, at its full size, and kept: freed and allocated again around
 // every repaint, it came back each time from fresh heap (small allocations took the freed space
 // in between), and a session of calculations ran the heap out (KhiCAS aborts then: the user's
-// crashes after a while, 2026-10-06).
+// crashes after a while, 2026-10-06). Its 20 KB are not lost to calculations, though: when the
+// heap runs out, the allocator takes it first (ui_strip_release), before the out-of-memory stop;
+// the screen is drawn directly until the calculation ends (ui_strip_rearm).
 enum { STRIP_ROWS = 64 };
 int ui_band_open(int maxrows) {
   (void)maxrows;
-  if (!strip)
+  if (!strip && !strip_given)
     for (int r = STRIP_ROWS; r >= 8 && !strip; r /= 2)
       if ((strip = (unsigned char *)malloc(UI_W * r))) strip_rows = r;
   return strip_rows;
 }
 void ui_band_close(void) {}
+int ui_strip_release(void) {
+  if (!strip || band_busy) return 0;
+  free(strip);
+  strip = 0; strip_rows = 0; strip_given = 1;
+  return 1;
+}
+void ui_strip_rearm(void) { strip_given = 0; }
+unsigned ui_strip_size(void) { return strip && !band_busy ? (unsigned)UI_W * strip_rows : 0; }
 void ui_band_begin(int y0, int y1) {
+  band_busy = 1;
   band_y0 = y0; band_y1 = y1;
   ui_fb = strip - y0 * UI_W; // screen row y lands at strip row y - y0
   ui_noclip();
@@ -49,6 +61,7 @@ void ui_band_end(void) {
   memcpy(FB + band_y0 * UI_W, strip, (band_y1 - band_y0) * UI_W);
   ui_fb = FB; band_y0 = 0; band_y1 = UI_H;
   ui_noclip();
+  band_busy = 0;
 }
 
 // Paper: the prototype's light theme

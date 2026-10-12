@@ -465,12 +465,14 @@ extern "C" {
   extern void * oom_reserve;
   extern volatile char oom_hit, oom_soft;
   void oom_interrupt(){ giac::ctrl_c=giac::interrupted=giac::oom_stop=true; }
+  void ui_strip_rearm(void); // ui_gfx.c
 }
 // the reserve given back when memory runs out (8 KB, OOM_RESERVE): taken again after each
 // evaluation while memory allows
 void oom_rearm(){ // (focus_steps.cc too)
   oom_hit=0;
   giac::oom_stop=false;
+  ui_strip_rearm(); // the screen strip, if a calculation took it: the next repaint takes it again
   if (!oom_reserve){
     oom_soft=1;
     oom_reserve=malloc(8192);

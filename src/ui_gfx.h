@@ -30,6 +30,11 @@ void ui_band_close(void);            // frees it
 void ui_band_begin(int y0, int y1);  // screen rows [y0, y1), at most the strip's rows
 void ui_band_load(void);             // starts the band from the screen's pixels (draw over them)
 void ui_band_end(void);              // copies the band to the screen
+// The strip is the first memory a calculation gets when the heap runs out (allocator_custom.c):
+int ui_strip_release(void);          // frees it unless a band is being drawn (1: done); the screen
+                                     // is then drawn directly until the next ui_strip_rearm
+void ui_strip_rearm(void);           // after the calculation: the next band takes it again
+unsigned ui_strip_size(void);        // its bytes while it can be released (the free memory shown)
 
 // theme colors
 // UC_DIM: the background as dimmed by ui_dim (for the edges of popovers drawn over the dimmed scene)

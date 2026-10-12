@@ -110,6 +110,9 @@ void* oom_reserve;
 volatile char oom_hit, oom_soft;
 void oom_interrupt(void);
 void _custom_free(void* ptr);
+// Before that, the screen strip (ui_gfx.c, 20 KB) is freed for the calculation, which goes on.
+int ui_strip_release(void);
+unsigned ui_strip_size(void);
 
 void* _custom_malloc(size_t alloc_size)
 {
@@ -118,9 +121,10 @@ void* _custom_malloc(size_t alloc_size)
     if (alloc_size == 0)
         return NULL;
 
-    // This allows callers to query how much free memory there is left
+    // This allows callers to query how much free memory there is left (with the screen strip,
+    // which a calculation gets when it needs it)
     if (alloc_size == MAGIC_SIZE_QUERY_FREEMEM)
-        return (void*)((heap_ptrend - heap_ptr) + (heap2_ptrend - heap2_ptr));
+        return (void*)((heap_ptrend - heap_ptr) + (heap2_ptrend - heap2_ptr) + ui_strip_size());
     if (alloc_size == MAGIC_SIZE_QUERY_FREEMEM - 1) { // the freed blocks (total, low 16 bits: largest / 2)
         size_t total = 0, big = 0;
         for (block_t* b = _alloc_base.ptr; b; b = b->ptr) { total += b->size; if (b->size > big) big = b->size; }
@@ -204,6 +208,8 @@ void* _custom_malloc(size_t alloc_size)
             (heap2_ptr + size < heap2_ptr) ||
             (heap2_ptr + size >= (uintptr_t)heap2_ptrend)
         ) {
+            if (ui_strip_release())
+                return _custom_malloc(alloc_size);
             if (oom_reserve && alloc_size <= OOM_RESERVE - 16) {
                 void* res = oom_reserve;
                 oom_reserve = NULL;
