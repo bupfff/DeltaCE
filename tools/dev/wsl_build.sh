@@ -3,6 +3,7 @@
 # Build tree, toolchain and outputs live outside the repo, in $KB (default /home/bell/khicas-review-build).
 set -uo pipefail
 WIN="$1"; VARIANT="$2"; SUPER="$3"; GIAC="$4"
+case "$VARIANT" in *-v15) exec bash "$(dirname "$0")/wsl_build_v15.sh" "$@" ;; esac  # CE toolchain v15
 KB="${KB:-/home/bell/khicas-review-build}"
 SRC="$KB/src"; OUT="$KB/out/$VARIANT"; LOG="$KB/logs"
 export PATH="$KB/CEdev/bin:$PATH"

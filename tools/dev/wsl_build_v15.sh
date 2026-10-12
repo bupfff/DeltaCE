@@ -1,0 +1,66 @@
+#!/bin/bash
+# WSL side of tools/dev/build.sh for the CE toolchain v15 variants (en-v15, en-steps-v15), called by
+# wsl_build.sh. Args: <windows-repo-path-in-wsl> <variant> <repo-commit> <giac-commit>
+# Toolchain: $CEDEV15 (default /home/bell/cedev15/x/CEdev); own source tree $KB/src15, so the v14.2
+# objects are not mixed in. The app is linked twice with GNU ld (the toolchain's application linker
+# script and crt0), the second time at its final flash address, then app_tools/pack_app.py adds
+# the headers INST expects and make_segments.py cuts the AppIns, as for v14.2.
+set -uo pipefail
+WIN="$1"; VARIANT="$2"; SUPER="$3"; GIAC="$4"
+KB="${KB:-/home/bell/khicas-review-build}"
+CEDEV15="${CEDEV15:-/home/bell/cedev15/x/CEdev}"
+SRC="$KB/src15"; OUT="$KB/out/$VARIANT"; LOG="$KB/logs"
+BU="$CEDEV15/binutils/bin"
+export PATH="$CEDEV15/bin:$PATH"
+mkdir -p "$OUT" "$LOG"
+G() { git -c safe.directory='*' "$@"; }
+
+if [ ! -d "$SRC/.git" ]; then G clone -q "$WIN" "$SRC"; fi
+G -C "$SRC" fetch -q "$WIN" +refs/devbuild/snapshot:refs/devbuild/snapshot || exit 1
+G -C "$SRC" checkout -qf "$SUPER" || exit 1
+if [ ! -e "$SRC/src/giac/.git" ]; then G -C "$SRC" -c protocol.file.allow=always submodule update -q --init; fi
+G -C "$SRC/src/giac" fetch -q "$WIN/.git/modules/src/giac" +refs/devbuild/snapshot:refs/devbuild/snapshot || exit 1
+G -C "$SRC/src/giac" checkout -qf "$GIAC" || exit 1
+
+cd "$SRC"
+case "$VARIANT" in
+  en-v15) ARGS="APPLANG=en" ;;
+  en-steps-v15) ARGS="APPLANG=en STEPS=1" ;;
+  *) echo "unknown variant $VARIANT"; exit 2 ;;
+esac
+if [ "$(cat obj/.variant 2>/dev/null)" != "$VARIANT" ]; then rm -rf obj bin; mkdir -p obj; echo "$VARIANT" > obj/.variant; fi
+
+# the fasmg link's settings are replaced: the toolchain's app linker script, and the heap bounds
+# of the custom allocator under the names that script gives them
+LDX="--defsym=___heapbot=___heap_low --defsym=___heaptop=___heap_high"
+t0=$(date +%s)
+link() { # <load address>
+  rm -f bin/DEMO.obj
+  make -j"$(nproc)" $ARGS APPLICATION=YES EXTRA_LDFLAGS="$LDX" OUTPUT_MAP=YES LOAD_ADDR="$1" bin/DEMO.obj >> "$LOG/build_$VARIANT.log" 2>&1 \
+    || { echo "[build] FAILED - last errors:"; grep -E "error|undefined" "$LOG/build_$VARIANT.log" | head -20; exit 1; }
+  "$BU/z80-none-elf-objcopy" -O binary bin/DEMO.obj bin/body.bin
+}
+: > "$LOG/build_$VARIANT.log"
+link 0
+LA=$(python3 app_tools/pack_app.py size bin/body.bin)
+n1=$(stat -c %s bin/body.bin)
+link "$LA"
+n2=$(stat -c %s bin/body.bin)
+[ "$n1" = "$n2" ] || { echo "[build] the app's size changed with its address: $n1 -> $n2"; exit 1; }
+t1=$(date +%s)
+ENTRY=0x$("$BU/z80-none-elf-nm" bin/DEMO.obj | awk '$3=="__start" {print $1}')
+python3 app_tools/pack_app.py pack bin/body.bin "$ENTRY" "$LA" bin/_DEMO.bin > /dev/null || { echo "[build] pack_app failed"; exit 1; }
+rm -f bin/AppIns*.8xv bin/AppIns*.bin
+python3 app_tools/make_segments.py bin/_DEMO.bin bin >/dev/null || { echo "[build] make_segments failed"; exit 1; }
+rm -f "$OUT"/AppIns*.8xv
+# the emulator tools read a map in the fasmg format: name = address
+"$BU/z80-none-elf-nm" bin/DEMO.obj | awk 'NF==3 {printf "%s = %06X\n", $3, strtonum("0x" $1)}' > bin/DEMO.map
+cp bin/AppIns*.8xv bin/_DEMO.bin bin/DEMO.map "$OUT"/
+echo "$SUPER $GIAC" > "$OUT/SNAPSHOT"
+size=$(stat -c %s bin/_DEMO.bin)
+echo "[build] OK in $((t1-t0))s: _DEMO.bin=$size B ($(( (size+65535)/65536 )) flash pages), $(ls "$OUT"/AppIns*.8xv | wc -l) AppIns, warnings=$(grep -c 'warning:' "$LOG/build_$VARIANT.log") -> $OUT"
+max=$((0x2AFFFD))
+segs=$(( (size + 3 + 65231) / 65232 )); last=$(( size + 3 - (segs - 1) * 65232 ))
+if [ "$size" -gt "$max" ]; then echo "[build] TOO BIG: $size B > $max B (43 flash pages): INST will fail"; exit 3; fi
+if [ "$segs" -gt 43 ] && [ "$last" -lt 1024 ]; then echo "[build] the last AppIns would hold $last B (< 1 KB): INST stops on it; grow or shrink the app by 1 KB"; exit 3; fi
+echo "[build] room left: $((max - size)) B"
