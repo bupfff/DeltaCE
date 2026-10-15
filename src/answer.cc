@@ -2213,9 +2213,9 @@ static bool long_one_term(const std::string & t){
 }
 
 // ---- F4's forms (answer.h) ----
-const char * const answer_form_names[]={"simplified","one fraction","factored","expanded","trig combined","trig expanded","in terms of sin","in terms of cos","in terms of tan","decimal"};
-static const unsigned char o_plain[]={FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA,FORM_DEC},
-  o_number[]={FORM_DEC,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA},
+const char * const answer_form_names[]={"simplified","one fraction","factored","expanded","trig combined","trig expanded","in terms of sin","in terms of cos","in terms of tan","decimal","long division","completed square","mixed number"};
+static const unsigned char o_plain[]={FORM_SIMP,FORM_RAT,FORM_FACT,FORM_SQR,FORM_DIV,FORM_EXPA,FORM_DEC},
+  o_number[]={FORM_DEC,FORM_MIX,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA},
   o_trig[]={FORM_TLIN,FORM_TEXP,FORM_TSIN,FORM_TCOS,FORM_TTAN,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA,FORM_DEC};
 
 // tan is the only trig function of g (and it has one): tan identities are quotients by nature,
@@ -2520,8 +2520,89 @@ static giac::gen sec_only(const giac::gen & g){
   const gen r=map_nodes(g,sec_back,0);
   return contains(r,at_sin) || contains(r,at_cos)?g:r;
 }
+// long division of a rational function of x whose top has at least the bottom's degree: the
+// quotient plus the remainder over the divisor, factored as the answers' denominators are
+// ((4x^8+8x^3-9)/(x-2) is 4x^7+8x^6+...+544+1079/(x-2)); undef when there is nothing to divide
+static giac::gen long_division(const giac::gen & g){
+  using namespace giac;
+  const vecteur lv=lvar(g);
+  if (lv.size()!=1 || lv.front().type!=_IDNT)
+    return undef;
+  const gen d=_denom(g,contextptr);
+  const gen qr=_quorem(makesequence(_numer(g,contextptr),d,lv.front()),contextptr);
+  if (qr.type!=_VECT || qr._VECTptr->size()!=2 || is_zero(qr._VECTptr->front()) || is_zero(qr._VECTptr->back()))
+    return undef;
+  const gen & q=qr._VECTptr->front();
+  gen fd=_factor(d,contextptr);
+  if (is_undef(fd) || fd.type==_STRNG)
+    fd=d;
+  vecteur w;
+  if (q.is_symb_of_sommet(at_plus) && q._SYMBptr->feuille.type==_VECT)
+    w=*q._SYMBptr->feuille._VECTptr;
+  else
+    w.push_back(q);
+  w.push_back(symb_prod(qr._VECTptr->back(),symb_inv(fd)));
+  return sym1(at_plus,gen(w,_SEQ__VECT));
+}
+// every polynomial of degree 2 in x of g with an x term, its square completed: x^2+6x+5 is
+// (x+3)^2-4, 1/(x^2+6x+13) is 1/((x+3)^2+4), sqrt(4x-x^2) is sqrt(4-(x-2)^2); done: one was.
+// Below the top, only sums: n*(n+2) stays factored, not (n+1)^2-1. Built in its final order
+// (positive_first would take a sum's numbers out: 2(x-1/2)^2+1/2 back to 4x^2-4x+2)
+static giac::gen complete_squares(const giac::gen & g,const giac::gen & x,bool top,bool & done){
+  using namespace giac;
+  if (g.type==_VECT){
+    vecteur w(*g._VECTptr);
+    for (iterateur it=w.begin();it!=w.end();++it)
+      *it=complete_squares(*it,x,false,done);
+    return gen(w,g.subtype);
+  }
+  if (g.type!=_SYMB)
+    return g;
+  const vecteur lv=lvar(g);
+  if ((top || g.is_symb_of_sommet(at_plus)) && lv.size()==1 && lv.front()==x && free_of(_denom(g,contextptr),x) && quadratic_radicand(g,x)){
+    const gen d=derive(g,x,contextptr),a=ratnormal(derive(d,x,contextptr)/2,contextptr);
+    const gen b=ratnormal(subst(d,x,0,false,contextptr),contextptr);
+    if (is_zero(a) || is_zero(b))
+      return g; // linear, or no x term (x^2+4): nothing to complete
+    const gen h=ratnormal(b/(2*a),contextptr),k=ratnormal(subst(g,x,0,false,contextptr)-b*b/(4*a),contextptr);
+    const gen s=symb_pow(x+h,2),t=is_one(a)?s:is_minus_one(a)?symb_neg(s):symb_prod(a,s);
+    done=true;
+    if (is_zero(k))
+      return t;
+    return is_strictly_positive(-a,contextptr) && is_strictly_positive(k,contextptr)?sym2(at_plus,k,t):sym2(at_plus,t,k); // 4-(x-2)^2
+  }
+  return symbolic(g._SYMBptr->sommet,complete_squares(g._SYMBptr->feuille,x,false,done));
+}
+static giac::gen completed_square(const giac::gen & g){
+  using namespace giac;
+  const vecteur ids=lidnt(g);
+  if (ids.size()!=1 || ids.front()==cst_pi)
+    return undef;
+  bool done=false;
+  const gen r=complete_squares(g,ids.front(),true,done);
+  return done?r:undef;
+}
+// a fraction a/b with |a|>b as a mixed number: 7/2 is 3+1/2, -7/2 is -3-1/2
+static giac::gen mixed_number(const giac::gen & g){
+  using namespace giac;
+  if (g.type!=_FRAC)
+    return undef;
+  const gen & d=g._FRACptr->den;
+  const bool neg=is_strictly_positive(-g._FRACptr->num,contextptr);
+  const gen n=neg?-g._FRACptr->num:g._FRACptr->num;
+  const gen q=_iquo(makesequence(n,d),contextptr),r=_irem(makesequence(n,d),contextptr);
+  if (is_zero(q) || is_undef(q) || is_undef(r))
+    return undef;
+  return neg?sym2(at_plus,-q,-r/d):sym2(at_plus,q,r/d);
+}
 static giac::gen form_op(int f,const giac::gen & g){
   using namespace giac;
+  if (f==FORM_DIV)
+    return long_division(g);
+  if (f==FORM_SQR)
+    return completed_square(g);
+  if (f==FORM_MIX)
+    return mixed_number(g);
   static const unary_function_ptr * const ops[]={at_simplify,at_ratnormal,at_factor,at_expand,at_tlin,at_texpand,at_trigsin,at_trigcos,at_trigtan,at_evalf};
   // (the trig forms: the other functions as names, the trig ones as they are: in terms of sin of
   // x*tan(x)+ln|cos(x)| rewrote inside the ln too, 4 s per form on the calculator)
@@ -2619,7 +2700,8 @@ static __attribute__((noinline)) void form_compute(answer_forms & F,int k){
   }
   if ((f==FORM_FACT || f==FORM_EXPA) && (strstr(F.orig.c_str(),"sec(") || strstr(F.orig.c_str(),"csc(") || strstr(F.orig.c_str(),"cot(")))
     r=sec_only(r);
-  if (f!=FORM_DEC && r.type==_SYMB && taille(r,200)<200) // in lowest terms inside functions too
+  if (f!=FORM_DEC && f!=FORM_SQR && r.type==_SYMB && taille(r,200)<200) // in lowest terms inside functions too (not
+    // a completed square: normal of ln((x+3)^2+4) is ln(x^2+6x+13) again)
     r=normal_args(r); // (ln|(sin(x)+1)/cos(x)|, atan((2x-1)/sqrt(3)))
   trace_time("normal_args");
   trace_step(answer_form_names[f],r);
@@ -2659,7 +2741,7 @@ static __attribute__((noinline)) void form_compute(answer_forms & F,int k){
   // in textbook form, as the answer was: arctan((x+2)/2), C1, 4-x^2; compared as shown
   if (f==FORM_DEC)
     r=map_nodes(r,half_sqrt,0);
-  if (r.type==_SYMB && taille(r,200)<200 && !contains(r,at_order_size))
+  if (f!=FORM_SQR && r.type==_SYMB && taille(r,200)<200 && !contains(r,at_order_size)) // (a completed square: built in order)
     r=positive_first(r);
   trace_time("positive_first");
   std::string text=r.print(contextptr);
