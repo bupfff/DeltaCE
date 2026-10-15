@@ -30,9 +30,15 @@ FORMS = [('p', '(x+1)^3', 1300), ('k', '{trace}', 1700), ('w', 2500)]
 GRAPH = [('k', 'sin(x)*e^(-x/5)', 250), ('k', '{graph}1', 0), ('w', 6000), ('f', 900),
          ('k', '{right}' * 20, 1600, 90)]
 
+# the steps build (en-steps): an antiderivative from the calculus menu, enter, then enter again
+# for its steps, read down to the answer
+STEPS = [('k', '{window}', 450), ('k', '1', 350), ('k', 'x{sin}x', 300), ('k', '{enter}', 1900),
+         ('k', '{enter}', 1700), ('k', '{down}' * 3, 2600, 1000)]
+
 MOVIES = {
     'flowce_light': [('intro', 1400)] + INTEGRAL + SERIES + FORMS + GRAPH,
     'flowce_dark': [('night',), ('intro', 1400)] + INTEGRAL + SERIES + FORMS + GRAPH,
+    'flowce_steps': STEPS,
 }
 
 

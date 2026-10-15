@@ -46,6 +46,15 @@ SCENES = {
     'ans':            [('p', '2+3'), ('k', '*2{enter}')],
     'cbrt_graph':     [('k', 'x^(1/3){graph}1'), ('w', 6000)],
     'polar':          [('p', '1/2*integrate((1+cos(t))^2,t,0,2pi)')],
+    # the steps build (en-steps): enter on the empty line after a calculus answer opens its steps
+    'steps_parts':    [('p', 'integrate(x*sin(x),x)'), ('k', '{enter}'), ('w', 8000)],
+    'steps_limit':    [('p', 'limit((1-cos(x))/x^2,x,0)'), ('k', '{enter}'), ('w', 8000)],
+    'steps_deriv':    [('p', 'diff(x^2*sin(x),x)'), ('k', '{enter}'), ('w', 6000)],
+    'steps_sum':      [('p', 'sum(1/(n*(n+1)),n,1,inf)'), ('k', '{enter}'), ('w', 12000)],
+    'steps_taylor':   [('p', 'taylor(e^x*sin(x),x=0,3)'), ('k', '{enter}'), ('w', 12000)],
+    'steps_hint':     [('p', 'integrate(x*e^x,x)')],
+    'steps_parts_end': [('p', 'integrate(x*sin(x),x)'), ('k', '{enter}'), ('w', 8000), ('k', '{down}{down}{down}'), ('w', 1500)],
+    'steps_subst':    [('p', 'integrate(2x*cos(x^2),x)'), ('k', '{enter}'), ('w', 8000)],
 }
 
 
