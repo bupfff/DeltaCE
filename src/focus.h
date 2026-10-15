@@ -8,7 +8,11 @@
 extern "C" {
 #endif
 #define focus_on 1 // the console is drawn by focus.cc (a constant: the classic screen's paths compile away)
+#ifdef FLOWCE_STEPS
+#define FLOWCE_VERSION "2.0b1" // the step-by-step build, in beta
+#else
 #define FLOWCE_VERSION "1.9.1" // in the status bar and on the start screen: bump it at each release
+#endif
 void focus_status(void);                // status bar (statusline / statusflags in focus mode)
 void focus_status_msg(const char * msg); // a message in the status bar ("computing...")
 void focus_idle(void); // getkey, idle for a few seconds: slow refreshes (battery)
