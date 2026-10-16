@@ -385,6 +385,25 @@ static void help_line(const ui_face * f, const char * t, int base, int fg, const
   if (cut) ui_draw_text(f, ell, -1, x, base, ramp(fg, UC_BG), 0);
 }
 
+// the empty console's tips: DeltaCE's features and the shortcuts that are easy to miss
+struct tip { const char * key, * text; };
+static const tip tips[] = {
+  {"F4", "on an answer: its other forms"},
+#ifdef FLOWCE_STEPS
+  {"enter", "on a derivative or an integral: the steps"},
+#endif
+  {"F4", "on an integral: check it by differentiating"},
+#ifdef WITH_UNITS
+  {"alpha F4", "units, and Celsius to Fahrenheit"},
+#endif
+  {"F1", "Value at x = puts a number in for x"},
+  {0, "Solve works in any letter: 3b + 2 = 11 gives b = 3"},
+  {"^", "then enter: paste an earlier answer"},
+  {"2nd", "then F1 to F5: arithmetic, matrices and more"},
+};
+enum { N_TIPS = sizeof(tips) / sizeof(tips[0]) };
+static int tip_k = -1;
+
 __attribute__((noinline)) static void hero_paint() { // in the current clip
   const char * s = (const char *)Console_GetEditLine();
   int y0 = hy0, h = hh;
@@ -464,11 +483,28 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     }
   } else {
     int m = y0 + h / 2 - 2, b = m + 20;
+    if (m - 66 >= y0) focus_emblem(UI_W / 2, m - 58); // (under the history: when it fits)
     ui_text(&ui_tr12, "Type a calculation", UI_W / 2, m, UC_SUB, UC_BG, 1);
     int x = UI_W / 2 - 110; // the prototype's three hints: math templates, up history, down search
     x = key_hint(x, b, "math", "templates") + 12;
     x = key_hint(x, b, "^", "history") + 12;
     key_hint(x, b, "v", "search");
+    // a tip at the bottom, a different one each time the app starts: its key, what it does
+    const int tb = y0 + h - 12;
+    if (tb - 12 < b + 16) return;
+    if (tip_k < 0) {
+#ifdef TICE
+      tip_k = (rtc_Minutes * 60 + rtc_Seconds) % N_TIPS;
+#else
+      tip_k = 0;
+#endif
+    }
+    const tip & t = tips[tip_k];
+    int tw = ui_text_width(&ui_tb9, "TIP", -1) + 10 + (t.key ? ui_text_width(&ui_tb9, t.key, -1) + 12 : 0) + ui_text_width(&ui_tr9, t.text, -1);
+    x = (UI_W - tw) / 2;
+    x += ui_text(&ui_tb9, "TIP", x, tb, UC_ACC, UC_BG, 0) + 10;
+    if (t.key) key_hint(x, tb, t.key, t.text);
+    else ui_text(&ui_tr9, t.text, x, tb, UC_SUB, UC_BG, 0);
   }
 }
 
@@ -551,15 +587,20 @@ static void status_draw(int force) {
     ui_fill(SZ_R, 0, UI_W - SZ_R, SB, col(UC_BG));
     if (fl & 3) { // 2nd / alpha chip
       const char * t = (fl & 1) ? "2nd" : (fl & 4) ? ((fl & 8) ? "a-lock" : "A-LOCK") : ((fl & 8) ? "a" : "A");
-      int w = ui_text_width(&ui_tb9, t, -1) + 10, c = (fl & 1) ? UC_ACC : UC_GREEN, x = UI_W - 34 - w;
+      int w = ui_text_width(&ui_tb9, t, -1) + 10, c = (fl & 1) ? UC_BLUE : UC_GREEN, x = UI_W - 34 - w;
       ui_rrect(0, x, 2, w, 12, 4, c, UC_BG);
       ui_text(&ui_tb9, t, x + w / 2, 11, UC_WHITE, c, 1);
     }
-    else { // the app's name and version by the battery (the 2nd/alpha chip takes its place)
+    else { // the app's mark and version by the battery (the 2nd/alpha chip takes its place):
+      // a Delta in the accent (the fonts have none), then CE
       const int vw = ui_text_width(&ui_tr9, "v" DELTACE_VERSION, -1) + 3;
-      int x = UI_W - 30 - vw - ui_text_width(&ui_tb9, "DeltaCE", -1);
-      x += ui_text(&ui_tb9, "Delta", x, 12, UC_SUB, UC_BG, 0);
-      x += ui_text(&ui_tb9, "CE", x, 12, UC_ACC, UC_BG, 0);
+      int x = UI_W - 30 - vw - ui_text_width(&ui_tb9, "CE", -1) - 14;
+      const unsigned char * acc = ramp(UC_ACC, UC_BG);
+      ui_seg16(x * 16 + 8, 13 * 16, x * 16 + 88, 3 * 16, 28, acc);
+      ui_seg16(x * 16 + 88, 3 * 16, x * 16 + 168, 13 * 16, 28, acc);
+      ui_seg16(x * 16 + 8, 13 * 16, x * 16 + 168, 13 * 16, 28, acc);
+      x += 14;
+      x += ui_text(&ui_tb9, "CE", x, 12, UC_SUB, UC_BG, 0);
       ui_text(&ui_tr9, "v" DELTACE_VERSION, x + 3, 12, UC_SUB, UC_BG, 0);
     }
     int bx = UI_W - 24; // battery
@@ -679,7 +720,7 @@ static void bar_draw(int keyflag, int force) {
   ui_fill(0, SBOT, UI_W, 1, col(UC_LINE));
   if (!layer) for (int i = 0; i < 5; ++i) focus_tab(i, 0, 0);
   else {
-    int fg = layer == 1 ? UC_ACC : UC_GREEN;
+    int fg = layer == 1 ? UC_BLUE : UC_GREEN;
     for (int i = 0; i < 5; ++i) ui_text(&ui_tr10, lab[i], 32 + 64 * i, SBOT + 15, fg, UC_BAR, 1);
   }
   ui_noclip();

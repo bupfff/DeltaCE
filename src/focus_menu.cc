@@ -228,7 +228,7 @@ static void open_card(const fm_menu & m, int col, int layer, int sel) {
     int band = ui_band_open(24) >= 22;
     if (band) { ui_band_begin(SBOT, UI_H); ui_band_load(); }
     if (!layer) focus_tab(col, 1, 1);
-    else tab_text(col, console_fkey_label(layer, col), layer == 1 ? UC_ACC : UC_GREEN);
+    else tab_text(col, console_fkey_label(layer, col), layer == 1 ? UC_BLUE : UC_GREEN);
     if (band) ui_band_end();
   }
   paint_rows(m, py, py + ph + 4, sel, 1);
@@ -520,6 +520,16 @@ static void splash_graph(int ms) {
     const int r = 4 + 10 * sp_eo(pc) / 1024;
     ui_rframe(0, SP_P - r, (fp >> 4) - r, 2 * r + 1, 2 * r + 1, r, pc < 512 ? UC_ACC : UC_ACCSOFT, UC_BG);
   }
+}
+// the start screen's last picture at half size, DeltaCE's emblem on the empty console: the curve,
+// its tangent at the top, the point; centered on cx, the curve's top at row top
+void focus_emblem(int cx, int top) {
+  const int p = (SP_P - SP_X0) / 2, x0 = (cx - p) * 16, y0 = top * 16 - splash_curve[p] / 2;
+  const unsigned char * sub = ui_ramp(0, UC_SUB, UC_BG);
+  for (int i = 0; i < 126; i += 2)
+    ui_seg16(x0 + i * 16, y0 + splash_curve[i] / 2, x0 + (i + 2) * 16, y0 + splash_curve[i + 2] / 2, 22, sub);
+  ui_seg16((cx - 54) * 16, top * 16, (cx + 54) * 16, top * 16, 30, ui_ramp(0, UC_ACC, UC_BG));
+  ui_rrect(0, cx - 3, top - 3, 7, 7, 3, UC_INK, UC_BG);
 }
 volatile int splash_frames; // frames drawn by the last start screen (the emulator tools read it)
 void focus_splash(int first) {
