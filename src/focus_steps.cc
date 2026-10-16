@@ -20,11 +20,22 @@
 #include "ui_math.h"
 #include "steps.h"
 #include "answer.h"
+#include "analyze.h"
 
 extern giac::context * contextptr;
 namespace giac { extern bool (*control_c_hook)(); }
 extern "C" { extern volatile char oom_hit; } // allocator_custom.c: memory ran out
 void oom_rearm(); // main.cc: the memory reserve, taken again
+#ifdef ANDEBUG // (a test build: #define ANDEBUG at the top of this file)
+#include <stdio.h>
+#define ADBG(...) sprintf((char *)0xFB0000, __VA_ARGS__)
+#endif
+#ifndef HOSTGIAC
+extern int dconsole_mode; // console.cc: 0, giac's notes ("Unable to isolate x...") go nowhere
+static void quiet(int on) { dconsole_mode = !on; }
+#else
+static void quiet(int) {}
+#endif
 
 static bool starts(const char * s, const char * p) { return !strncmp(s, p, strlen(p)); }
 // a calculation the steps screen can show: a derivative, an integral, a limit, a sum, a Taylor
@@ -43,7 +54,8 @@ int focus_steps_able(const char * s) {
 // Labels, names and rules at the margin X; the math in groups (an equation and the lines going
 // on with it, the working of a step), each centered as a block.
 enum { Y0 = 18, X = 14, XR = 306, W = XR - X, LVMIN = 6, LVWRAP = 5 };
-enum { K_HEAD, K_LINE, K_LABEL, K_TITLE, K_FORM, K_WORK, K_EQ, K_BOX, K_ANS };
+enum { K_HEAD, K_LINE, K_LABEL, K_TITLE, K_FORM, K_WORK, K_EQ, K_BOX, K_ANS, K_TEXT, K_MATH };
+// (K_TEXT: a text of the analysis, num 0 gray (a label, " or "), 1 ink; K_MATH: its math beside a label)
 struct item {
   char * s;      // math or label text (malloc), a title or formula (static), or 0
   int x, y, w, h, base, eqx; // box; base: the baseline below y; eqx: an equation's = after x, -1
@@ -308,6 +320,7 @@ static void draw_item(const item & it, int y, int bg) { // y: its top on the scr
   case K_LINE: ui_fill(x, y, it.w, 1, ui_col(0, UC_LINE)); return;
   case K_LABEL: ui_draw_text(&ui_tb9, it.s, -1, x, b, ui_ramp(0, it.num ? UC_SUB : UC_ACC, bg), 0); return;
   case K_TITLE: ui_draw_text(&ui_tb12, it.s, -1, x, b, ui_ramp(0, UC_INK, bg), 0); return;
+  case K_TEXT: ui_draw_text(&ui_tr12, it.s, -1, x, b, ui_ramp(0, it.num ? UC_INK : UC_SUB, bg), 0); return;
   case K_BOX: ui_rrect(0, x, y, it.w, it.h, 8, UC_ACCSOFT, bg); return;
   case K_ANS: bg = UC_ACCSOFT; break;
   case K_EQ:
@@ -372,8 +385,7 @@ static int stop(int sec, int maxtop) {
 // once the problem, as at the top of the page, over "Working out the steps" and the dots of
 // "Calculating" (focus_busy_tick, from giac's control_c checks; ON stops, as for any calculation)
 static int wait_y; // the baseline of that line, 0 if not shown
-static void waiting(const char * head) {
-  static const char T[] = "Working out the steps";
+static void waiting(const char * head, const char * T = "Working out the steps") {
   SEC = 0; GRP = 1;
   wait_y = (Y0 + 10 + add_math(head, strlen(head), X, 10, W, 2, K_HEAD) + UI_H) / 2;
   finish(0);
@@ -403,7 +415,9 @@ static __attribute__((noinline)) const char * build(const char * in, const char 
       head = steps_problem(g, contextptr).print(contextptr);
       waiting(head.c_str());
       giac::control_c_hook = focus_busy_tick;
+      quiet(1);
       ok = steps_of(g, v, contextptr);
+      quiet(0);
     }
   }
   const bool stopped = giac::interrupted || giac::ctrl_c;
@@ -436,6 +450,132 @@ static __attribute__((noinline)) const char * build(const char * in, const char 
   return why;
 }
 
+// ---------------------------------------------------------------- the analysis (DeltaCE)
+// A row of the report: its label (gray) on the left, its items beside it, on as many lines as
+// they need (a line's items on one baseline); no label: the items centered.
+static int row(const an_line & l, int y) {
+  const bool lab = l.text && *l.text;
+  const int lw = lab ? ui_text_width(&ui_tr12, l.text, -1) : 0;
+  if (lab && l.math.empty()) { // a sentence
+    const int k = NP;
+    if (put(K_TEXT, dup(l.text, strlen(l.text)), X, y, lw, 14, 11, 0)) P[k].num = 1;
+    return y + 14;
+  }
+  if (!lab) ++GRP;
+  const char * sep = l.sep == AN_OR ? " or " : l.sep == AN_SPACE ? " " : ", ";
+  const int sw = ui_text_width(&ui_tr12, sep, -1), x0 = lab ? (lw + 10 < 120 ? X + lw + 10 : X + 16) : X;
+  struct ent { const char * s; int n, x, w, asc, desc, lv, text; } e[16];
+  int ne = 0, x = x0, top = y;
+  if (lab) { // the label: the first line's first item
+    e[ne].s = l.text; e[ne].n = strlen(l.text); e[ne].x = X; e[ne].w = lw; e[ne].asc = 11; e[ne].desc = 3; e[ne].lv = 0; e[ne].text = 2; ++ne;
+    if (x0 == X + 16) x = XR + 1; // (a long label: its items on the next line)
+  }
+  const char * m = l.math.c_str();
+  for (int first = 1;; first = 0) {
+    const char * nl = strchr(m, '\n');
+    const int n = nl ? nl - m : strlen(m);
+    const bool tx = n && m[0] == '\1';
+    mi_layout L;
+    int w, asc = 11, desc = 3, lv = 0;
+    if (tx) w = ui_text_width(&ui_tr12, m + 1, n - 1);
+    else { lv = ui_math_fit(m, n, -1, 4, XR - x0, 60, MI_F_IMPLDOT, L); w = L.width; asc = L.asc; desc = L.desc; }
+    const int need = (first ? 0 : sw) + w;
+    if ((x + need > XR && x > x0) || ne > 13) { // the line is full: placed on its baseline (a comma
+      if (!first && l.sep == AN_COMMA) { // ends it, "or" starts the next one)
+        e[ne].s = ","; e[ne].n = 1; e[ne].x = x; e[ne].w = ui_text_width(&ui_tr12, ",", 1); e[ne].asc = 11; e[ne].desc = 3; e[ne].lv = 0; e[ne].text = 2; ++ne;
+      }
+      int a = 0, d = 0;
+      for (int i = 0; i < ne; ++i) { if (e[i].asc > a) a = e[i].asc; if (e[i].desc > d) d = e[i].desc; }
+      for (int i = 0; i < ne; ++i) {
+        const int k = NP;
+        const bool t = e[i].text;
+        if (put(t ? K_TEXT : lab ? K_MATH : K_WORK, dup(e[i].s, e[i].n), e[i].x, top + a - e[i].asc, e[i].w, e[i].asc + e[i].desc, e[i].asc, e[i].lv)) {
+          P[k].num = e[i].text == 1;
+          if (!lab) P[k].grp = GRP;
+        }
+      }
+      top += a + d + 6; ne = 0; x = x0;
+      if (l.sep == AN_COMMA) first = 1;
+    }
+    if (!first) { e[ne].s = sep; e[ne].n = strlen(sep); e[ne].x = x; e[ne].w = sw; e[ne].asc = 11; e[ne].desc = 3; e[ne].lv = 0; e[ne].text = 2; ++ne; x += sw; }
+    e[ne].s = tx ? m + 1 : m; e[ne].n = tx ? n - 1 : n; e[ne].x = x; e[ne].w = w; e[ne].asc = asc; e[ne].desc = desc; e[ne].lv = lv; e[ne].text = tx; ++ne;
+    x += w;
+    if (!nl) break;
+    m = nl + 1;
+  }
+  int a = 0, d = 0;
+  for (int i = 0; i < ne; ++i) { if (e[i].asc > a) a = e[i].asc; if (e[i].desc > d) d = e[i].desc; }
+  for (int i = 0; i < ne; ++i) {
+    const int k = NP;
+    const bool t = e[i].text;
+    if (put(t ? K_TEXT : lab ? K_MATH : K_WORK, dup(e[i].s, e[i].n), e[i].x, top + a - e[i].asc, e[i].w, e[i].asc + e[i].desc, e[i].asc, e[i].lv)) {
+      P[k].num = e[i].text == 1;
+      if (!lab) P[k].grp = GRP;
+    }
+  }
+  return top + a + d;
+}
+static __attribute__((noinline)) void lay_report(const std::vector<an_line> & v) {
+  int y = 10;
+  SEC = 0; GRP = 1;
+  for (unsigned i = 0; i < v.size() && !oom_hit; ++i) {
+    const an_line & l = v[i];
+    if (l.kind == AN_HEAD) y += add_math(l.math.c_str(), l.math.size(), X, y, W, 2, K_HEAD) + 14;
+    else if (l.kind == AN_SECTION) section(l.text, 0, y);
+    else y = row(l, y) + 9;
+  }
+  finish(0);
+  PH = y + 8;
+}
+// the analysis of the function typed as in (a calculation's text): computed (the waiting screen,
+// ON stops) and laid out; 0 if done, else why not
+static __attribute__((noinline)) const char * build_report(const char * in) {
+  const int S = strlen(in), cap = 2 * S + 32 > 256 ? 2 * S + 32 : 256;
+  char * buf = (char *)malloc(cap);
+  wait_y = 0;
+  if (!buf) return "Out of memory";
+  strcpy(buf, in);
+  answer_prepass(buf, cap, true);
+  std::vector<an_line> v;
+  const char * why = 0;
+  giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = false;
+  {
+    giac::gen g(buf, contextptr);
+    if (!giac::interrupted) {
+      std::string head = giac::eval(g, 1, contextptr).print(contextptr); // (cos(x)^2-sin(x), not as typed)
+      waiting(head.c_str(), "Analyzing");
+      giac::control_c_hook = focus_busy_tick;
+      quiet(1);
+      why = analyze_of(g, v, contextptr);
+      quiet(0);
+    }
+  }
+  const bool stopped = giac::interrupted || giac::ctrl_c;
+  giac::control_c_hook = 0;
+  free(buf);
+  if (oom_hit) why = "Out of memory";
+  else if (giac::stack_hit) why = "Too many recursion levels";
+  else if (stopped) why = "Stopped";
+  giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = giac::stack_hit = false;
+#ifdef ANDEBUG // the report as text on CEmu's debug console (scripts/emu_analyze_corpus.py; -A's format)
+  ADBG("== %s   [%s]\n", in, why ? why : "ok");
+  for (unsigned i = 0; i < v.size(); ++i) {
+    std::string m = v[i].math;
+    for (unsigned k = 0; k < m.size(); ++k) { if (m[k] == '\n') m[k] = '|'; else if (m[k] == '\1') m[k] = '~'; }
+    if (v[i].kind == AN_SECTION) ADBG("  %s\n", v[i].text);
+    else ADBG("    %s%s%s\n", v[i].text ? v[i].text : "", v[i].text && *v[i].text && !m.empty() ? ":  " : "", m.c_str());
+  }
+#endif
+  if (!why) {
+    lay_report(v);
+    if (oom_hit) { giac::ctrl_c = giac::interrupted = false; why = NP ? 0 : "Out of memory"; }
+  }
+  focus_busy(0);
+  v.clear();
+  if (oom_hit) oom_rearm();
+  return why;
+}
+
 // up/down from part cur at top: within a part taller than the screen, else to the next part
 static void move(int dir, int & cur, int & top, int maxtop) {
   const int vis = UI_H - Y0;
@@ -449,15 +589,23 @@ static void move(int dir, int & cur, int & top, int maxtop) {
   else if (cur + dir >= 1 && cur + dir <= SEC) { cur += dir; top = stop(cur, maxtop); }
 }
 
+static void show(const char * why);
 void focus_steps(const char * in, const char * ans) {
   focus_status_label("STEPS");
-  const char * why = build(in, ans);
+  show(build(in, ans));
+}
+// DeltaCE: a function's analysis (analyze.cc), on the steps' page
+void focus_analyze(const char * in) {
+  focus_status_label("ANALYSIS");
+  show(build_report(in));
+}
+static void show(const char * why) {
   focus_status_msg(0);
   int key;
   if (why) { // over the problem (the waiting line erased)
     clear_page();
     if (wait_y) ui_fill(0, wait_y - 14, UI_W, 32, ui_col(0, UC_BG));
-    focus_note(why, why[0] == 'N' ? "No textbook method explains this answer" : 0);
+    focus_note(why, !strcmp(why, "No steps for this one") ? "No textbook method explains this answer" : 0);
     GetKey(&key);
   }
   else {
@@ -477,6 +625,17 @@ void focus_steps(const char * in, const char * ans) {
 }
 
 #ifdef HOSTGIAC
+// tools/hostgiac -W: the analysis screen of in after stop presses of down, as -V
+int focus_analyze_preview(const char * in, int stop) {
+  if (build_report(in)) { clear_page(); return -1; }
+  const int vis = UI_H - Y0, maxtop = PH > vis ? PH - vis : 0;
+  int top = 0, cur = 1;
+  for (int i = 0; i < stop; ++i) move(1, cur, top, maxtop);
+  paint(top, cur);
+  const int n = SEC;
+  clear_page();
+  return n;
+}
 // tools/hostgiac -V: the screen of in (answer ans) after stop presses of down, drawn off screen;
 // the number of parts, -1 if no steps
 int focus_steps_preview(const char * in, const char * ans, int stop) {

@@ -862,6 +862,9 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"abcuv(a,b,c)", nullptr, "Finds 2 polynomials u,v such that a*u+b*v=c","x+1,x^2-2,x", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"abs(x)", nullptr, "Absolute value or norm of x", "-3", "[1,2,3]", CAT_CATEGORY_COMPLEXNUM | (CAT_CATEGORY_REAL<<8)},
   {"acos(x)", nullptr, "Inverse cosine arccos(x), between 0 and pi.", "1/2", nullptr, CAT_CATEGORY_TRIG},
+#ifdef FLOWCE_STEPS
+  {"analyze(f)", nullptr, "Studies a function: domain, intercepts, symmetry, asymptotes, where it increases and decreases, extrema, concavity. Up and down go through the parts.", "x^3-3x", "(x^2-1)/(x-2)", CAT_CATEGORY_CALCULUS},
+#endif
   {"append", nullptr, "Adds an element at the end of a list","#l.append(x)", nullptr, CAT_CATEGORY_LIST},
   {"approx(x)", nullptr, "Decimal value of x.", "pi", nullptr, CAT_CATEGORY_REAL},
   {"arg(z)", nullptr, "Angle of complex z.", "1+i", nullptr, CAT_CATEGORY_COMPLEXNUM},

@@ -385,6 +385,16 @@ static void help_line(const ui_face * f, const char * t, int base, int fg, const
   if (cut) ui_draw_text(f, ell, -1, x, base, ramp(fg, UC_BG), 0);
 }
 
+// DeltaCE's mark, a Delta (the fonts have none): base row y, h px high (h + 1 wide), stroke th
+// (1/16 px), in color c
+static void delta_mark(int x, int y, int h, int th, int c) {
+  const unsigned char * r = ramp(c, UC_BG);
+  const int x0 = x * 16 + 8, x1 = x0 + h * 8, x2 = x0 + h * 16, b = y * 16, t = (y - h) * 16;
+  ui_seg16(x0, b, x1, t, th, r);
+  ui_seg16(x1, t, x2, b, th, r);
+  ui_seg16(x0, b, x2, b, th, r);
+}
+
 // the empty console's tips: DeltaCE's features and the shortcuts that are easy to miss
 struct tip { const char * key, * text; };
 static const tip tips[] = {
@@ -483,7 +493,10 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     }
   } else {
     int m = y0 + h / 2 - 2, b = m + 20;
-    if (m - 66 >= y0) focus_emblem(UI_W / 2, m - 58); // (under the history: when it fits)
+    // the mark and a tip on the empty console only: not under the history, nor when a calculation
+    // starts (its entry is in the history: painting them there cost 70 ms a calculation)
+    if (NE) return;
+    if (m - 50 >= y0) delta_mark(UI_W / 2 - 13, m - 26, 24, 24, UC_LINE); // (faint)
     ui_text(&ui_tr12, "Type a calculation", UI_W / 2, m, UC_SUB, UC_BG, 1);
     int x = UI_W / 2 - 110; // the prototype's three hints: math templates, up history, down search
     x = key_hint(x, b, "math", "templates") + 12;
@@ -592,13 +605,10 @@ static void status_draw(int force) {
       ui_text(&ui_tb9, t, x + w / 2, 11, UC_WHITE, c, 1);
     }
     else { // the app's mark and version by the battery (the 2nd/alpha chip takes its place):
-      // a Delta in the accent (the fonts have none), then CE
+      // a Delta in the accent, then CE
       const int vw = ui_text_width(&ui_tr9, "v" DELTACE_VERSION, -1) + 3;
       int x = UI_W - 30 - vw - ui_text_width(&ui_tb9, "CE", -1) - 14;
-      const unsigned char * acc = ramp(UC_ACC, UC_BG);
-      ui_seg16(x * 16 + 8, 13 * 16, x * 16 + 88, 3 * 16, 28, acc);
-      ui_seg16(x * 16 + 88, 3 * 16, x * 16 + 168, 13 * 16, 28, acc);
-      ui_seg16(x * 16 + 8, 13 * 16, x * 16 + 168, 13 * 16, 28, acc);
+      delta_mark(x, 13, 10, 28, UC_ACC);
       x += 14;
       x += ui_text(&ui_tb9, "CE", x, 12, UC_SUB, UC_BG, 0);
       ui_text(&ui_tr9, "v" DELTACE_VERSION, x + 3, 12, UC_SUB, UC_BG, 0);

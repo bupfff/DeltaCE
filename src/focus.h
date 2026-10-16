@@ -9,7 +9,7 @@ extern "C" {
 #endif
 #define focus_on 1 // the console is drawn by focus.cc (a constant: the classic screen's paths compile away)
 // DeltaCE, a fork of FlowCE: its own version, in the status bar and on the start screen
-#define DELTACE_VERSION "0.4"
+#define DELTACE_VERSION "0.5"
 #ifdef FLOWCE_STEPS
 #define FLOWCE_VERSION "2.0b1" // the step-by-step build, in beta (the FlowCE release DeltaCE is based on)
 #else
@@ -42,7 +42,6 @@ int focus_list(const char * title, const char * const * labels, int n, int sel, 
 void focus_note(const char * title, const char * text); // a message card; the caller reads the key
 void focus_text(const char * title, const char * text); // About, Shortcuts: a text to read
 void focus_splash(int first);           // the start screen (first: tips, "press any key")
-void focus_emblem(int cx, int top);     // the start screen's last picture, small (the empty console)
 // the graph's table of values: head[ncol], cells row by row, hint on the last line
 void focus_table(const char * const * head, int ncol, const char * const * cells, int nrow, const char * hint);
 // focus_prompt(title, label, std::string & s, numeric): a value prompt (KhiCAS's inputline) as
@@ -96,6 +95,7 @@ void focus_entry_help(int e, char * desc, int dsize, char * ex, int esize);
 // steps), else 0.
 int focus_steps_able(const char * s);
 void focus_steps(const char * in, const char * ans);
+void focus_analyze(const char * in);     // DeltaCE: a function's analysis (analyze.cc) on the steps' page
 const char * focus_steps_input(const char ** ans);
 #endif
 #endif

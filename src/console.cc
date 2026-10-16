@@ -2401,7 +2401,7 @@ static void console_temperature(const char * code){
   Console_Input((const Char *)s.c_str());
 }
 static int console_apply_action(const char * text){
-  static const char * const acts[]={"solve(","factor(","expand(","simplify(","partfrac(","integrate(","diff(","limit(","series(","subst("};
+  static const char * const acts[]={"solve(","factor(","expand(","simplify(","partfrac(","integrate(","diff(","limit(","series(","subst(","analyze("};
   const char * open=strchr(text,'(');
   bool act=false;
   for (unsigned i=0;open && i<sizeof(acts)/sizeof(acts[0]);++i)
@@ -2450,6 +2450,30 @@ static int console_apply_action(const char * text){
   return 1;
 }
 
+#ifdef FLOWCE_STEPS
+// DeltaCE: analyze(f) typed or from the calculus menu: the analysis of f (focus_steps.cc), ans()
+// as the answer it stands for; false if f is empty
+static bool console_analyze(const char * line){
+  const char * a=line+8, * end=a+strlen(a);
+  while (end>a && end[-1]==' ') --end;
+  if (end>a && end[-1]==')') --end; // (its closing parenthesis)
+  if (end==a) return false;
+  const int rl=focus_result_line();
+  const char * ans=rl>=0 && Line[rl].str?(const char *)Line[rl].str:"0";
+  const int n=end-a,cap=n+(int)strlen(ans)*4+8;
+  char * buf=(char *)malloc(cap);
+  if (!buf) return false;
+  int k=0;
+  for (const char * p=a;p<end;){
+    if (!strncmp(p,"ans()",5) && k+(int)strlen(ans)+2<cap){ buf[k++]='('; strcpy(buf+k,ans); k+=strlen(ans); buf[k++]=')'; p+=5; }
+    else buf[k++]=*p++;
+  }
+  buf[k]=0;
+  focus_analyze(buf);
+  free(buf);
+  return true;
+}
+#endif
 static const char * const console_yesno[]={"Clear history","Cancel"};
 int Console_GetKey(){
   unsigned int key, move_line, move_col;
@@ -3113,6 +3137,10 @@ int Console_GetKey(){
     if (key == KEY_CTRL_EXE){
       if (Current_Line == Last_Line){
 #ifdef FLOWCE_STEPS
+        if (Edit_Line && !strncmp((const char *)Edit_Line,"analyze(",8) && console_analyze((const char *)Edit_Line)){
+          Console_Disp(1); // (DeltaCE: the analysis screen; the line stays, to edit or open again)
+          continue;
+        }
         const char * sa=0, * st=Edit_Line && !Edit_Line[0]?focus_steps_input(&sa):0;
         if (st){ // Enter after a derivative or an integral shown large: its steps (focus_steps.cc)
           focus_steps(st,sa);

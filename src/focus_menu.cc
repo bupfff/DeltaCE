@@ -38,6 +38,9 @@ static const fm_item m_calc[] = {
   {"limit(,x,)", 4, 0, "Limit", 0, 0},
   {"sum(,k,,)", 5, 0, "Sum", 0, 0},
   {"series(,x,0,5)", 7, 0, "Taylor series", 0, 0},
+#ifdef FLOWCE_STEPS
+  {"analyze()", 1, 0, "Analyze f(x)", 0, 0}, // (DeltaCE: analyze.cc, the report on the steps' page)
+#endif
 };
 static const fm_item m_trig[] = {
   {"sin()", 1, 0, 0, 0, 0}, {"cos()", 1, 0, 0, 0, 0}, {"tan()", 1, 0, 0, 0, 0},
@@ -66,7 +69,11 @@ static const fm_item m_math[] = {
 };
 #define N(a) (char)(sizeof(a) / sizeof(a[0]))
 static const fm_menu MENUS[6] = { // F1 F2 F3 F4 F5 math
+#ifdef FLOWCE_STEPS
+  {0, 1, N(m_alg), m_alg}, {2, 3, N(m_calc), m_calc}, {1, 3, N(m_trig), m_trig}, // (7 calculus items: 3 columns)
+#else
   {0, 1, N(m_alg), m_alg}, {2, 2, N(m_calc), m_calc}, {1, 3, N(m_trig), m_trig},
+#endif
   {1, 4, N(m_sym), m_sym}, {0, 1, N(m_more), m_more}, {1, 3, N(m_math), m_math},
 };
 #undef N
@@ -520,16 +527,6 @@ static void splash_graph(int ms) {
     const int r = 4 + 10 * sp_eo(pc) / 1024;
     ui_rframe(0, SP_P - r, (fp >> 4) - r, 2 * r + 1, 2 * r + 1, r, pc < 512 ? UC_ACC : UC_ACCSOFT, UC_BG);
   }
-}
-// the start screen's last picture at half size, DeltaCE's emblem on the empty console: the curve,
-// its tangent at the top, the point; centered on cx, the curve's top at row top
-void focus_emblem(int cx, int top) {
-  const int p = (SP_P - SP_X0) / 2, x0 = (cx - p) * 16, y0 = top * 16 - splash_curve[p] / 2;
-  const unsigned char * sub = ui_ramp(0, UC_SUB, UC_BG);
-  for (int i = 0; i < 126; i += 2)
-    ui_seg16(x0 + i * 16, y0 + splash_curve[i] / 2, x0 + (i + 2) * 16, y0 + splash_curve[i + 2] / 2, 22, sub);
-  ui_seg16((cx - 54) * 16, top * 16, (cx + 54) * 16, top * 16, 30, ui_ramp(0, UC_ACC, UC_BG));
-  ui_rrect(0, cx - 3, top - 3, 7, 7, 3, UC_INK, UC_BG);
 }
 volatile int splash_frames; // frames drawn by the last start screen (the emulator tools read it)
 void focus_splash(int first) {
