@@ -2213,10 +2213,11 @@ static bool long_one_term(const std::string & t){
 }
 
 // ---- F4's forms (answer.h) ----
-const char * const answer_form_names[]={"simplified","one fraction","factored","expanded","trig combined","trig expanded","in terms of sin","in terms of cos","in terms of tan","decimal","long division","completed square","mixed number"};
-static const unsigned char o_plain[]={FORM_SIMP,FORM_RAT,FORM_FACT,FORM_SQR,FORM_DIV,FORM_EXPA,FORM_DEC},
+const char * const answer_form_names[]={"simplified","one fraction","factored","expanded","trig combined","trig expanded","in terms of sin","in terms of cos","in terms of tan","decimal","long division","completed square","mixed number","d/dx: matches the integrand","d/dx of the answer"};
+const char * answer_forms_input;
+static const unsigned char o_plain[]={FORM_CHECK,FORM_CHECKD,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_SQR,FORM_DIV,FORM_EXPA,FORM_DEC},
   o_number[]={FORM_DEC,FORM_MIX,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA},
-  o_trig[]={FORM_TLIN,FORM_TEXP,FORM_TSIN,FORM_TCOS,FORM_TTAN,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA,FORM_DEC};
+  o_trig[]={FORM_CHECK,FORM_CHECKD,FORM_TLIN,FORM_TEXP,FORM_TSIN,FORM_TCOS,FORM_TTAN,FORM_SIMP,FORM_RAT,FORM_FACT,FORM_EXPA,FORM_DEC};
 
 // tan is the only trig function of g (and it has one): tan identities are quotients by nature,
 // 2tan(x)/(1-tan(x)^2) for tan(2x)
@@ -2632,6 +2633,31 @@ static __attribute__((noinline)) void form_compute(answer_forms & F,int k){
   F.text[k].clear();
   const int f=F.order[k];
   const gen & g=F.g;
+  if (f==FORM_CHECK || f==FORM_CHECKD){ // (DeltaCE) the derivative of an antiderivative
+    if (!F.chk) return;
+    gen d=ratnormal(derive(g,F.cx,contextptr),contextptr);
+    if (is_undef(d) || d.type==_STRNG) return;
+    // the integrand again: exactly, or (trig identities, ln|x|) at three points
+    bool same=is_zero(ratnormal(d-F.ci,contextptr));
+    if (!same){ // the same values at three points (the calculator's doubles have 7 digits)
+      static const double pts[3]={0.618,1.414,2.303};
+      same=true;
+      for (int i=0;same && i<3;++i){
+        const gen a=evalf(subst(d,F.cx,gen(pts[i]),false,contextptr),1,contextptr),b=evalf(subst(F.ci,F.cx,gen(pts[i]),false,contextptr),1,contextptr);
+        if (a.type!=_DOUBLE_ || b.type!=_DOUBLE_) same=false;
+        else same=fabs(a._DOUBLE_val-b._DOUBLE_val)<=1e-4*(fabs(b._DOUBLE_val)>1?fabs(b._DOUBLE_val):1);
+      }
+    }
+    if ((f==FORM_CHECK)!=same) return;
+    gen r=same?F.ci:d;
+    if (r.type==_SYMB && taille(r,200)<200) r=positive_first(r);
+    std::string text=r.print(contextptr);
+    textbook(text);
+    textbook_constants(text);
+    F.text[k]=text;
+    F.form[k]=r;
+    return;
+  }
   // giac's simplify of trig is slow (2.6 s on the calculator for 2sin(x)cos(x)) and gives the tan
   // form (in terms of tan has it) or tan(x/2) messes, except for trig below a bar: sin(x)/(1+cos(x))
   // is tan(x/2)
@@ -2771,6 +2797,24 @@ void answer_forms_start(answer_forms & F,const std::string & orig,bool number){
     F.n=0;
   F.size=taille(F.g,400);
   F.below=F.trig && trig_below(F.g);
+  F.chk=false; // (DeltaCE) an antiderivative: integrate(f,x), int(f,x) or integrate(f) (in x)
+  if (!number && !open && answer_forms_input && strlen(answer_forms_input)<400){
+    const char * p=answer_forms_input;
+    while (*p==' ') ++p;
+    if (!strncmp(p,"integrate(",10) || !strncmp(p,"int(",4)){
+      char buf[900];
+      strcpy(buf,p);
+      khicas_implicit_mult(buf,sizeof(buf));
+      const gen in(buf,contextptr);
+      if (in.is_symb_of_sommet(at_integrate)){
+        const gen & a=in._SYMBptr->feuille;
+        if (a.type==_VECT && a._VECTptr->size()==2 && a._VECTptr->back().type==_IDNT){
+          F.ci=eval(a._VECTptr->front(),1,contextptr); F.cx=a._VECTptr->back(); F.chk=true;
+        }
+        else if (a.type!=_VECT){ F.ci=eval(a,1,contextptr); F.cx=gen(identificateur("x")); F.chk=true; }
+      }
+    }
+  }
   F.text.assign(F.n,std::string());
   F.form.assign(F.n,gen(0));
   F.done.assign(F.n,0);

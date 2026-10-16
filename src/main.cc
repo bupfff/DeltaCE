@@ -609,6 +609,10 @@ const char * console_form_name="exact"; // the form of the line F4 cycles (Focus
 bool console_form_of(const char * s){
   return form_line && s==form_line && !strcmp(s,(form_idx?forms->text[form_idx-1]:forms->orig).c_str());
 }
+// (DeltaCE) line s shows the check of an antiderivative (its derivative: no "+ C")
+bool console_form_check(const char * s){
+  return console_form_of(s) && form_idx && (forms->order[form_idx-1]==FORM_CHECK || forms->order[form_idx-1]==FORM_CHECKD);
+}
 static void form_busy(){ statuslinemsg("computing..."); }
 void console_cycle_form(int l){
   using namespace giac;
@@ -619,6 +623,9 @@ void console_cycle_form(int l){
   dconsole_mode=0; // giac's notes ("Warning: unable to find oo integer solutions...") are not shown
   if (!console_form_of((const char *)Line[l].str)){ // another result: its forms
     const std::string orig((const char *)Line[l].str);
+    answer_forms_input=0; // (DeltaCE) its input, for the check of an antiderivative
+    for (int k=l-1;k>=0 && k>=l-8;--k)
+      if (Line[k].type==LINE_TYPE_INPUT){ answer_forms_input=(const char *)Line[k].str; break; }
     answer_forms_start(*forms,orig,*console_approx() && orig==console_approx_for);
     form_idx=0;
   }

@@ -19,6 +19,7 @@ namespace xcas {
 #endif
 using namespace std;
 #include "mathinput.h" // after "#define std ustl": its vector is uSTL's
+#include <ctype.h>
 #include "focus.h"
 #include "mathedit.h"
 
@@ -2324,8 +2325,83 @@ static __attribute__((noinline)) bool console_wrappable(const char * e,bool solv
   return !strchr("+-*/^=,(<>",last);
 }
 
+// (DeltaCE) the variable an action (solve, diff, integrate, limit, series, subst) works in on
+// expr: x, or the one letter expr has when it has no x (3b+2=11: b; 2t^2+5t: t; ans(): the last
+// answer's), read from its text: names before ( are functions, _km units, e pi i oo constants; a
+// name of several letters other than a Greek one (ab: a*b) leaves x. (Calling giac to parse it
+// from here reset the calculator: the popover's memory state.)
+static int greek_name(const char * s,int n){
+  static const char * const g[]={"alpha","beta","gamma","delta","theta","lambda","mu","phi","omega","rho","sigma","tau",0};
+  for (int i=0;g[i];++i) if ((int)strlen(g[i])==n && !strncmp(s,g[i],n)) return 1;
+  return 0;
+}
+static void console_action_var(const char * expr,char * var,int cap){
+  strcpy(var,"x");
+  const char * s=expr;
+  if (!strcmp(expr,"ans()")){
+    const int l=focus_result_line();
+    if (l<0 || !Line[l].str) return;
+    s=(const char *)Line[l].str;
+  }
+  const char * found=0;
+  int flen=0,many=0;
+  for (int i=0;s[i];){
+    const char c=s[i];
+    if (c=='"'){ // a string
+      for (++i;s[i] && s[i]!='"';++i) if (s[i]=='\\' && s[i+1]) ++i;
+      if (s[i]) ++i;
+      continue;
+    }
+    if ((c>='0' && c<='9') || c=='.'){ // a number (2e-3; 2t is 2 then t)
+      while ((s[i]>='0' && s[i]<='9') || s[i]=='.') ++i;
+      if (s[i]=='e' && ((s[i+1]>='0' && s[i+1]<='9') || ((s[i+1]=='-' || s[i+1]=='+') && s[i+2]>='0' && s[i+2]<='9')))
+        for (i+=2;s[i]>='0' && s[i]<='9';) ++i;
+      continue;
+    }
+    if (isalpha((unsigned char)c) || c=='_'){
+      int j=i;
+      while (isalnum((unsigned char)s[j]) || s[j]=='_') ++j;
+      int k=j;
+      while (s[k]==' ') ++k;
+      const int n=j-i;
+      const bool skip=s[k]=='(' || c=='_' || (n==1 && (c=='e' || c=='i')) || (n==2 && !strncmp(s+i,"pi",2)) ||
+        (n==2 && !strncmp(s+i,"oo",2)) || (n==3 && !strncmp(s+i,"inf",3)) || (n==8 && !strncmp(s+i,"infinity",8));
+      if (!skip){
+        if (n==1 && c=='x') return; // x is there
+        if (n>1 && !greek_name(s+i,n)) many=1; // ab: a*b
+        else if (!found){ found=s+i; flen=n; }
+        else if (flen!=n || strncmp(found,s+i,n)) many=1;
+      }
+      i=j;
+      continue;
+    }
+    ++i;
+  }
+  if (found && !many && flen<cap){ memcpy(var,found,flen); var[flen]=0; }
+}
+// (DeltaCE) a temperature conversion of the units menu (code CF, FC, CK, KC: from, to), applied as
+// F1's actions are: to the line typed (caret at its end), else to the last answer on an empty
+// line, else its template goes in with the caret in its box: 100 then Celsius to F is 9/5*(100)+32
+static void console_temperature(const char * code){
+  const char * pre=!strcmp(code,"CF")?"9/5*(":!strcmp(code,"FC")?"5/9*((":"(";
+  const char * post=!strcmp(code,"CF")?")+32":!strcmp(code,"FC")?")-32)":!strcmp(code,"CK")?")+273.15":")-273.15";
+  if (!console_input2d() || !Edit_Line) return;
+  const char * e=(const char *)Edit_Line;
+  const int len=strlen(e),caret=console_caret();
+  std::string s(pre);
+  if (len && caret==len) s+=e;
+  else if (!len && focus_result_line()>=0) s+="ans()";
+  else {
+    Console_Input((const Char *)(std::string(pre)+post).c_str());
+    for (int b=strlen(post);b>0;--b) Console_MoveCursor(CURSOR_LEFT);
+    return;
+  }
+  s+=post;
+  Console_Clear_EditLine();
+  Console_Input((const Char *)s.c_str());
+}
 static int console_apply_action(const char * text){
-  static const char * const acts[]={"solve(","factor(","expand(","simplify(","partfrac(","integrate(","diff(","limit(","series("};
+  static const char * const acts[]={"solve(","factor(","expand(","simplify(","partfrac(","integrate(","diff(","limit(","series(","subst("};
   const char * open=strchr(text,'(');
   bool act=false;
   for (unsigned i=0;open && i<sizeof(acts)/sizeof(acts[0]);++i)
@@ -2338,20 +2414,35 @@ static int console_apply_action(const char * text){
   for (int i=caret;at_end && i<len;++i)
     at_end=e[i]==')';
   std::string s(text,open+1-text); // factor(
+  std::string expr;
   if (at_end && console_wrappable(e,text[0]=='s' && text[1]=='o'))
-    s+=e;
+    expr=e;
   else if (!len && focus_result_line()>=0)
-    s+="ans()";
+    expr="ans()";
   else {
     if (caret>0 && (isalpha((unsigned char)e[caret-1]) || e[caret-1]=='_'))
       Console_Input((const Char *)"*");
     return 0;
   }
-  s+=open+1; // ) or ,x) or ,x,,)
+  s+=expr;
+  std::string rest(open+1); // ) or ,x) or ,x,,) or ,x=)
+  // (DeltaCE) in the expression's own letter when it has no x: 3b+2=11 solved for b, 5t^2 in t
+  if (rest.size()>=3 && rest[0]==',' && rest[1]=='x' && (rest[2]==',' || rest[2]==')' || rest[2]=='=')){
+    char v[16];
+    console_action_var(expr.c_str(),v,sizeof(v));
+    if (strcmp(v,"x") && rest.size()<40){ // (built in a char buffer: uSTL's "," + string + substr reset the calculator)
+      char nr[64];
+      nr[0]=',';
+      strcpy(nr+1,v);
+      strcat(nr,rest.c_str()+2);
+      rest=nr;
+    }
+  }
+  s+=rest;
   Console_Clear_EditLine();
   Console_Input((const Char *)s.c_str());
-  for (const char * p=open+1;p[0] && p[1];++p)
-    if (p[0]==',' && (p[1]==',' || p[1]==')')){ // the first empty slot
+  for (const char * p=rest.c_str();p[0] && p[1];++p)
+    if ((p[0]==',' && (p[1]==',' || p[1]==')')) || (p[0]=='=' && p[1]==')')){ // the first empty slot
       for (int b=strlen(p+1);b>0;--b)
         Console_MoveCursor(CURSOR_LEFT);
       break;
@@ -3322,8 +3413,11 @@ const char * Console_Draw_FMenu(int key, struct FMenu* menu,Char * cfg,int activ
   nb_entries = menu->count;
   if (focus_on && ((active_app==0 && focus_screen()) || (active_app==2 && focus_view))){ // the console or the program editor: a Focus card of the entries
 #ifdef WITH_UNITS
-    if (key-KEY_CTRL_F1==13) // alpha F4: DeltaCE's units menu (KhiCAS's draw menu was there)
-      return focus_units(13);
+    if (key-KEY_CTRL_F1==13){ // alpha F4: DeltaCE's units menu (KhiCAS's draw menu was there)
+      const char * u=focus_units(13);
+      if (u && u[0]==1){ console_temperature(u+1); return nullptr; }
+      return u;
+    }
 #endif
     const int r=focus_fmenu(key-KEY_CTRL_F1,(const char * const *)entries,nb_entries);
     if (r>=0)

@@ -29,7 +29,7 @@ static const fm_item m_alg[] = {
   {"expand()", 1, 0, "Expand", 0, 0},
   {"simplify()", 1, 0, "Simplify", 0, 0},
   {"partfrac()", 1, 0, "Partial fractions", 0, 0},
-  {"()/()", 4, 0, "Fraction", 0, 0},
+  {"subst(,x=)", 4, 0, "Value at x =", 0, 0}, // (DeltaCE; a fraction is the / key)
 };
 static const fm_item m_calc[] = {
   {"integrate(,x)", 3, 0, "Antiderivative", 0, 0},
@@ -741,7 +741,7 @@ int focus_fmenu(int idx, const char * const * e, int n) {
 // _degreeF converts to nothing, and _grad reads as the gradient (_gon is the same unit). EXIT in a category goes back to the
 // categories; Convert types => (5_mi=>_km)
 static const char * const un_cat[9] = {"Convert", "Length", "Area, volume", "Mass", "Time, speed",
-                                       "Force, energy", "Pressure, electric", "Heat, angle", "Constants"};
+                                       "Force, energy", "Pressure, electric", "Temp., angle", "Constants"};
 static const char * const un_tab[8][18] = {
   {"_m", "meter", "_cm", "centimeter", "_mm", "millimeter", "_km", "kilometer", "_inch", "inch",
    "_ft", "foot", "_yd", "yard", "_mi", "mile", "_nmi", "nautical mile"},
@@ -755,8 +755,9 @@ static const char * const un_tab[8][18] = {
    "_eV", "electron-volt", "_W", "watt", "_hp", "horsepower", "_kWh", "kilowatt-hour"},
   {"_Pa", "pascal", "_kPa", "kilopascal", "_bar", "bar", "_atm", "atmosphere", "_psi", "psi",
    "_mmHg", "mm of mercury", "_V", "volt", "_A", "ampere", "_Ohm", "ohm"},
-  {"_K", "kelvin", "_Rankine", "rankine", "_Btu", "BTU", "_deg", "degree", "_rad", "radian",
-   "_gon", "gon (grad)", "_arcmin", "arc minute", "_arcs", "arc second", "_rev", "revolution"},
+  // \x01: a temperature conversion, applied to the line (console.cc: giac has no degrees Celsius)
+  {"\x01" "CF", "Celsius to F", "\x01" "FC", "F to Celsius", "\x01" "CK", "Celsius to K", "\x01" "KC", "K to Celsius",
+   "_K", "kelvin", "_deg", "degree", "_rad", "radian", "_arcmin", "arc minute", "_rev", "revolution"},
   {"_c_", "light speed", "_g_", "gravity (Earth)", "_G_", "gravitation", "_h_", "Planck", "_k_", "Boltzmann",
    "_NA_", "Avogadro", "_R_", "gas constant", "_qe_", "electron charge", "_me_", "electron mass"},
 };
@@ -779,7 +780,9 @@ const char * focus_units(int idx) {
     const int c = un_cards(idx, it, 9);
     if (c < 0) return 0;
     if (c == 0) return "=>";
-    for (int k = 0; k < 9; ++k) { it[k].text = un_tab[c - 1][2 * k]; it[k].label = un_tab[c - 1][2 * k + 1]; }
+    for (int k = 0; k < 9; ++k) { // (a temperature conversion: its name alone)
+      it[k].text = un_tab[c - 1][2 * k][0] == 1 ? 0 : un_tab[c - 1][2 * k]; it[k].label = un_tab[c - 1][2 * k + 1];
+    }
     const int u = un_cards(idx, it, 9);
     if (u >= 0) return un_tab[c - 1][2 * u];
     if (u == -2) return 0;

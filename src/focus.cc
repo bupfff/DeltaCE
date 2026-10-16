@@ -24,6 +24,7 @@ extern "C" int os_key_flags();      // k_csdk.c: 1 2nd, 2 alpha, 4 alpha lock, 8
 bool console_edit2d();              // console.cc: the edit line is math (not Python)
 int console_caret();                // console.cc: caret index in the edit line, -1 if in the history
 extern const char * console_form_name; // main.cc: the form F4 last gave (console_form_of)
+bool console_form_check(const char * s); // main.cc: s shows the check of an antiderivative (no + C)
 bool console_form_of(const char * s);
 extern const char * console_approx_for; // main.cc: the decimal value of that printed result
 extern bool answer_simplify_on;     // answer.cc: Simplify answers (mode) is on, as last read
@@ -215,7 +216,7 @@ static __attribute__((noinline)) void draw_result(const fent & e, int right, int
   }
   fitc c = fitted(s, OUT_LV, W_OUT, 64, MI_F_IMPLDOT);
   int cw = 0;
-  if (e.in >= 0 && is_antideriv(Line[e.in].str)) { // "+ C" in the secondary color
+  if (e.in >= 0 && is_antideriv(Line[e.in].str) && !console_form_check((const char *)Line[e.out].str)) { // "+ C" in the secondary color
     const ui_face * f = &ui_mu17;
     cw = ui_text_width(f, "+ ", -1) + ui_text_width(&ui_mi17, "C", -1) + 4;
     int x = right - cw + 4;
@@ -413,7 +414,7 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     int bot = y0 + h - (is_text(r) ? 14 : 25); // above the forms chip (tall fractions ran into it)
     if (is_text(r)) ui_text_wrapped(r, top, bot, 296);
     else {
-      int anti = e.in >= 0 && is_antideriv(Line[e.in].str);
+      int anti = e.in >= 0 && is_antideriv(Line[e.in].str) && !console_form_check((const char *)Line[e.out].str);
       fitc c = fitted(r, HERO_LV, anti ? 256 : 292, bot - top > 18 ? bot - top : 18, MI_F_IMPLDOT);
       int cw = anti ? ui_text_width(&ui_mu24, "+ ", -1) + ui_text_width(&ui_mi24, "C", -1) + 6 : 0;
       int x = (UI_W - c.w - cw) / 2, base = top + (bot - top - (c.a + c.d)) / 2 + c.a;
