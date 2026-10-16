@@ -159,7 +159,7 @@ static int NE;
 // answer), else 0
 static const char * steps_input(const fent & e) {
   const char * r = e.out < 0 ? 0 : shown((const char *)Line[e.out].str);
-  if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14) && strncmp(r, "diverges", 8) && strncmp(r, "no limit", 8))) return 0; // (a limit's "does not exist" or "no limit", a series' "diverges" too)
+  if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14) && strncmp(r, "diverges", 8) && strncmp(r, "no limit", 8) && strncmp(r, "no solution", 11))) return 0; // (a limit's "does not exist" or "no limit", a series' "diverges", an equation's "no solution" too)
   const char * s = (const char *)Line[e.in].str;
   return focus_steps_able(s) ? s : 0;
 }
@@ -491,6 +491,14 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
         ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
       }
     }
+#ifdef FLOWCE_STEPS
+    else if (steps_input(e)) { // a text answer with steps (no solution, does not exist): their chip alone
+      const int sw = ui_text_width(&ui_tb9, "steps", -1) + ui_text_width(&ui_tb9, "enter", -1) + 20, sx = (UI_W - sw) / 2, cy = y0 + h - 13;
+      ui_rrect(0, sx, cy - 10, sw, 13, 6, UC_ACC, UC_BG);
+      int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, UC_ONACC, UC_ACC, 0);
+      ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
+    }
+#endif
   } else {
     int m = y0 + h / 2 - 2, b = m + 20;
     // the mark and a tip on the empty console only: not under the history, nor when a calculation

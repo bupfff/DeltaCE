@@ -42,7 +42,7 @@ static bool starts(const char * s, const char * p) { return !strncmp(s, p, strle
 // polynomial, also inside another command (subst(diff(f,x,3),x=0), solve(diff(f,x)=0,x): the
 // steps take the calculus part first, then the rest)
 int focus_steps_able(const char * s) {
-  static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum("};
+  static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum(", "solve("};
   for (const char * p = s; *p; ++p)
     if (p == s || !isalnum((unsigned char)p[-1]))
       for (unsigned k = 0; k < sizeof(ops) / sizeof(ops[0]); ++k)
@@ -266,6 +266,7 @@ static __attribute__((noinline)) void lay_steps(const char * head, const std::ve
     }
     else { // working (u = x, dv = ...; an identity): the items of a line side by side when they fit
       if (P[NP - 1].kind != K_WORK) ++GRP;
+      const int k0 = NP;
       for (int a = 0; s[a];) {
         int n = top(s + a, ',');
         if (n < 0) n = strlen(s + a);
@@ -281,20 +282,21 @@ static __attribute__((noinline)) void lay_steps(const char * head, const std::ve
         else y += add_math(s + a, n, X, y, W, 4, K_WORK) + 10;
         a += n + (s[a + n] == ',');
       }
+      if (NP - k0 > 2) for (int k = k0 + 1; k < NP; ++k) if (P[k].num == 2) P[k].num = 3; // (a = 1, b = -5, c = 6)
       y += 4;
     }
     free(s);
   }
   finish(k0);
   if (ans && *ans) { // the answer, in a box (instead of a last line "= the answer")
-    if (NP && P[NP - 1].kind == K_EQ && P[NP - 1].num == 1 && !strcmp(P[NP - 1].s, ans)) { y = P[NP - 1].y; free(P[--NP].s); }
+    if (NP && ((P[NP - 1].kind == K_EQ && P[NP - 1].num == 1) || P[NP - 1].kind == K_WORK) && !strcmp(P[NP - 1].s, ans)) { y = P[NP - 1].y; free(P[--NP].s); }
     k0 = NP;
     section("ANSWER", 0, y);
     const int b = NP;
     if (put(K_BOX, 0, X - 4, y, W + 8, 0, 0, 0)) {
       ++GRP;
-      static const char DNE[] = "does not exist", DIV[] = "diverges"; // (a limit's, a series' text answer)
-      const char * tx = starts(ans, DNE) || starts(ans, "no limit") ? DNE : starts(ans, DIV) ? DIV : 0; // (sin(1/x) at 0: "no limit (it oscillates)")
+      static const char DNE[] = "does not exist", DIV[] = "diverges", NOS[] = "no solution"; // (a limit's, a series', an equation's text answer)
+      const char * tx = starts(ans, DNE) || starts(ans, "no limit") ? DNE : starts(ans, DIV) ? DIV : starts(ans, NOS) ? NOS : 0; // (sin(1/x) at 0: "no limit (it oscillates)")
       const int h = tx ? (put(K_TITLE, (char *)tx, X + (W - ui_text_width(&ui_tb12, tx, -1)) / 2, y + 14, 0, 16, 13, 0), 16)
                        : add_math(ans, strlen(ans), X, y + 14, W - 12 - (plusc ? 44 : 0), 2, K_ANS);
       if (plusc && NP > b + 1) { // + C after the last line
@@ -413,6 +415,7 @@ static __attribute__((noinline)) const char * build(const char * in, const char 
     giac::gen g(buf, contextptr);
     if (!giac::interrupted) {
       head = steps_problem(g, contextptr).print(contextptr);
+      if (char * h = dup(head.c_str(), head.size())) { unwrap(h); head = h; free(h); } // (2(x+3)=4x-5, not =(4x-5))
       waiting(head.c_str());
       giac::control_c_hook = focus_busy_tick;
       quiet(1);

@@ -22,7 +22,9 @@ enum {
   R_TSUBR, R_TSUBEQ, R_TRI, R_SPLIT, R_CONJ, R_WEIER, R_ABS, R_IMPROPER, R_NOELEM,
   R_FTC, R_EQV, R_PART, R_ABSI, R_FTC1, R_LSUB, R_LLAW, R_LALG, R_LCONJ, R_LHOP, R_LDIV, R_LQUOT,
   R_LEXP, R_LINFV, R_LDNE, R_LSQZ, R_LCOMP, R_LFRAC, R_LDOM, R_TDER, R_TVAL, R_TAYLOR,
-  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_COSPI, R_LOSC, R_LDIVQ, R_NRULES
+  R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_COSPI, R_LOSC, R_LDIVQ,
+  R_ADIST, R_ALCD, R_ASWAP, R_ASUB, R_AADD, R_ADIV, R_ACONT, R_ATRUE, R_AFALSE,
+  R_QSTD, R_QABC, R_QFORM, R_QDISC, R_QSIMP, R_ALINE, R_QTWO, R_QTWO2, R_QONE, R_QNONE, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -107,6 +109,26 @@ static const char * const RULES[]={
   "cos(n pi) is (-1)^n",0,"A=B",
   "Oscillates between -1 and 1: no limit",0,"A=B",
   "Long division",0,"A=B",
+  // equations (DeltaCE): A, B the sides, C the common denominator
+  "Distribute and combine like terms",0,"A=B",
+  "Multiply both sides by the common denominator",0,"C*(A)=C*(B)",
+  "Swap the sides",0,"A=B",
+  "Subtract from both sides",0,"A=B",
+  "Add to both sides",0,"A=B",
+  "Divide both sides",0,"(A)/C=(B)/C",
+  "",0,"A=B",
+  "Always true: every number is a solution",0,"A=B",
+  "Never true: no solution",0,"A=B",
+  "Move every term to one side",0,"A=0",
+  "Identify a, b and c",0,"a=A,b=B,c=C",
+  "Quadratic formula","x=(-b\xc2\xb1sqrt(b^2-4ac))/(2a)","A",
+  "The discriminant","b^2-4ac","A",
+  "Simplify",0,"A",
+  "",0,"A",
+  "Two solutions",0,"V=A,V=B",
+  "",0,"V=A,V=B",
+  "The discriminant is 0: one solution",0,"V=A",
+  "The discriminant is negative: no real solution",0,"A<0",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -127,7 +149,8 @@ gen steps_math(const step_t & s,GIAC_CONTEXT){
   // by parts: u and v, unless the variable is one of them (after a substitution u): p and q
   bool uv=s.v.type==_IDNT && (!strcmp(s.v._IDNTptr->id_name,"u") || !strcmp(s.v._IDNTptr->id_name,"v"));
   gen U(identificateur(uv?"p":"u")),W(identificateur(uv?"q":"v"));
-  return mergek(subst(gen(RULES[3*s.rule+2],contextptr),*phm_,makevecteur(s.a,s.b,s.c,s.v,dname(s.v),dname(s.a),U,W,dname(U),dname(W)),true,contextptr));
+  gen r=subst(gen(RULES[3*s.rule+2],contextptr),*phm_,makevecteur(s.a,s.b,s.c,s.v,dname(s.v),dname(s.a),U,W,dname(U),dname(W)),true,contextptr);
+  return s.rule>=R_ADIST?r:mergek(r); // (an equation's line: 4*1*6 as substituted, not 24)
 }
 
 // ---------------------------------------------------------------- state and helpers
@@ -1956,12 +1979,155 @@ gen steps_derivative(const gen & f,const gen & x,GIAC_CONTEXT){
   return !is_undef(r) && !interrupted && same_num(ev(r),D(f,x),x)?mergek(unexp(r)):gen(undef);
 }
 // the problem as typed (mergek without its rewrites: one denominator, 1/(n(n+2)), not 1/n/(n+2))
-gen steps_problem(const gen & input,GIAC_CONTEXT){ ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(serfix(input)))); raw_=false; return r; }
+gen steps_problem(const gen & input,GIAC_CONTEXT){
+  if (input.is_symb_of_sommet(at_solve) && lop(input,at_derive).empty() && lop(input,at_integrate).empty() && lop(input,at_limit).empty() && lop(input,at_sum).empty()){ // the equation, its sides as giac writes them
+    ctx_=contextptr;
+    gen e=arg(input).type==_VECT?arg(input,0):arg(input);
+    return e.is_symb_of_sommet(at_equal)?symbolic(at_equal,makesequence(ev(arg(e,0)),ev(arg(e,1)))):ev(e);
+  }
+  ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(serfix(input)))); raw_=false; return r; }
+// ---------------------------------------------------------------- equations (DeltaCE)
+// A linear or quadratic equation as a textbook solves it: both sides changed alike, one move a
+// step; a quadratic always by the formula (the user's choice), its values put in as they are.
+static NOINL gen co(const gen & p,int k){ // the coefficient of x^k in p, a polynomial of degree <= 2
+  gen d=k?D(p,X):p;
+  if (k==2) d=D(d,X)/2;
+  return ev(sub(d,X,0));
+}
+static NOINL gen lcd(const gen & a,const gen & b,const gen & c,const gen & d){ // of the fractions
+  gen v[4]={a,b,c,d},k=1;
+  for (int i=0;i<4;++i) if (v[i].type==_FRAC) k=lcm(k,v[i]._FRACptr->den);
+  return k;
+}
+static NOINL bool written(const gen & a,const gen & b){ return a.print(CTX)==b.print(CTX); } // (as written)
+// both sides of A = B with c added (sign 1) or taken away (-1): 3x+2-2 = 11-2, no parentheses
+static NOINL void both(int r,const gen & A,const gen & B,const gen & c,int sign){
+  vecteur a,b;
+  flat(at_plus,A,a); flat(at_plus,B,b);
+  const gen t=sign>0?c:symbolic(at_neg,c);
+  a.push_back(t); b.push_back(t);
+  S(r,symbolic(at_plus,gen(a,_SEQ__VECT)),symbolic(at_plus,gen(b,_SEQ__VECT)));
+}
+static NOINL bool eq_linear(gen L,gen R){
+  gen Lx=ev(expand(L,CTX)),Rx=ev(expand(R,CTX));
+  gen k=lcd(co(Lx,1),co(Lx,0),co(Rx,1),co(Rx,0));
+  if (!is_one(k)){ // fractions first
+    S(R_ALCD,L,R,k);
+    Lx=ev(expand(k*Lx,CTX)); Rx=ev(expand(k*Rx,CTX));
+    S(R_ACONT,Lx,Rx);
+  }
+  else if (!written(Lx,L) || !written(Rx,R)) S(R_ADIST,Lx,Rx);
+  gen q=ratnormal(Rx-co(Rx,1)*X-co(Rx,0),CTX);
+  if (!is_zero(q)){ // x^2+2x = x^2+5: the x^2 terms cancel
+    both(R_ASUB,Lx,Rx,q,-1);
+    Lx=ev(expand(Lx-q,CTX)); Rx=ev(expand(Rx-q,CTX));
+    S(R_ACONT,Lx,Rx);
+  }
+  gen aL=co(Lx,1),bL=co(Lx,0),aR=co(Rx,1),bR=co(Rx,0);
+  if (is_zero(aL) && !is_zero(aR)){ // 5 = 3x-1: the x terms on the left
+    S(R_ASWAP,Rx,Lx);
+    gen t=Lx; Lx=Rx; Rx=t; t=aL; aL=aR; aR=t; t=bL; bL=bR; bR=t;
+  }
+  if (!is_zero(aR)){ // the x terms to the left
+    gen t=ev(aR*X);
+    if (is_positive(aR,CTX)) both(R_ASUB,Lx,Rx,t,-1); else both(R_AADD,Lx,Rx,ev(-t),1);
+    aL=ev(aL-aR);
+    Lx=ev(aL*X+bL); Rx=bR;
+    S(R_ACONT,Lx,Rx);
+  }
+  if (is_zero(aL)){ S(is_zero(ev(bR-bL))?R_ATRUE:R_AFALSE,bL,bR); return true; }
+  if (!is_zero(bL)){ // the numbers to the right
+    if (is_positive(bL,CTX)) both(R_ASUB,Lx,Rx,bL,-1); else both(R_AADD,Lx,Rx,ev(-bL),1);
+    Lx=ev(aL*X); Rx=ev(bR-bL);
+    S(R_ACONT,Lx,Rx);
+  }
+  if (!is_one(aL)){
+    S(R_ADIV,Lx,Rx,aL);
+    S(R_ACONT,X,ratnormal(Rx/aL,CTX));
+  }
+  return true;
+}
+// The quadratic formula's lines are written as text (an identifier's name prints as is): giac
+// prints (-5)^2-4*1*6 as ((-5)^2)-(4*1*6) and -(-5) as 5
+static NOINL gen txt(const std::string & s){ return gen(identificateur(s)); }
+static NOINL std::string pr(const gen & g){ return g.print(CTX); }
+static NOINL std::string par(const gen & g){ // in parentheses when negative or not one term
+  std::string s=pr(g);
+  if (s[0]=='-' || strchr(s.c_str()+1,'+') || strchr(s.c_str()+1,'-') || strchr(s.c_str(),'/')){ std::string t="("; t+=s; t+=")"; return t; }
+  return s;
+}
+static NOINL std::string in(const char * a,const std::string & s,const char * b){ // a s b (only +=:
+  std::string t=a; t+=s; t+=b; return t;                                      // uSTL's + reset the calculator once)
+}
+static NOINL std::string pm(const std::string & a,const std::string & b){ // a +- b, or +- b
+  std::string s=a;
+  s+="\xc2\xb1"; s+=b;
+  return s;
+}
+static NOINL bool eq_quadratic(const gen & L,const gen & R){
+  gen p=ev(expand(ev(L-R),CTX));
+  if (!is_zero(R) || !written(p,L)) S(R_QSTD,p,0);
+  gen k=lcd(co(p,2),co(p,1),co(p,0),0);
+  if (!is_one(k)){
+    S(R_ALCD,p,0,k);
+    p=ev(expand(k*p,CTX));
+    S(R_ACONT,p,0);
+  }
+  gen a=co(p,2),b=co(p,1),c=co(p,0),d=ev(b*b-4*a*c);
+  const std::string x=pr(X),two=in("(2*",par(a),")");
+  std::string disc=par(b); disc+="^2-4*"; disc+=par(a); disc+="*"; disc+=par(c);
+  S(R_QABC,a,b,c);
+  { // x = (-(b) +- sqrt(b^2-4ac))/(2a), the values as they are
+    std::string t=x; t+="=("; t+=pm(is_zero(b)?std::string():in("-",par(b),""),in("sqrt(",disc,")")); t+=")/"; t+=two;
+    S(R_QFORM,txt(t),0);
+  }
+  { std::string t=disc; t+="="; t+=pr(d); S(R_QDISC,txt(t),0); }
+  if (is_strictly_positive(-d,CTX)){ S(R_QNONE,d,0); return true; }
+  gen n=ev(-b),e=ev(2*a),r=ev(symbolic(at_sqrt,d)); // r: sqrt(12) is 2 sqrt(3)
+  const std::string ns=is_zero(n)?std::string():pr(n),den=par(e);
+  { std::string t=x; t+="=("; t+=pm(ns,in("sqrt(",pr(d),")")); t+=")/"; t+=den; S(R_QSIMP,txt(t),0); }
+  if (is_zero(d)){ S(R_QONE,ratnormal(n/e,CTX),0); return true; }
+  const int o=is_positive(e,CTX)?-1:1; // the smaller solution first, as the console lists them
+  if (r.type==_INT_ || r.type==_FRAC){ // a perfect square: the two fractions, then their values
+    { std::string t=x; t+="=("; t+=pm(ns,pr(r)); t+=")/"; t+=den; S(R_ALINE,txt(t),0); }
+    std::string s1="(",s2="(";
+    s1+=ns; if (o<0 || !ns.empty()) s1+=o<0?"-":"+"; s1+=pr(r); s1+=")/"; s1+=den; // ((-6)/2, (6)/2 when b = 0)
+    s2+=ns; if (o>0 || !ns.empty()) s2+=o<0?"+":"-"; s2+=pr(r); s2+=")/"; s2+=den;
+    S(R_QTWO,txt(s1),txt(s2));
+    S(R_QTWO2,ratnormal((n+o*r)/e,CTX),ratnormal((n-o*r)/e,CTX));
+  }
+  else { // the root simplified (sqrt(24) is 2 sqrt(6)), x = p +- q, then the two
+    if (!written(r,symbolic(at_sqrt,d))){ std::string t=x; t+="=("; t+=pm(ns,pr(r)); t+=")/"; t+=den; S(R_ALINE,txt(t),0); }
+    gen P=ratnormal(n/e,CTX),Q=normal(ev(abs(r/e,CTX)),CTX);
+    { std::string t=x; t+="="; t+=pm(is_zero(P)?std::string():pr(P),pr(Q)); S(R_ALINE,txt(t),0); }
+    S(R_QTWO,ev(P-Q),ev(P+Q));
+  }
+  return true;
+}
+static NOINL bool eq_steps(const gen & input){
+  const gen & g=arg(input);
+  const gen eq=g.type==_VECT?g[0]:g;
+  if (g.type==_VECT && g._VECTptr->size()>1){ if (g[1].type!=_IDNT) return false; X=g[1]; }
+  gen L=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq),R=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0));
+  if (!dep(L) && !dep(R)) return false;
+  gen d=ratnormal(L-R,CTX);
+  if (dep(_denom(d,CTX))) return false; // (x in a denominator: a rational equation)
+  vecteur k=lvarx(_numer(d,CTX),X),ids=lidnt(d);
+  if (k.size()>1 || (k.size()==1 && k[0]!=X) || !polyf(_numer(d,CTX))) return false; // (not a polynomial: sqrt(x) = 3)
+  EACH(it,ids) if (*it!=X && evalf(*it,1,CTX).type!=_DOUBLE_) return false; // (other letters: a x + b = 0; pi is a number)
+  gen deg=k.empty()?gen(0):_degree(makesequence(_numer(d,CTX),X),CTX);
+  if (deg==2) return eq_quadratic(L,R);
+  if (deg.type==_INT_ && deg.val<2 && L.type!=_VECT) return eq_linear(L,R);
+  return false;
+}
+
 bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){
   static gen * in0; // the input as the steps take it (in_ points to it; no static constructor in the app)
   if (!in0) in0=new gen;
   gen x(identificateur("x"));
   ctx_=contextptr; out_=&out; depth_=0; nsub_=0; var_=&x; in_=in0;
+  if (input.is_symb_of_sommet(at_solve) && lop(input,at_derive).empty() && lop(input,at_integrate).empty() && lop(input,at_limit).empty() && lop(input,at_sum).empty())
+    return eq_steps(input) && !out.empty(); // (an equation; solve(diff(f,x)=0,x): its derivative's steps first, below)
   *in0=serfix(input);
   gen ls=limit_simp(*in0);
   if (ls!=*in0){ S(R_SIMP,*in0,ls); *in0=ls; }

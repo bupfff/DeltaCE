@@ -68,7 +68,7 @@ enum { MAXN = 192, MAXD = 24, MAXOPS = 400, RMAX = 2 * MAXD + 4, MAXC = 64 };
 
 // token types: TK_* or the punctuation char itself
 enum { TK_END, TK_NUM, TK_NAME, TK_STR, OP_DEF, OP_IMP, OP_ARR, OP_EQ, OP_NE, OP_LE, OP_GE,
-       OP_POW, TK_OTHER = 31 };
+       OP_POW, OP_PM, TK_OTHER = 31 };
 
 // node kinds; leaves first
 enum { K_TEXT, K_OP, K_OPU, K_SEP, K_DOT, K_BLANK, K_FLAT, K_PI, K_INF, K_THETA,
@@ -149,8 +149,11 @@ static void lex(int i) {
       if (j < L && digit(ch(j))) i = digits(j);
     }
     tt = TK_NUM;
+  } else if (c == 0xc2 && d == 0xb1) { // the plus-minus sign (the steps' quadratic formula)
+    i += 2;
+    tt = OP_PM;
   } else if (namec(c)) {
-    while (i < L && (namec(ch(i)) || digit(ch(i)))) ++i;
+    while (i < L && (namec(ch(i)) || digit(ch(i))) && !(ch(i) == 0xc2 && i + 1 < L && ch(i + 1) == 0xb1)) ++i; // (b+-c: not one name)
     // pi right before a letter (2pir typed with the pi key) is its own token, drawn as the pi
     // glyph, as the input pre-pass reads it (2*pi*r); not before ( : piecewise(...) is a name
     if (i - tc > 2 && S[tc] == 'p' && S[tc + 1] == 'i' && (S[tc + 2] | 32) >= 'a' &&
@@ -177,13 +180,13 @@ static int binlev(int t) { // binary operator precedence level, 0: none
   case ';': case ',': return 1;
   case OP_DEF: case OP_IMP: case OP_ARR: return 2;
   case '=': case OP_EQ: case OP_NE: case '<': case '>': case OP_LE: case OP_GE: return 3;
-  case '+': case '-': return 4;
+  case '+': case '-': case OP_PM: return 4;
   case '*': case '/': return 5;
   }
   return 0;
 }
 static int prim(int t) { return t == TK_NUM || t == TK_NAME || t == TK_STR || t == '(' || t == '[' || t == '{'; }
-static int prefix(int t) { return t == '-' || t == '+' || t == '!' || t == '\''; }
+static int prefix(int t) { return t == '-' || t == '+' || t == '!' || t == '\'' || t == OP_PM; }
 static int powop(int t) { return t == '^' || t == OP_POW; }
 static int otype(int t) { return t == '(' ? 0 : t == '[' ? 1 : t == '{' ? 2 : -1; }
 static int ctype(int t) { return t == ')' ? 0 : t == ']' ? 1 : t == '}' ? 2 : -1; }
