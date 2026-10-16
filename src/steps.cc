@@ -427,6 +427,10 @@ static gen trig_der(const unary_function_ptr & u,const gen & t){
   return 0;
 }
 static gen dsteps(const gen & f){
+  // ON or clear while the steps are worked out: giac's results are then error values, and the
+  // constant-multiple rule's ev(1) is not 1, so dsteps(rest) was dsteps(f) again, without end,
+  // until the stack ran into the OS's RAM and the calculator reset (isteps and lsteps check too)
+  if (ctrl_c || interrupted) return undef;
   if (!dep(f)) return 0;
   if (f==X) return 1;
   if (f.type!=_SYMB) return D(f,X);
