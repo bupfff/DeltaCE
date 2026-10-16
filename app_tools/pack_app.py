@@ -8,8 +8,8 @@
 # .data itself, so the OS copies no data (size 0).
 import struct, sys
 
-NAME, VERSION = b'FlowCE', b'5.0.0.0000'
-INFO = b'FlowCE - calculus CAS - GNU GPL\0'
+NAME, VERSION = b'DeltaCE', b'5.0.0.0000'
+INFO = b'DeltaCE - calculus CAS - GNU GPL\0'
 END = 0x3AFFFD
 FOOTER = b'\x02\x3e\x01\x00' + b'\xff' * 256
 HDR = 0x12a
