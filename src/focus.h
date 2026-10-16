@@ -9,7 +9,7 @@ extern "C" {
 #endif
 #define focus_on 1 // the console is drawn by focus.cc (a constant: the classic screen's paths compile away)
 // DeltaCE, a fork of FlowCE: its own version, in the status bar and on the start screen
-#define DELTACE_VERSION "0.1"
+#define DELTACE_VERSION "0.2"
 #ifdef FLOWCE_STEPS
 #define FLOWCE_VERSION "2.0b1" // the step-by-step build, in beta (the FlowCE release DeltaCE is based on)
 #else
