@@ -746,6 +746,7 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     {"_(m^2/s)", "_(m^2/s)", "Viscosity", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_A", nullptr, "Ampere", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_Bq", nullptr, "Becquerel", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_Btu", "_Btu", "British thermal unit (energy), 1055 J", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_C", nullptr, "Coulomb", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_Ci", nullptr, "Curie", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_F", nullptr, "Farad", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
@@ -765,6 +766,7 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     {"_REarth_", nullptr, "Earth radius", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_RSun_", nullptr, "Sun radius", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_R_", nullptr, "Boltzmann constant (per mol)", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_Rankine", "_Rankine", "Rankine (temperature)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_S", nullptr, "", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_StdP_", nullptr, "Standard pressure", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_StdT_", nullptr, "Standard temperature (0 degre Celsius in Kelvins)", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
@@ -774,45 +776,81 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     {"_Vm_", nullptr, "Volume molaire", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_W", nullptr, "Watt=kg*m^2/s^3", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_Wb", nullptr, "Weber", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_acre", "_acre", "acre (area), 4046.86 m^2", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_alpha_", nullptr, "fine structure constant", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_arcmin", "_arcmin", "arc minute (angle), 1/60 degree", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_arcs", "_arcs", "arc second (angle), 1/3600 degree", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_atm", "_atm", "atmosphere (pressure), 101.325 kPa", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_bar", "_bar", "bar (pressure), 100 kPa", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_c_", nullptr, "speed of light", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_cal", "_cal", "calorie (energy), 4.184 J", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_cd", nullptr, "candela", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_cm", "_cm", "centimeter (length), 0.01 m", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_cu", "_cu", "US cup (volume), 0.237 liter", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_d", nullptr, "day", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_deg", nullptr, "degree", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_eV", nullptr, "electron-Volt", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_epsilon0_", nullptr, "vacuum permittivity", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_ft", nullptr, "feet", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_g", "_g", "gram (mass), 0.001 kg", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_g_", nullptr, "Earth gravity (ground)", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_galUS", "_galUS", "US gallon (volume), 3.785 liters", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_gon", "_gon", "gon or grad (angle), 1/400 of a turn", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_grad", nullptr, "grades (angle unit(", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_h", nullptr, "Hour", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_h_", nullptr, "Planck constant", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_ha", nullptr, "hectare", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_hbar_", nullptr, "Planck constant/(2*pi)", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_hp", "_hp", "horsepower (power), 745.7 W", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_inch", nullptr, "inches", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_kPa", "_kPa", "kilopascal (pressure), 1000 Pa", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_kWh", nullptr, "kWh", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_k_", nullptr, "Boltzmann constant", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_kcal", "_kcal", "kilocalorie (energy), a food Calorie", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_kg", nullptr, "kilogram", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_km", "_km", "kilometer (length), 1000 m", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_knot", "_knot", "knot (speed), one nautical mile per hour", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_kph", "_kph", "kilometer per hour (speed)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_l", nullptr, "liter", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_lb", "_lb", "pound (mass), 0.4536 kg", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_lbf", "_lbf", "pound-force (force), 4.448 newtons", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_m", nullptr, "meter", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_mEarth_", nullptr, "Earth mass", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_m^2", nullptr, "Area in m^2", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_m^3", nullptr, "Volume in m^3", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_me_", nullptr, "electron mass", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_mg", "_mg", "milligram (mass), 0.001 g", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_mi", "_mi", "mile (length), 1609.34 m", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_miUS", nullptr, "US miles", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_min", "_min", "minute (time), 60 s", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_ml", "_ml", "milliliter (volume), 0.001 liter", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_mm", "_mm", "millimeter (length), 0.001 m", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_mmHg", "_mmHg", "millimeter of mercury (pressure)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_mn", nullptr, "minute", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_mol", "_mol", "mole (amount of substance)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_mp_", nullptr, "proton mass", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_mph", "_mph", "mile per hour (speed)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_mpme_", nullptr, "proton/electron mass-ratio", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_mu0_", nullptr, "", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_nmi", "_nmi", "nautical mile (length), 1852 m", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_oz", "_oz", "ounce (mass), 28.35 g", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_phi_", nullptr, "magnetic flux quantum", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_psi", "_psi", "pound per square inch (pressure)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_qe_", nullptr, "electron charge", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_qme_", nullptr, "_q_/_me_", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_qt", "_qt", "US quart (volume), 0.946 liter", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_rad", nullptr, "radians", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_rem", nullptr, "rem", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_rev", "_rev", "revolution (angle), one turn", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_s", nullptr, "second", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_sd_", nullptr, "Sideral day", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_syr_", nullptr, "Sideral year", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
+    {"_t", "_t", "metric ton (mass), 1000 kg", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
+    {"_ton", "_ton", "short ton (mass), 2000 pounds", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_tr", nullptr, "tour (angle unit)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_u", "_u", "atomic mass unit (mass)", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_yd", nullptr, "yards", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
+    {"_yr", "_yr", "year (time), 365.24 days", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
 #else
   {"=>", "=>", "Store (sto key) or convert: 5=>a stores, x^4-1=>* factors, p=>+ partial fractions, sin(x)^2=>cos rewrites with cos.", "#5=>a", "#x^4-1=>*", CAT_CATEGORY_PROGCMD },
 #endif

@@ -26,11 +26,9 @@ FEATURE_DEFS = -DWITH_LAPLACE -DWITH_DESOLVE -DWITH_EQW -DWITH_PLOT
 ifeq ($(UNITS),1)
     FEATURE_DEFS += -DWITH_UNITS
 endif
-# The step-by-step build (FlowCE.b84 from 2.0): no Python syntax and no units, for the room
+# The step-by-step build (FlowCE.b84 from 2.0): no Python syntax. DeltaCE: with units too (STEPS=1
+# UNITS=1: they fit together with CE toolchain v15, 2026-10-15)
 ifeq ($(STEPS),1)
-    ifeq ($(UNITS),1)
-        $(error STEPS=1 and UNITS=1 do not fit together)
-    endif
     FEATURE_DEFS += -DFLOWCE_STEPS
 endif
 

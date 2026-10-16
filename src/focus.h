@@ -49,6 +49,8 @@ void focus_table(const char * const * head, int ncol, const char * const * cells
 // KhiCAS's F-key menus (console_menu) as cards: idx = key - F1 after console_menu's renumbering.
 // Returns the entry chosen, -1 if cancelled, -2 - j to open menu j instead.
 int focus_fmenu(int idx, const char * const * entries, int n);
+// DeltaCE's units menu (alpha F4, menu idx): a category, then a unit; the text to type, 0 if none
+const char * focus_units(int idx);
 int focus_screen();                     // 1 if the screen shows the Focus console (popovers can dim it)
 extern int focus_view;                  // 1 while another view (the graph) owns the screen: popovers
                                         // do not repaint the console when they close

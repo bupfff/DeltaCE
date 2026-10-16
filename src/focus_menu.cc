@@ -734,6 +734,59 @@ int focus_fmenu(int idx, const char * const * e, int n) {
   return res;
 }
 
+#ifdef WITH_UNITS
+// DeltaCE's units menu (alpha F4, where KhiCAS's draw menu was; its commands stay in the search):
+// nine categories, then up to nine units of one (as typed: giac's unit names, with an SI prefix
+// where giac has none: _cm, _km, _kWh), each over its name. Not in giac: degrees Celsius; its
+// _degreeF converts to nothing, and _grad reads as the gradient (_gon is the same unit). EXIT in a category goes back to the
+// categories; Convert types => (5_mi=>_km)
+static const char * const un_cat[9] = {"Convert", "Length", "Area, volume", "Mass", "Time, speed",
+                                       "Force, energy", "Pressure, electric", "Heat, angle", "Constants"};
+static const char * const un_tab[8][18] = {
+  {"_m", "meter", "_cm", "centimeter", "_mm", "millimeter", "_km", "kilometer", "_inch", "inch",
+   "_ft", "foot", "_yd", "yard", "_mi", "mile", "_nmi", "nautical mile"},
+  {"_m^2", "square meter", "_ha", "hectare", "_acre", "acre", "_m^3", "cubic meter", "_l", "liter",
+   "_ml", "milliliter", "_galUS", "gallon (US)", "_qt", "quart", "_cu", "cup (US)"},
+  {"_kg", "kilogram", "_g", "gram", "_mg", "milligram", "_t", "metric ton", "_lb", "pound",
+   "_oz", "ounce", "_ton", "short ton", "_u", "atomic mass", "_mol", "mole"},
+  {"_s", "second", "_min", "minute", "_h", "hour", "_d", "day", "_yr", "year",
+   "_m/_s", "meter/second", "_kph", "km/hour", "_mph", "mile/hour", "_knot", "knot"},
+  {"_N", "newton", "_lbf", "pound-force", "_J", "joule", "_cal", "calorie", "_kcal", "kilocalorie",
+   "_eV", "electron-volt", "_W", "watt", "_hp", "horsepower", "_kWh", "kilowatt-hour"},
+  {"_Pa", "pascal", "_kPa", "kilopascal", "_bar", "bar", "_atm", "atmosphere", "_psi", "psi",
+   "_mmHg", "mm of mercury", "_V", "volt", "_A", "ampere", "_Ohm", "ohm"},
+  {"_K", "kelvin", "_Rankine", "rankine", "_Btu", "BTU", "_deg", "degree", "_rad", "radian",
+   "_gon", "gon (grad)", "_arcmin", "arc minute", "_arcs", "arc second", "_rev", "revolution"},
+  {"_c_", "light speed", "_g_", "gravity (Earth)", "_G_", "gravitation", "_h_", "Planck", "_k_", "Boltzmann",
+   "_NA_", "Avogadro", "_R_", "gas constant", "_qe_", "electron charge", "_me_", "electron mass"},
+};
+// a card grid of n items, from menu idx's F-key; the item chosen, -1 cancelled, -2 another F-key
+static int un_cards(int idx, fm_item * it, int n) {
+  fm_menu m = {2, 3, (char)n, it};
+  const int col = idx % 5;
+  geometry(col, m);
+  prepare(m);
+  open_card(m, col, idx / 5, 0);
+  cur = idx;
+  const int r = run_keys(m, 0, fk_kh);
+  close_card(1, 1);
+  return r < -1 ? -2 : r;
+}
+const char * focus_units(int idx) {
+  for (;;) {
+    fm_item it[9];
+    for (int k = 0; k < 9; ++k) { it[k].text = 0; it[k].back = 0; it[k].pv = 0; it[k].label = un_cat[k]; it[k].hint = 0; it[k].act = 0; }
+    const int c = un_cards(idx, it, 9);
+    if (c < 0) return 0;
+    if (c == 0) return "=>";
+    for (int k = 0; k < 9; ++k) { it[k].text = un_tab[c - 1][2 * k]; it[k].label = un_tab[c - 1][2 * k + 1]; }
+    const int u = un_cards(idx, it, 9);
+    if (u >= 0) return un_tab[c - 1][2 * u];
+    if (u == -2) return 0;
+  }
+}
+#endif
+
 int focus_popover(int key, const char ** text, int * back) {
   int id = key == KEY_CTRL_SYMB ? 5 : key - KEY_CTRL_F1;
   if (id < 0 || id > 5) return FA_NONE;
