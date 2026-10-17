@@ -25,7 +25,8 @@ enum {
   R_SDIV, R_SRAT, R_SGEOM, R_PSUM, R_PSUMT, R_SLIM, R_PSER, R_LCMP, R_LFORM, R_AST, R_RATIO, R_ROOT, R_LNQ, R_ITEST, R_COSPI, R_LOSC, R_LDIVQ,
   R_ADIST, R_ALCD, R_ASWAP, R_ASUB, R_AADD, R_ADIV, R_ACONT, R_ATRUE, R_AFALSE,
   R_QSTD, R_QABC, R_QFORM, R_QDISC, R_QSIMP, R_ALINE, R_QTWO, R_QTWO2, R_QONE, R_QNONE,
-  R_FGCF, R_FDSQ, R_FSUMC, R_FDIFC, R_FPSQ, R_FTWO, R_FSPLIT, R_FGROUP, R_FQUAD, R_FROOT, R_FZERO, R_FSOLVE, R_FNOREAL, R_FPRIME, R_FPRIME2, R_NRULES
+  R_FGCF, R_FDSQ, R_FSUMC, R_FDIFC, R_FPSQ, R_FTWO, R_FSPLIT, R_FGROUP, R_FQUAD, R_FROOT, R_FZERO, R_FSOLVE, R_FNOREAL, R_FPRIME, R_FPRIME2,
+  R_REXCL, R_RLCD, R_RKEEP, R_RDROP, R_RSQ, R_ROK, R_RBAD, R_RNONE, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -146,6 +147,15 @@ static const char * const RULES[]={
   "No real solution from this factor",0,"A=0",
   "No real roots: does not factor",0,"A",
   "Does not factor further",0,"A",
+  // rational and radical equations (DeltaCE)
+  "Excluded values: no denominator can be 0",0,"A",
+  "Multiply both sides by the LCD",0,"A",
+  "Check: not an excluded value",0,"A",
+  "An excluded value: not a solution",0,"A",
+  "Square both sides",0,"A",
+  "Check in the equation: both sides agree",0,"A",
+  "Check: the sides differ, extraneous",0,"A",
+  "Every candidate is extraneous: no solution",0,"A",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -2101,6 +2111,7 @@ static NOINL void PL(int r,const char * f,const gen & a,const gen & b=zero,const
 }
 static NOINL bool eq_quadratic(const gen & L,const gen & R){
   gen p=ev(expand(ev(L-R),CTX));
+  if (is_strictly_positive(-co(p,2),CTX)) p=ev(expand(ev(R-L),CTX)); // (to the side where x^2 is positive: x^2-3x-2 = 0)
   if (!is_zero(R) || !written(p,L)) S(R_QSTD,p,0);
   gen k=lcd(co(p,2),co(p,1),co(p,0),0);
   if (!is_one(k)){
@@ -2389,22 +2400,134 @@ static NOINL bool eq_factor(const gen & L,const gen & R){
   EACH(it,none) S(R_FNOREAL,*it,0);
   return true;
 }
+// a polynomial equation L = R in x (numeric coefficients): its steps by its degree
+static NOINL bool eq_poly(const gen & L,const gen & R){
+  const gen d=ratnormal(L-R,CTX);
+  if (dep(_denom(d,CTX)) || dep(_denom(ratnormal(L,CTX),CTX)) || dep(_denom(ratnormal(R,CTX),CTX))) return false; // (x/(x-1) = 1/(x-1)+2: its sides)
+  vecteur k=lvarx(_numer(d,CTX),X),ids=lidnt(d);
+  if (k.size()>1 || (k.size()==1 && k[0]!=X) || !polyf(_numer(d,CTX))) return false; // (not a polynomial)
+  EACH(it,ids) if (*it!=X && evalf(*it,1,CTX).type!=_DOUBLE_) return false; // (other letters: a x + b = 0; pi is a number)
+  const gen deg=k.empty()?gen(0):_degree(makesequence(_numer(d,CTX),X),CTX);
+  if (deg==2) return eq_quadratic(L,R);
+  if (deg.type==_INT_ && deg.val>2) return eq_factor(L,R);
+  if (deg.type==_INT_ && deg.val<2 && L.type!=_VECT) return eq_linear(L,R);
+  return false;
+}
+// the real solutions of the polynomial equation L = R, exact
+static NOINL vecteur roots_of(const gen & L,const gen & R){
+  vecteur r;
+  const gen s=_solve(makesequence(symbolic(at_equal,makesequence(ev(L-R),0)),X),CTX);
+  double d;
+  if (s.type==_VECT) EACH(it,*s._VECTptr){ gen z=evalf(*it,1,CTX); if (z.type==_DOUBLE_ || z.type==_INT_) r.push_back(normal(*it,CTX)); } // ((3-sqrt(17))/2, not -(-3+sqrt(17))/2)
+  (void)d;
+  return r;
+}
+static NOINL gen eqseq(const vecteur & v,const unary_function_ptr * op){ // x=a, x=b (op at_equal) or x!=a, ...
+  vecteur w;
+  EACH(it,v) w.push_back(symbolic(*op,makesequence(X,*it)));
+  return w.size()==1?w.front():gen(w,_SEQ__VECT);
+}
+// each term of a side times the LCD, simplified: 2x(x+1)(1/x+1/(x+1)) is 2(x+1)+2x
+static NOINL gen termwise(const gen & side,const gen & lcd){
+  vecteur t,w;
+  flat(at_plus,side,t);
+  EACH(it,t){
+    const gen r=ratnormal(lcd*(*it),CTX),f=_factor(r,CTX);
+    w.push_back(taille(f,100)<=taille(r,100)?f:r);
+  }
+  return w.size()==1?w.front():symbolic(at_plus,gen(w,_SEQ__VECT));
+}
+// x in a denominator: the excluded values, both sides times the LCD, the polynomial equation, the
+// solutions checked against the excluded values
+static NOINL bool eq_rational(const gen & L,const gen & R){
+  const gen lcd=ratnormal(_lcm(makesequence(_denom(ratnormal(L,CTX),CTX),_denom(ratnormal(R,CTX),CTX)),CTX),CTX);
+  if (!dep(lcd)) return false;
+  const vecteur ex=roots_of(lcd,0);
+  if (!ex.empty()) S(R_REXCL,eqseq(ex,at_different),0);
+  const gen lf=_factor(lcd,CTX);
+  S(R_RLCD,symbolic(at_equal,makesequence(symbolic(at_prod,makesequence(lf,L)),symbolic(at_prod,makesequence(lf,R)))),0);
+  const gen Ls=termwise(L,lcd),Rs=termwise(R,lcd);
+  S(R_ALINE,symbolic(at_equal,makesequence(Ls,Rs)),0);
+  if (!eq_poly(Ls,Rs)) return false;
+  vecteur ok,bad;
+  const vecteur c=roots_of(Ls,Rs);
+  EACH(it,c) (is_zero(ratnormal(subst(lcd,X,*it,false,CTX),CTX))?bad:ok).push_back(*it);
+  if (!ok.empty()) S(R_RKEEP,eqseq(ok,at_equal),0);
+  if (!bad.empty()) S(R_RDROP,eqseq(bad,at_equal),0);
+  return true;
+}
+// a square root of x in g: sqrt(u), u with x
+static NOINL bool is_root(const gen & t){
+  if (!t.is_symb_of_sommet(at_pow) || arg(t).type!=_VECT) return false;
+  const gen e=arg(t,1);
+  return e.type==_FRAC && is_one(e._FRACptr->num) && e._FRACptr->den==2 && dep(arg(t,0));
+}
+static NOINL int nroots(const gen & g){ int n=0; vecteur p=lop(g,at_pow); EACH(it,p) n+=is_root(*it); return n; }
+// side = c sqrt(u) + o: its root term's root (c, o set), 0 if none
+static NOINL gen root_term(const gen & side,gen & c,gen & o){
+  vecteur t,rest;
+  flat(at_plus,side,t);
+  gen s=0;
+  EACH(it,t){
+    if (!is_zero(s) || !nroots(*it)){ rest.push_back(*it); continue; }
+    if (is_root(*it)){ s=*it; c=1; continue; }
+    vecteur f; // c sqrt(u): a number times the root
+    flat(at_prod,*it,f);
+    gen k=1,r=0;
+    EACH(jt,f) if (is_root(*jt) && is_zero(r)) r=*jt; else k=k*(*jt);
+    if (is_zero(r) || dep(k)) return 0;
+    s=r; c=ev(k);
+  }
+  o=rest.empty()?gen(0):rest.size()==1?rest.front():symbolic(at_plus,gen(rest,_SEQ__VECT));
+  return s;
+}
+// square roots: one alone on its side, both sides squared (twice when a root is left: sqrt(x) +
+// sqrt(x+5) = 5), the polynomial equation, each candidate put back in the equation as given (Lc = Rc:
+// squaring can add solutions)
+static NOINL bool eq_radical(const gen & L0,const gen & R0,const gen & Lc,const gen & Rc,int depth){
+  gen L=L0,R=R0;
+  if (!nroots(L)){ S(R_ASWAP,R,L); gen t=L; L=R; R=t; }
+  if (depth>1 || nroots(L)+nroots(R)>2) return false;
+  gen c,o;
+  const gen s=root_term(L,c,o);
+  if (is_zero(s)) return false;
+  if (!is_zero(o)){ // the root alone (the other terms, another root too, to the other side)
+    const gen on=ev(-o);
+    if (o.type<_IDNT && is_strictly_positive(-o,CTX)) both(R_AADD,L,R,on,1); else both(R_ASUB,L,R,o,-1);
+    L=ev(c*s); R=ratnormal(R-o,CTX);
+    S(R_ACONT,L,R);
+  }
+  if (!is_one(c)){
+    S(R_ADIV,L,R,c);
+    L=s; R=ratnormal(R/c,CTX);
+    S(R_ACONT,L,R);
+  }
+  const gen u=arg(s,0),R2=ratnormal(ev(expand(R*R,CTX)),CTX);
+  PL(R_RSQ,"(%0)^2=(%1)^2",L,R);
+  S(R_ACONT,u,R2);
+  if (nroots(u)+nroots(R2)) return eq_radical(u,R2,Lc,Rc,depth+1); // (a root left: again)
+  if (!eq_poly(u,R2)) return false;
+  const vecteur cand=roots_of(u,R2);
+  int good=0;
+  EACH(it,cand){ // both sides of the equation as given, at the candidate
+    const gen p=txt(par(*it)),lq=subst(Lc,X,p,false,CTX),rq=subst(Rc,X,p,false,CTX);
+    const gen lv=normal(ev(subst(Lc,X,*it,false,CTX)),CTX),rv=normal(ev(subst(Rc,X,*it,false,CTX)),CTX);
+    const bool eq=is_zero(normal(lv-rv,CTX));
+    good+=eq;
+    PL(eq?R_ROK:R_RBAD,"%0=%1,%2=%3,%4=%5",X,*it,lq,lv,rq,rv);
+  }
+  if (!good && !cand.empty()) S(R_RNONE,eqseq(cand,at_different),0); // (x != 9: none left)
+  return true;
+}
 static NOINL bool eq_steps(const gen & input){
   const gen & g=arg(input);
   const gen eq=g.type==_VECT?g[0]:g;
   if (g.type==_VECT && g._VECTptr->size()>1){ if (g[1].type!=_IDNT) return false; X=g[1]; }
   gen L=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq),R=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0));
   if (!dep(L) && !dep(R)) return false;
-  gen d=ratnormal(L-R,CTX);
-  if (dep(_denom(d,CTX))) return false; // (x in a denominator: a rational equation)
-  vecteur k=lvarx(_numer(d,CTX),X),ids=lidnt(d);
-  if (k.size()>1 || (k.size()==1 && k[0]!=X) || !polyf(_numer(d,CTX))) return false; // (not a polynomial: sqrt(x) = 3)
-  EACH(it,ids) if (*it!=X && evalf(*it,1,CTX).type!=_DOUBLE_) return false; // (other letters: a x + b = 0; pi is a number)
-  gen deg=k.empty()?gen(0):_degree(makesequence(_numer(d,CTX),X),CTX);
-  if (deg==2) return eq_quadratic(L,R);
-  if (deg.type==_INT_ && deg.val>2) return eq_factor(L,R);
-  if (deg.type==_INT_ && deg.val<2 && L.type!=_VECT) return eq_linear(L,R);
-  return false;
+  if (nroots(L)+nroots(R)) return eq_radical(L,R,L,R,0); // (sqrt(x+3) = x-3)
+  if (dep(_denom(ratnormal(L,CTX),CTX)) || dep(_denom(ratnormal(R,CTX),CTX))) return eq_rational(L,R); // (x/(x-2) = 3)
+  return eq_poly(L,R);
 }
 
 bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){

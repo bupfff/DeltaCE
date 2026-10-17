@@ -45,8 +45,11 @@ static bool starts(const char * s, const char * p) { return !strncmp(s, p, strle
 // equations and factoring), told from the text: the chip and Enter promised steps for every solve,
 // and "No steps" came back for inequalities, systems, |x|, roots, logs (the user, in class)
 static int alg_able(const char * s) {
-  static const char * const no[] = {"<", ">", "[", "abs(", "sqrt(", "surd(", "log", "ln(", "exp(", "sin(", "cos(", "tan(", "^(", "e^", "/(", "!", "%", "|"};
-  for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]); ++k) if (strstr(s, no[k])) return 0;
+  // (solve: square roots and x in a denominator too, the radical and rational equations; one root a side)
+  const bool eq = starts(s, "solve(");
+  static const char * const no[] = {"<", ">", "[", "abs(", "surd(", "log", "ln(", "exp(", "sin(", "cos(", "tan(", "^(", "e^", "!", "%", "|", "sqrt(", "/("};
+  for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]) - (eq ? 2 : 0); ++k) if (strstr(s, no[k])) return 0;
+  if (eq) { int n = 0; for (const char * p = s; (p = strstr(p, "sqrt(")); ++p) ++n; if (n > 2) return 0; }
   const char * v = 0;
   int vn = 0;
   for (const char * p = s; *p;) { // one name besides the calls (3x+2=11 and its x: x)
@@ -59,8 +62,8 @@ static int alg_able(const char * s) {
     }
     p = q;
   }
-  for (const char * p = s; (p = strpbrk(p, "/^")); ++p) // (1/x: x in a denominator; 2^x: in an exponent)
-    if (isalpha((unsigned char)p[1])) return 0;
+  for (const char * p = s; (p = strpbrk(p, "/^")); ++p) // (factor(1/x): x in a denominator; 2^x: in an exponent)
+    if (isalpha((unsigned char)p[1]) && (*p == '^' || !eq)) return 0;
   if (v && starts(s, "solve(") && !strncmp(s + 6, v, vn) && s[6 + vn] == '=') { // x=5: already solved
     const char * r = s + 7 + vn, * e = strrchr(r, ','); // (its right side: up to ",x)")
     bool again = false;
