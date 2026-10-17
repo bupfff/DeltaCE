@@ -357,6 +357,7 @@ static void draw_item(const item & it, int y, int bg) { // y: its top on the scr
   case K_TEXT: ui_draw_text(&ui_tr12, it.s, -1, x, b, ui_ramp(0, it.num ? UC_INK : UC_SUB, bg), 0); return;
   case K_BOX: ui_rrect(0, x, y, it.w, it.h, 8, UC_ACCSOFT, bg); return;
   case K_ANS: bg = UC_ACCSOFT; break;
+  case K_WORK: // (a working line broken at its =: the = too)
   case K_EQ:
     if (it.num == 1) { // a line going on: its = first
       ui_draw_text(FACE[0][it.lv], "=", -1, x + gap(it.lv), b, ui_ramp(0, UC_INK, bg), 0);
@@ -624,17 +625,19 @@ static void move(int dir, int & cur, int & top, int maxtop) {
   else if (cur + dir >= 1 && cur + dir <= SEC) { cur += dir; top = stop(cur, maxtop); }
 }
 
-static void show(const char * why);
+static void show(const char * why, const char * name);
 void focus_steps(const char * in, const char * ans) {
   focus_status_label("STEPS");
-  show(build(in, ans));
+  show(build(in, ans), "STEPS");
 }
 // DeltaCE: a function's analysis (analyze.cc), on the steps' page
 void focus_analyze(const char * in) {
   focus_status_label("ANALYSIS");
-  show(build_report(in));
+  show(build_report(in), "ANALYSIS");
 }
-static void show(const char * why) {
+// (DeltaCE) the page's keys: up/down read on (a part taller than the screen a screen at a time),
+// left/right a whole part, 2nd up/down the first part and the answer; the status bar says where
+static void show(const char * why, const char * name) {
   focus_status_msg(0);
   int key;
   if (why && !strcmp(why, "No steps for this one")) { // (not an error: said in the status bar, the console back)
@@ -653,12 +656,23 @@ static void show(const char * why) {
   else {
     const int vis = UI_H - Y0, maxtop = PH > vis ? PH - vis : 0;
     int top = 0, cur = 1;
+    static char lbl[24];
     for (;;) {
+      if (SEC > 1) { // STEPS  3 / 8
+        char * q = lbl;
+        strcpy(q, name); q += strlen(q); *q++ = ' '; *q++ = ' ';
+        q = digits(q, cur); strcpy(q, " / "); digits(q + 3, SEC);
+        focus_status_label(lbl);
+      }
       paint(top, cur);
       GetKey(&key);
       if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_EXE || key == KEY_CTRL_OK) break;
-      if (key == KEY_CTRL_DOWN || key == KEY_CTRL_RIGHT) move(1, cur, top, maxtop);
-      if (key == KEY_CTRL_UP || key == KEY_CTRL_LEFT) move(-1, cur, top, maxtop);
+      if (key == KEY_CTRL_DOWN) move(1, cur, top, maxtop);
+      if (key == KEY_CTRL_UP) move(-1, cur, top, maxtop);
+      if (key == KEY_CTRL_RIGHT && cur < SEC) top = stop(++cur, maxtop);
+      if (key == KEY_CTRL_LEFT && cur > 1) top = stop(--cur, maxtop);
+      if (key == KEY_CTRL_PAGEDOWN) top = stop(cur = SEC, maxtop);
+      if (key == KEY_CTRL_PAGEUP) { cur = 1; top = 0; }
     }
   }
   clear_page();

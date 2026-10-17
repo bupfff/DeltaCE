@@ -2476,6 +2476,44 @@ static bool console_analyze(const char * line){
   return true;
 }
 #endif
+#ifdef FLOWCE_STEPS
+// (DeltaCE) right arrow on an answer shown large (an expression in a letter): what to do next with
+// it, done at once (Value at: its box to fill). -1: not such an answer (the key does what it did)
+static int console_answer_actions(){
+  const int rl=focus_result_line();
+  if (rl<0 || !Line[rl].str) return -1;
+  const char * a=(const char *)Line[rl].str;
+  if (strchr(a,'=') || strchr(a,'[') || strchr(a,'"') || strchr(a,'<') || strchr(a,'>')) return -1; // (solutions, lists, text)
+  char v[16];
+  console_action_var("ans()",v,sizeof(v));
+  const int vn=strlen(v);
+  bool has=false; // the letter in the answer (2x: x; exp(x): x; not a number)
+  for (const char * p=a;(p=strstr(p,v))!=0;p+=vn)
+    if ((p==a || (!isalpha((unsigned char)p[-1]) && p[-1]!='_')) && !isalnum((unsigned char)p[vn]) && p[vn]!='(' && p[vn]!='_') has=true;
+  if (!has) return -1;
+  static const char * const labels[]={"Factor","Expand","Simplify","Solve = 0","Derivative","Integral","Value at","Graph","Analyze"};
+  static const char * const how[]={"factor(ans())","expand(ans())","simplify(ans())","solve(ans()=0,@)","diff(ans(),@)","integrate(ans(),@)","","",""};
+  const int c=focus_list("Use this answer",labels,9,0,0,0);
+  if (c<0){ Console_Disp(1); return CONSOLE_SUCCEEDED; }
+  if (c==6) // Value at: subst(Ans, x=[]) with the caret in the box
+    return console_apply_action("subst(,x=)")?CONSOLE_SUCCEEDED:-1;
+  if (c==8){ console_analyze("analyze(ans())"); Console_Disp(1); return CONSOLE_SUCCEEDED; }
+  char buf[64];
+  int k=0;
+  if (c==7){ strcpy(buf,"plot("); k=5; } // (the answer's text: the graph is not a calculation of Ans)
+  const char * src=c==7?a:how[c];
+  for (;*src && k<(int)sizeof(buf)-20;++src){
+    if (*src=='@'){ strcpy(buf+k,v); k+=vn; }
+    else buf[k++]=*src;
+  }
+  if (c==7){ if (*src) return -1; buf[k++]=')'; } // (too long to graph from here)
+  buf[k]=0;
+  Console_Clear_EditLine();
+  Console_Input((const Char *)buf);
+  console_prepare_input();
+  return Console_NewLine(LINE_TYPE_INPUT,1);
+}
+#endif
 static const char * const console_yesno[]={"Clear history","Cancel"};
 int Console_GetKey(){
   unsigned int key, move_line, move_col;
@@ -3018,6 +3056,12 @@ int Console_GetKey(){
       Console_Disp(1);
       continue;
     }
+#ifdef FLOWCE_STEPS
+    if (focus_on && key==KEY_CTRL_RIGHT && Current_Line==Last_Line && Edit_Line && !Edit_Line[0]){
+      const int r=console_answer_actions(); // (DeltaCE) on an answer: its actions
+      if (r!=-1) return r;
+    }
+#endif
     if (console_input2d() && (key==KEY_CTRL_LEFT || key==KEY_CTRL_RIGHT || key==KEY_CTRL_UP || key==KEY_CTRL_DOWN)){
       const char * s=(const char *)Edit_Line;
       const int dir=key==KEY_CTRL_LEFT?0:key==KEY_CTRL_RIGHT?1:key==KEY_CTRL_UP?2:3;

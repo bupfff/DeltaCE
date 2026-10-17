@@ -63,6 +63,7 @@ void focus_status_label(const char * s); // a view's label in the status bar ("C
 void focus_status_view(const char * s, int chip); // the same; chip: the 2nd/alpha chip stays (the program editor)
 void focus_bar_editor(const char * const * labels, int keyflag); // the program editor's bar: its words, or 2nd/alpha
 void focus_tab_open(int i, const char * label); // tab i drawn open (bright) while its menu's card is shown
+void focus_tab_open_box(int i);           // (DeltaCE) tab i's open shape, joined to the card above
 void focus_tab(int i, int on, int bank); // the standard layer's tab of F-key i (on: its menu is open)
 void focus_bar_tabs(const char * const * labels, int on); // the F-key bar as 5 text tabs, tab on selected
 enum { IC_X2, IC_INT, IC_WAVE, IC_PI, IC_FORMS, IC_MORE, IC_SEARCH };

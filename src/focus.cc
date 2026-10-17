@@ -410,6 +410,7 @@ static const tip tips[] = {
   {0, "Solve works in any letter: 3b + 2 = 11 gives b = 3"},
   {"^", "then enter: paste an earlier answer"},
   {"2nd", "then F1 to F5: arithmetic, matrices and more"},
+  {"2nd", "then down, on the steps: jump to the answer"},
 };
 enum { N_TIPS = sizeof(tips) / sizeof(tips[0]) };
 static int tip_k = -1;
@@ -693,15 +694,27 @@ static int forms_key(); // F4 shows forms (a result is selected, or shown large)
 static const char * const tab_word[5] = {"algebra", "calculus", "trig", "symbols", "more"};
 static const unsigned char tab_icon[5] = {IC_X2, IC_INT, IC_WAVE, IC_PI, IC_MORE};
 
+// (DeltaCE) an open tab: a card's color, its sides and bottom framed, joined to the card above
+void focus_tab_open_box(int i) {
+  const int cx = 32 + 64 * i;
+  ui_clip(cx - 32, SBOT - 4, cx + 32, UI_H);
+  ui_fill(cx - 32, SBOT + 1, 64, MB - 1, ui_col(1, UC_BAR));
+  ui_rrect(1, cx - 30, SBOT - 8, 60, MB + 6, 6, UC_CARD, UC_BAR);
+  ui_rframe(1, cx - 30, SBOT - 8, 60, MB + 6, 6, UC_LINE, UC_CARD);
+  ui_clip(cx - 32, SBOT + 1, cx + 32, UI_H);
+}
 // the tab of F-key i in the standard layer; on: its popover is open (drawn bright, bank 1)
 void focus_tab(int i, int on, int bank) {
   int cx = 32 + 64 * i, by = SBOT + 15, fm = i == 3 && forms_key();
   const char * w = fm ? "forms" : tab_word[i];
-  ui_clip(cx - 32, SBOT + 1, cx + 32, UI_H);
-  ui_fill(cx - 32, SBOT + 1, 64, MB - 1, ui_col(bank, UC_BAR));
-  if (on) ui_rrect(bank, cx - 30, SBOT + 3, 60, MB - 5, 6, UC_ACCSOFT, UC_BAR);
+  if (on) focus_tab_open_box(i);
+  else {
+    ui_clip(cx - 32, SBOT + 1, cx + 32, UI_H);
+    ui_fill(cx - 32, SBOT + 1, 64, MB - 1, ui_col(bank, UC_BAR));
+    if (i) ui_fill(cx - 32, SBOT + 6, 1, MB - 11, ui_col(bank, UC_LINE)); // (a hairline between keys)
+  }
   const ui_face * f = on ? &ui_tb10 : &ui_tr10;
-  int bg = on ? UC_ACCSOFT : UC_BAR, lw = ui_text_width(f, w, -1), x0 = cx - (16 + lw) / 2;
+  int bg = on ? UC_CARD : UC_BAR, lw = ui_text_width(f, w, -1), x0 = cx - (16 + lw) / 2;
   focus_icon(fm ? IC_FORMS : tab_icon[i], x0 + 7, by - 4, bank, UC_ACC, bg);
   ui_draw_text(f, w, -1, x0 + 16, by, ui_ramp(bank, on ? UC_ACC : UC_BARINK, bg), 0);
   ui_noclip();
@@ -990,7 +1003,22 @@ static int forms_key() { return focus_result_line() >= 0; }
 const char * focus_steps_input(const char ** ans) {
   const char * s = hm == HM_RESULT && NE ? steps_input(E[NE - 1]) : 0;
   if (s) *ans = shown((const char *)Line[E[NE - 1].out].str);
-  return s;
+  // (DeltaCE) Ans in it (solve(Ans=0,x) from the answer actions): the answer before, in parentheses
+  static char * sub;
+  const char * p = s ? strstr(s, "ans()") : 0;
+  if (p && NE > 1 && E[NE - 2].out >= 0 && Line[E[NE - 2].out].str) {
+    const char * a = (const char *)Line[E[NE - 2].out].str;
+    free(sub);
+    if (!(sub = (char *)malloc(strlen(s) + strlen(a) * 3 + 8))) return 0;
+    char * q = sub;
+    for (const char * r = s; *r;) {
+      if (!strncmp(r, "ans()", 5)) { *q++ = '('; strcpy(q, a); q += strlen(a); *q++ = ')'; r += 5; }
+      else *q++ = *r++;
+    }
+    *q = 0;
+    return sub;
+  }
+  return p ? 0 : s; // (Ans and no answer before: no steps)
 }
 #endif
 // History by calculations, as the prototype: the console line to select for dir 0 up, 1 down,

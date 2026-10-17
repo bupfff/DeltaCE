@@ -90,11 +90,11 @@ static void geometry(int id, const fm_menu & m) {
     cw = m.grid == 2 ? (m.cols == 3 ? 100 : 150) : m.cols == 3 ? 76 : 60;
     pw = m.cols * cw + 10; ph = ((m.n + m.cols - 1) / m.cols) * cellh(m) + 10;
   } else { pw = LW; ph = m.n * RH + 10; }
-  int anchor = id < 5 ? 32 + 64 * id : UI_W / 2;
+  int anchor = id < 5 ? 32 + 64 * id : UI_W / 2, mg = id < 5 ? 1 : 4; // (DeltaCE: a key's card over its whole tab)
   px = anchor - pw / 2;
-  if (px < 4) px = 4;
-  if (px > UI_W - pw - 4) px = UI_W - pw - 4;
-  py = id == 5 ? ST + (SBOT - ST - ph) / 2 : SBOT - ph - 6;
+  if (px < mg) px = mg;
+  if (px > UI_W - pw - mg) px = UI_W - pw - mg;
+  py = id == 5 ? ST + (SBOT - ST - ph) / 2 : SBOT - ph; // (DeltaCE: on the bar, joined to its tab)
 }
 
 // the box of item k (screen coordinates)
@@ -146,11 +146,12 @@ static __attribute__((noinline)) void paint_item(const fm_menu & m, int k, int s
   const fm_item & it = m.items[k];
   int x, y, w, h;
   item_box(m, k, x, y, w, h);
-  int on = k == sel, bg = on ? UC_ACC : UC_CARD, fg = on ? UC_ONACC : UC_INK, sub = on ? UC_ONACC : UC_SUB;
+  // (DeltaCE) the selected item: a soft teal row with a teal edge (FlowCE's: filled teal)
+  int on = k == sel, bg = on ? UC_ACCSOFT : UC_CARD, fg = UC_INK, sub = on ? UC_ACC : UC_SUB;
   ui_clip(x, y, x + w, y + h);
   ui_fill(x, y, w, h, ui_col(1, UC_CARD));
   if (m.grid) {
-    if (on) ui_rrect(1, x + 1, y + 1, w - 2, h - 2, 6, UC_ACC, UC_CARD);
+    if (on) { ui_rrect(1, x + 1, y + 1, w - 2, h - 2, 6, UC_ACCSOFT, UC_CARD); ui_rframe(1, x + 1, y + 1, w - 2, h - 2, 6, UC_ACC, UC_ACCSOFT); }
     if (m.grid == 2) { // a card: the preview, its label under it (a label alone: centered)
       int alone = PLV[k] < 0;
       preview(k, it.pv ? it.pv : it.text, x + 4, y + 23, w - 8, fg, bg, 1);
@@ -161,20 +162,23 @@ static __attribute__((noinline)) void paint_item(const fm_menu & m, int k, int s
       }
     } else preview(k, it.pv ? it.pv : it.text, x + 4, y + h / 2, w - 8, fg, bg, 1);
   } else {
-    if (on) ui_rrect(1, x, y, w, h, 6, UC_ACC, UC_CARD);
+    if (on) { ui_rrect(1, x, y, w, h, 6, UC_ACCSOFT, UC_CARD); ui_fill(x + 2, y + 5, 3, h - 10, ui_col(1, UC_ACC)); }
     char num[2] = {(char)('1' + k), 0};
-    int nw = ui_text_width(&ui_tb10, num, -1);
-    if (k < 9) ui_draw_text(&ui_tb10, num, -1, x + 10 - nw / 2, y + h / 2 + 4, ui_ramp(1, sub, bg), 0);
-    int lx = x + 24;
+    int nw = ui_text_width(&ui_tb9, num, -1);
+    if (k < 9) { // a keycap
+      ui_rframe(1, x + 9, y + h / 2 - 7, 13, 13, 3, sub, bg);
+      ui_draw_text(&ui_tb9, num, -1, x + 16 - nw / 2, y + h / 2 + 4, ui_ramp(1, sub, bg), 0);
+    }
+    int lx = x + 30;
     if (it.text) {
-      ui_clip(x + 20, y, x + 124, y + h);
-      preview(k, it.pv ? it.pv : it.text, x + 22, y + h / 2, 100, fg, bg, 0);
+      ui_clip(x + 26, y, x + 128, y + h);
+      preview(k, it.pv ? it.pv : it.text, x + 28, y + h / 2, 98, fg, bg, 0);
       ui_clip(x, y, x + w, y + h);
-      lx = x + 128;
+      lx = x + 132;
     }
     else if (it.pv) { // the symbol column
-      sym_text(it.pv, x + 46, y + h / 2, fg, bg);
-      lx = x + 76;
+      sym_text(it.pv, x + 50, y + h / 2, fg, bg);
+      lx = x + 80;
     }
     ui_draw_text(on ? &ui_tb12 : &ui_tr12, it.label, -1, lx, y + h / 2 + 5, ui_ramp(1, fg, bg), 0);
     if (it.hint) {
@@ -231,14 +235,17 @@ static void tab_text(int i, const char * w, int fg);
 // (layer 0: its icon and word; 2nd, alpha: its text label), the card is painted
 static void open_card(const fm_menu & m, int col, int layer, int sel) {
   ui_dim(1);
-  if (col < 5) {
-    int band = ui_band_open(24) >= 22;
-    if (band) { ui_band_begin(SBOT, UI_H); ui_band_load(); }
+  paint_rows(m, py, col < 5 ? SBOT : py + ph + 4, sel, 1);
+  if (col < 5) { // (DeltaCE) its tab, joined to the card: the card rises out of its key
+    int band = ui_band_open(32) >= 32;
+    if (band) { ui_band_begin(SBOT - 4, UI_H); ui_band_load(); }
     if (!layer) focus_tab(col, 1, 1);
     else tab_text(col, console_fkey_label(layer, col), layer == 1 ? UC_BLUE : UC_GREEN);
+    ui_clip(0, SBOT - 4, UI_W, UI_H);
+    ui_fill(32 + 64 * col - 29, SBOT - 3, 58, 4, ui_col(1, UC_CARD)); // (the card's edge over the tab: gone)
+    ui_noclip();
     if (band) ui_band_end();
   }
-  paint_rows(m, py, py + ph + 4, sel, 1);
   ui_band_close();
 }
 // closes the card: the scene comes back; under it, the stage is repainted (repaint) unless a
@@ -693,10 +700,8 @@ static void tab_text(int i, const char * w, int fg) {
   while (n && b[n - 1] == ' ') --n;
   b[n] = 0;
   int cx = 32 + 64 * i, tw = ui_text_width(&ui_tb10, b, -1);
-  ui_clip(cx - 32, SBOT + 1, cx + 32, UI_H);
-  ui_fill(cx - 32, SBOT + 1, 64, UI_H - SBOT - 1, ui_col(1, UC_BAR));
-  ui_rrect(1, cx - 30, SBOT + 3, 60, UI_H - SBOT - 5, 6, UC_ACCSOFT, UC_BAR);
-  ui_draw_text(&ui_tb10, b, -1, cx - tw / 2, SBOT + 15, ui_ramp(1, fg, UC_ACCSOFT), 0);
+  focus_tab_open_box(i);
+  ui_draw_text(&ui_tb10, b, -1, cx - tw / 2, SBOT + 15, ui_ramp(1, fg, UC_CARD), 0);
   ui_noclip();
 }
 void focus_tab_open(int i, const char * label) { tab_text(i, label, UC_ACC); }
@@ -797,17 +802,20 @@ const char * focus_units(int idx) {
 }
 #endif
 
+static signed char pop_last[6]; // (DeltaCE) each menu opens on the item picked last
 int focus_popover(int key, const char ** text, int * back) {
   int id = key == KEY_CTRL_SYMB ? 5 : key - KEY_CTRL_F1;
   if (id < 0 || id > 5) return FA_NONE;
   for (;;) {
     const fm_menu & m = MENUS[id];
+    const int sel = pop_last[id] < m.n ? pop_last[id] : 0;
     geometry(id, m);
     prepare(m);
-    open_card(m, id, 0, 0);
+    open_card(m, id, 0, sel);
     cur = id;
-    int r = run_keys(m, 0, fk_pop), res = FA_NONE;
+    int r = run_keys(m, sel, fk_pop), res = FA_NONE;
     if (r >= 0) {
+      pop_last[id] = (signed char)r;
       const fm_item & it = m.items[r];
       if (it.act) res = it.act;
       else { *text = it.text; *back = it.back; res = FA_INSERT; }
