@@ -197,6 +197,7 @@ int focus_steps_preview(const char * in,const char * ans,int stop);
 #include "../../src/ui_fontdata.h"
 extern "C" { extern unsigned char * ui_fb; unsigned short * ui_host_palette(void); }
 int focus_analyze_preview(const char * in,int stop);
+int focus_steps_able(const char * s);
 static void write_ppm(const char * fn);
 // -W <dir>: the analysis screen of each input (DeltaCE), as -V: <dir>/<n>_<stop>.ppm
 static void view_analysis(const char * dir,int n,const char * s){
@@ -274,7 +275,7 @@ static std::string eval_one(const char * s,bool autosimp,bool prepass){
 
 int main(int argc,char ** argv){
   int N=1,trace_round=0;
-  bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false,steps=false; bool analysis=false;
+  bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false,steps=false; bool analysis=false,able=false;
   const char * viewdir=0; const char * aviewdir=0;
   const char * file=0;
   static const char * exprs[8192]; int ne=0;
@@ -294,6 +295,7 @@ int main(int argc,char ** argv){
     else if (!strcmp(argv[i],"-m")) measure=true;
     else if (!strcmp(argv[i],"-S")) steps=true;
     else if (!strcmp(argv[i],"-A")) analysis=true;
+    else if (!strcmp(argv[i],"-Q")) able=true;
     else if (!strcmp(argv[i],"-V") && i+1<argc) viewdir=argv[++i];
     else if (!strcmp(argv[i],"-W") && i+1<argc) aviewdir=argv[++i];
     else if (!strcmp(argv[i],"-t") && i+1<argc) trace_round=atoi(argv[++i]);
@@ -324,6 +326,10 @@ int main(int argc,char ** argv){
   giac::epsilon(contextptr)=1e-5;
   angle_radian(1,contextptr);
   { char c; giac::stack_floor=(size_t)&c-(6<<20); } // as main.cc's stack_floor: 6 MB of the 8 MB stack
+  if (able){ // -Q: the steps chip for each input (focus_steps_able, as typed)
+    for (int k=0;k<ne;++k) printf("%d  %s\n",focus_steps_able(exprs[k]),exprs[k]);
+    return 0;
+  }
   if (aviewdir){
     for (int k=0;k<ne;++k) view_analysis(aviewdir,k,exprs[k]);
     return 0;

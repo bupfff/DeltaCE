@@ -778,6 +778,27 @@ static __attribute__((noinline)) giac::gen collect_rational(const giac::gen & g)
   const gen s=rest.size()==1?rest.front():sym1(at_plus,gen(rest,_SEQ__VECT));
   return taille(s,1000)<taille(g,1000)?s:g;
 }
+// (DeltaCE) the numbers of a sum added up: ratnormal over sqrt(2) leaves x^2+2x-2+1 (the square of
+// sqrt(2) comes out after), shown so for (x+sqrt(2)+1)(x-sqrt(2)+1) and x^2+12x+10=>*
+static __attribute__((noinline)) giac::gen combine_numbers(const giac::gen & s){
+  using namespace giac;
+  if (!s.is_symb_of_sommet(at_plus) || s._SYMBptr->feuille.type!=_VECT)
+    return s;
+  vecteur rest;
+  gen c=0;
+  int n=0;
+  for (const_iterateur it=s._SYMBptr->feuille._VECTptr->begin();it!=s._SYMBptr->feuille._VECTptr->end();++it){
+    const gen & t=*it;
+    if (t.type==_INT_ || t.type==_ZINT || t.type==_FRAC){ c=c+t; ++n; }
+    else if (t.is_symb_of_sommet(at_neg) && (t._SYMBptr->feuille.type==_INT_ || t._SYMBptr->feuille.type==_ZINT || t._SYMBptr->feuille.type==_FRAC)){ c=c-t._SYMBptr->feuille; ++n; }
+    else rest.push_back(t);
+  }
+  if (n<2)
+    return s;
+  if (!is_zero(c))
+    rest.push_back(c);
+  return rest.empty()?gen(0):rest.size()==1?rest.front():sym1(at_plus,gen(rest,_SEQ__VECT));
+}
 static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
   using namespace giac;
   if ((g.type!=_SYMB && g.type!=_VECT) || is_undef(g) || taille(g,100)>=100)
@@ -796,7 +817,7 @@ static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
   // giac's simplify took 5.8 s of the 6.4 s of d/dx sin(x)/x (on any small trig answer): trig
   // answers now get ratnormal and the cheap sin^2+cos^2=1 rewrite below
   const bool trig=false;
-  gen s=ratnormal(g,contextptr);
+  gen s=combine_numbers(ratnormal(g,contextptr));
   trace_step("ratnormal",s);
   if (!trig && g.type==_SYMB && radicals(s)>=0){ // factored denominator: 1/(x+1)^2, not 1/(x^2+2x+1)
     gen d=_denom(s,contextptr);
@@ -1883,8 +1904,22 @@ static __attribute__((noinline)) void ti_log10(char * buf,int cap){
       str=!str;
     if (str || strncmp(buf+i,"log(",4) || (i && (isalnum((unsigned char)buf[i-1]) || buf[i-1]=='_')))
       continue;
+    // (DeltaCE) log(8,2), the TI's logBASE: base 2 (logb); log10(8,2) was the log of each, 2 answers
+    int depth=0,comma=0;
+    for (int j=i+4;j<n && depth>=0 && !comma;++j){
+      if (buf[j]=='(' || buf[j]=='[') ++depth;
+      else if (buf[j]==')' || buf[j]==']') --depth;
+      else if (buf[j]==',' && !depth) comma=1;
+    }
     if (n+3>cap)
       return;
+    if (comma){
+      memmove(buf+i+4,buf+i+3,n-i-2); // "log" + "b" + "(..."
+      buf[i+3]='b';
+      n+=1;
+      i+=4;
+      continue;
+    }
     memmove(buf+i+5,buf+i+3,n-i-2); // "log" + "10" + "(..."
     buf[i+3]='1';
     buf[i+4]='0';
@@ -3115,6 +3150,31 @@ static int plus_terms(const giac::gen & g){
   return n;
 }
 // ln(4) as 2ln(2): ln of an integer that is a power (then 12ln(2)-6ln(4)+3 is 3)
+// (DeltaCE) a root of a fraction whose top and bottom are powers: (81/16)^(1/4) is 3/2 (giac leaves
+// it: solve(16x^4-81=0,x) answered x=(81/16)^(1/4))
+static long exact_root(long v,int n){ // the n-th root of v when whole, else -1
+  long r=(long)(exp(log((double)v)/n)+0.5);
+  for (long u=r>1?r-1:0;u<=r+1;++u){
+    long p=1;
+    for (int k=0;k<n && p<=v;++k) p*=u;
+    if (p==v) return u;
+  }
+  return -1;
+}
+static giac::gen frac_root(const giac::gen & g,const giac::gen & f,const giac::gen &){
+  using namespace giac;
+  if (g._SYMBptr->sommet==at_pow && f.type==_VECT && f._VECTptr->size()==2){
+    const gen & b=f._VECTptr->front(), & e=f._VECTptr->back();
+    if (b.type==_FRAC && e.type==_FRAC && b._FRACptr->num.type==_INT_ && b._FRACptr->den.type==_INT_ && e._FRACptr->den.type==_INT_
+        && b._FRACptr->num.val>0 && e._FRACptr->den.val>1 && e._FRACptr->den.val<=8){
+      const int n=e._FRACptr->den.val;
+      const long p=exact_root(b._FRACptr->num.val,n),q=exact_root(b._FRACptr->den.val,n);
+      if (p>0 && q>0)
+        return eval(pow(gen((int)p)/gen((int)q),e._FRACptr->num,contextptr),1,contextptr);
+    }
+  }
+  return symbolic(g._SYMBptr->sommet,f);
+}
 static giac::gen ln_power(const giac::gen & g,const giac::gen & f,const giac::gen &){
   using namespace giac;
   if (g._SYMBptr->sommet==at_ln && f.type==_INT_)
@@ -3578,6 +3638,8 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
       g=e; // (2523-4*29*sqrt(29)-5046+348*sqrt(29)+2339)/16 is (29sqrt(29)-23)/2
   }
   graw=g; // (the long-polynomial check of answer_print expands it: expand ignores a built division)
+  if (!a.tabled && (g.type==_SYMB || g.type==_VECT) && taille(g,200)<200)
+    g=map_nodes(g,frac_root,0); // (81/16)^(1/4): 3/2
   if (g.type==_SYMB && taille(g,200)<200 && !contains(g,at_order_size)) // (series: as is)
     g=positive_first(g);
   trace_step("positive_first",g);

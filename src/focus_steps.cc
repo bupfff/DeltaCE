@@ -41,13 +41,42 @@ static bool starts(const char * s, const char * p) { return !strncmp(s, p, strle
 // a calculation the steps screen can show: a derivative, an integral, a limit, a sum, a Taylor
 // polynomial, also inside another command (subst(diff(f,x,3),x=0), solve(diff(f,x)=0,x): the
 // steps take the calculus part first, then the rest)
+// (DeltaCE) solve( and factor( typed as such: steps for a polynomial in one letter only (steps.cc's
+// equations and factoring), told from the text: the chip and Enter promised steps for every solve,
+// and "No steps" came back for inequalities, systems, |x|, roots, logs (the user, in class)
+static int alg_able(const char * s) {
+  static const char * const no[] = {"<", ">", "[", "abs(", "sqrt(", "surd(", "log", "ln(", "exp(", "sin(", "cos(", "tan(", "^(", "e^", "/(", "!", "%", "|"};
+  for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]); ++k) if (strstr(s, no[k])) return 0;
+  const char * v = 0;
+  int vn = 0;
+  for (const char * p = s; *p;) { // one name besides the calls (3x+2=11 and its x: x)
+    if (!isalpha((unsigned char)*p) && *p != '_') { ++p; continue; }
+    const char * q = p;
+    while (isalnum((unsigned char)*q) || *q == '_') ++q;
+    if (*q != '(') {
+      if (!v) { v = p; vn = q - p; }
+      else if (q - p != vn || strncmp(v, p, vn)) return 0;
+    }
+    p = q;
+  }
+  for (const char * p = s; (p = strpbrk(p, "/^")); ++p) // (1/x: x in a denominator; 2^x: in an exponent)
+    if (isalpha((unsigned char)p[1])) return 0;
+  if (v && starts(s, "solve(") && !strncmp(s + 6, v, vn) && s[6 + vn] == '=') { // x=5: already solved
+    const char * r = s + 7 + vn, * e = strrchr(r, ','); // (its right side: up to ",x)")
+    bool again = false;
+    for (const char * p = r; *p && (!e || p < e); ++p)
+      if (!strncmp(p, v, vn) && !isalnum((unsigned char)p[vn]) && (p == r || (!isalpha((unsigned char)p[-1]) && p[-1] != '_'))) again = true; // (2b: b)
+    if (!again) return 0;
+  }
+  return v != 0;
+}
 int focus_steps_able(const char * s) {
-  static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum(", "solve("};
+  static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum("};
   for (const char * p = s; *p; ++p)
     if (p == s || !isalnum((unsigned char)p[-1]))
       for (unsigned k = 0; k < sizeof(ops) / sizeof(ops[0]); ++k)
         if (starts(p, ops[k])) return 1;
-  return 0;
+  return (starts(s, "solve(") || (starts(s, "factor(") && !strchr(s, '.'))) && alg_able(s); // (factor(0.5x^2-2): decimals)
 }
 
 // The page: items laid out once (page coordinates: y from the top of the page), drawn in bands.
@@ -605,10 +634,17 @@ void focus_analyze(const char * in) {
 static void show(const char * why) {
   focus_status_msg(0);
   int key;
+  if (why && !strcmp(why, "No steps for this one")) { // (not an error: said in the status bar, the console back)
+    clear_page();
+    focus_status_label(0);
+    focus_invalidate();
+    focus_status_msg("No steps for this one");
+    return;
+  }
   if (why) { // over the problem (the waiting line erased)
     clear_page();
     if (wait_y) ui_fill(0, wait_y - 14, UI_W, 32, ui_col(0, UC_BG));
-    focus_note(why, !strcmp(why, "No steps for this one") ? "No textbook method explains this answer" : 0);
+    focus_note(why, 0);
     GetKey(&key);
   }
   else {

@@ -960,7 +960,7 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"line(equation)", nullptr, "Line of equation or from 2 points", "y=2x+1", "[1,2],[3,1]", CAT_CATEGORY_PLOT},
   {"linsolve([eq1,eq2,..],[x,y,..])", nullptr, "Linear system solving. May use the output of lu for O(n^2) solving (see example 2).","[x+y=1,x-y=2],[x,y]", "#p,l,u:=lu([[1,2],[3,4]]); linsolve(p,l,u,[5,6])", CAT_CATEGORY_SOLVE | (CAT_CATEGORY_LINALG <<8) | (CAT_CATEGORY_MATRIX << 16)},
   {"ln(x)", nullptr, "Natural logarithm (base e).", "e^2", nullptr, CAT_CATEGORY_REAL},
-  {"log(x)", nullptr, "Logarithm in base 10.", "100", nullptr, CAT_CATEGORY_REAL},
+  {"log(x,[b])", nullptr, "Logarithm in base 10, or in base b: log(8,2) is 3.", "100", "8,2", CAT_CATEGORY_REAL},
   {"lu(A)", nullptr, "LU decomposition LU of matrix A, P*A=L*U", "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX},
   {"magenta", "magenta", "Display option", "#display=magenta", nullptr, CAT_CATEGORY_OPTIONS},
   {"map(f,l)", nullptr, "Maps f on element of list l.","lambda x:x*x,[1,2,3]", nullptr, CAT_CATEGORY_LIST},

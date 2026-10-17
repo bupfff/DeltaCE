@@ -417,10 +417,14 @@ static int pfactor() {
 // levels 1-5 as one flat row. Returns a list head (tail in rtail).
 static int prow(int stopc) {
   int h = 0, t = 0, tp = 0, need = 1, nb = 0, n; // tp: item before the current level-5 term
-  for (;;) {
+  for (int pk = 0;;) { // pk: the operator before
     int k = tt, lv = binlev(k);
     if (stopc && k == ',') lv = 0;
     if (over()) { if ((n = flat())) { add(h, t, n, n); need = 0; } break; }
+    if (need && pk == OP_IMP && (k == '*' || k == '+')) { // x^4-1=>* (factor), =>+ (partial fractions): the sign as is
+      n = leaf(K_TEXT); add(h, t, n, n); lex(tb); need = 0; pk = 0;
+      continue;
+    }
     if (need ? prim(k) || prefix(k) || powop(k) : prim(k)) { // operand, or implicit *
       if (!(n = pfactor())) break;
       if (!need) T[n].f |= F_IMPL;
@@ -451,6 +455,7 @@ static int prow(int stopc) {
     }
     n = leaf(lv == 1 ? K_SEP : k == '*' ? K_DOT : K_OP);
     add(h, t, n, n); lex(tb);
+    pk = k;
     if (lv < 5) tp = n;
     need = 1; nb = k != ';';
   }
