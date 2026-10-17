@@ -2581,7 +2581,9 @@ int Console_GetKey(){
         }
         if (g.compare(0,2,"y=")==0) // y=x^2: its right side
           g=g.substr(2,g.size()-2);
-        if (g.empty() || g.find('=')!=string::npos){ // nothing, or an equation (x=2 answers)
+        // nothing, or not something to draw: a definition, a test (DeltaCE: equations in x and y are,
+        // x^2+y^2=25 a circle; x=2 a vertical line)
+        if (g.empty() || g.find(":=")!=string::npos || g.find("==")!=string::npos || g.find("=>")!=string::npos || g.find("<=")!=string::npos || g.find(">=")!=string::npos || g.find("!=")!=string::npos){
           focus_status_msg(g.empty()?"Type a function of x first":"Not a function of x");
           continue;
         }

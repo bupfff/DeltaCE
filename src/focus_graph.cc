@@ -31,15 +31,27 @@ extern int dconsole_mode; // console.cc: 0, giac's notes go nowhere
 int focus_prompt(const char * title, const char * label, std::string & s, bool numeric); // focus_menu.cc
 
 // ---------------------------------------------------------------- the functions, compiled
-enum { O_X, O_C, O_ADD, O_MUL, O_NEG, O_INV, O_IPOW, O_POW, O_ROOT, O_F1 };
+enum { O_X, O_C, O_ADD, O_MUL, O_NEG, O_INV, O_IPOW, O_POW, O_ROOT, O_F1, O_Y };
 enum { F_SIN, F_COS, F_TAN, F_EXP, F_LN, F_SQRT, F_ABS, F_ASIN, F_ACOS, F_ATAN, F_SINH, F_COSH, F_TANH, F_LOG10, F_FLOOR, F_CEIL };
-enum { NMAX = 4, PMAX = 80, SMAX = 20 };
+enum { NMAX = 6, NGRP = 4, PMAX = 80, SMAX = 20 };
 struct prog { unsigned char op[PMAX], fn[PMAX]; float c[PMAX]; unsigned char n, depth, ok; };
 static prog * P_;          // the functions' programs
 static gen * F_;           // the functions (giac), F_[i]
 static int NF;             // how many
 static gen * X_;           // the variable
-static const unsigned char COLS[NMAX] = {UC_ACC, UC_RED, UC_PURPLE, UC_ORANGE};
+static gen * Yv_;          // y, in equations (x^2+y^2=25); 0: none
+// What is drawn: the curves y = f(x) (F_, P_; an equation solved for y gives one per solution:
+// y = sqrt(25-x^2), y = -sqrt(25-x^2)) and the vertical lines (x = 3: VX), each of an equation typed
+// (GRP: its color); the equations that are not solved for y as such (F(x, y) = 0: IM_, IP_, IG_)
+static unsigned char GRP[NMAX];
+static float VX[NMAX];     // a vertical line's x, NAN for a curve
+static gen * IM_;          // F(x, y) of an equation drawn as such (x^3+y^3=6xy)
+static prog * IP_;
+static unsigned char IG_[NGRP];
+static int NI, NGR;        // how many such equations; how many typed
+static gen * EQ_;          // each typed one as F(x, y) = 0 (y-f(x) for a function): where two cross
+static const unsigned char COLS[NGRP] = {UC_ACC, UC_RED, UC_PURPLE, UC_ORANGE};
+static inline unsigned char col(int i) { return COLS[GRP[i] & 3]; }
 
 static NOINL bool emit(prog & p, int op, float c, int fn, int d) {
   if (p.n >= PMAX) return false;
@@ -54,7 +66,7 @@ static NOINL float fl(const gen & g) {
 }
 static bool fin(float v);
 static NOINL bool cnum(const gen & g, float & v) { // a number (pi, 2/3, sqrt(2) too)
-  if (g.type == _IDNT && g == *X_) return false;
+  if (g.type == _IDNT && (g == *X_ || (Yv_ && g == *Yv_))) return false;
   v = fl(g);
   return fin(v);
 }
@@ -62,8 +74,9 @@ static NOINL bool cnum(const gen & g, float & v) { // a number (pi, 2/3, sqrt(2)
 static bool comp(prog & p, const gen & g, int d) {
   float v;
   if (g.type == _IDNT && g == *X_) return emit(p, O_X, 0, 0, d + 1);
+  if (g.type == _IDNT && Yv_ && g == *Yv_) return emit(p, O_Y, 0, 0, d + 1);
   if (g.type != _SYMB) return cnum(g, v) && emit(p, O_C, v, 0, d + 1);
-  if (!depend(g, *X_->_IDNTptr)) return cnum(g, v) && emit(p, O_C, v, 0, d + 1);
+  if (!depend(g, *X_->_IDNTptr) && !(Yv_ && depend(g, *Yv_->_IDNTptr))) return cnum(g, v) && emit(p, O_C, v, 0, d + 1);
   const unary_function_ptr & s = g._SYMBptr->sommet;
   const gen & a = g._SYMBptr->feuille;
   if (s == at_plus || s == at_prod) {
@@ -78,17 +91,17 @@ static bool comp(prog & p, const gen & g, int d) {
   if (s == at_inv) return comp(p, a, d) && emit(p, O_INV, 0, 0, d + 1);
   if (s == at_pow && a.type == _VECT && a._VECTptr->size() == 2) {
     const gen & b = a[0], & e = a[1];
-    if (e.type == _INT_ && e.val >= -64 && e.val <= 64) return comp(p, b, d) && emit(p, O_IPOW, (float)e.val, 0, d + 1);
+    if (e.type == _INT_ && e.val >= -64 && e.val <= 64) return comp(p, b, d) && emit(p, O_IPOW, 0, e.val + 64, d + 1); // (the exponent + 64)
     if (e.type == _FRAC && e._FRACptr->num.type == _INT_ && e._FRACptr->den.type == _INT_) {
       const int q = e._FRACptr->den.val, n = e._FRACptr->num.val;
       if (q == 2 && n == 1) return comp(p, b, d) && emit(p, O_F1, 0, F_SQRT, d + 1);
       if (q & 1) // an odd root, real for negative bases too (the textbooks' cube root of -8: -2)
-        return comp(p, b, d) && emit(p, O_ROOT, (float)q, 0, d + 1) && (n == 1 || emit(p, O_IPOW, (float)n, 0, d + 1));
+        return comp(p, b, d) && emit(p, O_ROOT, 1.0f / q, 0, d + 1) && (n == 1 || emit(p, O_IPOW, 0, n + 64, d + 1)); // (1/q: no division at each x)
     }
     return comp(p, b, d) && comp(p, e, d + 1) && emit(p, O_POW, 0, 0, d + 2);
   }
   if (s == at_surd && a.type == _VECT && a._VECTptr->size() == 2 && a[1].type == _INT_)
-    return comp(p, a[0], d) && emit(p, O_ROOT, (float)a[1].val, 0, d + 1);
+    return comp(p, a[0], d) && emit(p, O_ROOT, 1.0f / a[1].val, 0, d + 1);
   static const unary_function_ptr * const * const fs[] = {&at_sin, &at_cos, &at_tan, &at_exp, &at_ln, &at_sqrt, &at_abs,
     &at_asin, &at_acos, &at_atan, &at_sinh, &at_cosh, &at_tanh, &at_log10, &at_floor, &at_ceil};
   for (int k = 0; k < (int)(sizeof(fs) / sizeof(fs[0])); ++k)
@@ -143,38 +156,40 @@ static NOINL bool fin(float v) {
   return (q.u & 0x7f800000UL) != 0x7f800000UL;
 }
 // g at x: its program p, else giac (a function the programs cannot do: slow)
-static NOINL float run_prog(const prog & p, const gen & g, float x) {
-  if (!p.ok) return fl(subst(g, *X_, gen((double)x), false, contextptr));
-  float s[SMAX];
-  int k = -1;
-  for (int j = 0; j < p.n; ++j) {
-    const float c = p.c[j];
-    switch (p.op[j]) {
-    case O_X: s[++k] = x; break;
-    case O_C: s[++k] = c; break;
-    case O_ADD: s[k - 1] += s[k]; --k; break;
-    case O_MUL: s[k - 1] *= s[k]; --k; break;
-    case O_NEG: s[k] = -s[k]; break;
-    case O_INV: s[k] = 1 / s[k]; break;
+static NOINL float run_prog(const prog & p, const gen & g, float x, float yv = 0) {
+  if (!p.ok) return fl(subst(Yv_ ? subst(g, *Yv_, gen((double)yv), false, contextptr) : g, *X_, gen((double)x), false, contextptr));
+  // (pointers, no index: an index is a multiplication, a helper call on the eZ80)
+  float st[SMAX], * sp = st - 1;
+  const unsigned char * op = p.op, * fn = p.fn;
+  const float * cc = p.c;
+  for (int j = p.n; j > 0; --j, ++op, ++fn, ++cc) {
+    switch (*op) {
+    case O_X: *++sp = x; break;
+    case O_Y: *++sp = yv; break;
+    case O_C: *++sp = *cc; break;
+    case O_ADD: sp[-1] += *sp; --sp; break;
+    case O_MUL: sp[-1] *= *sp; --sp; break;
+    case O_NEG: *sp = -*sp; break;
+    case O_INV: *sp = 1 / *sp; if (!fin(*sp)) return NAN; break;
     case O_IPOW: { // (x^2: one multiplication)
-      int e = (int)c;
-      float b = e < 0 ? 1 / s[k] : s[k], r = 1;
+      int e = *fn - 64;
+      float b = e < 0 ? 1 / *sp : *sp, r = 1;
       bool one = true;
       for (e = e < 0 ? -e : e;;) {
         if (e & 1) { r = one ? b : r * b; one = false; }
         if (!(e >>= 1)) break;
         b *= b;
       }
-      s[k] = r;
+      *sp = r;
     } break;
-    case O_POW: s[k - 1] = powf(s[k - 1], s[k]); --k; break;
-    case O_ROOT: { const float u = s[k]; s[k] = u < 0 ? -powf(-u, 1 / c) : powf(u, 1 / c); } break;
-    case O_F1: s[k] = fun1(p.fn[j], s[k]); break;
+    case O_POW: sp[-1] = powf(sp[-1], *sp); --sp; if (!fin(*sp)) return NAN; break;
+    case O_ROOT: { const float u = *sp; *sp = u < 0 ? -powf(-u, *cc) : powf(u, *cc); } break;
+    case O_F1: *sp = fun1(*fn, *sp); if (!fin(*sp)) return NAN; break; // (the OS's float routines do not carry a NaN on: 1/2*sqrt(-1) was a number)
     }
   }
-  return k == 0 ? s[0] : NAN;
+  return sp == st ? *st : NAN;
 }
-static NOINL float val(int i, float x) { return run_prog(P_[i], F_[i], x); } // f_i at x
+static NOINL float val(int i, float x) { return fin(VX[i]) ? NAN : run_prog(P_[i], F_[i], x); } // f_i at x (a vertical line: none)
 
 // ---------------------------------------------------------------- the view
 enum { GT = 16, GB = 218, GH = GB - GT, BAR_H = UI_H - GB };
@@ -282,6 +297,7 @@ struct frame {
   short lx[NKP], ly[NKP];        // their coordinates' places (lx < 0: not shown, over another)
   char ln[64];                   // the readout's line
   int ngx, ngy, nd;
+  short ec[16]; unsigned char ei[16]; int ex[16], ey[16]; int ne; // where a curve's domain ends between two columns (sqrt(25-x^2) at 5): to there from column ec
 };
 static frame * FR;
 // y's row in 1/16 px, within 64 screens above and below (TOPC, BOTC); NONE: not a number
@@ -353,6 +369,21 @@ static NOINL void sample(int every) {
     }
   }
   quick_ = false;
+  FR->ne = 0; // the domain's ends between two columns (full frames): found by halving, the curve drawn to them
+  if (every == 1)
+    for (int i = 0; i < NF; ++i) {
+      const int * y = FR->y + i * UI_W;
+      for (int c = 0; c + 1 < UI_W && FR->ne < 16; ++c) {
+        const bool a = y[c] != NONE;
+        if (a == (y[c + 1] != NONE)) continue;
+        float xd = vx0 + (a ? c : c + 1) * pw, xu = vx0 + (a ? c + 1 : c) * pw;
+        for (int t = 0; t < 12; ++t) { const float m = (xd + xu) / 2; if (fin(val(i, m))) xd = m; else xu = m; }
+        const int r = row16(val(i, xd));
+        if (r == NONE) continue;
+        FR->ec[FR->ne] = (short)(a ? c : c + 1); FR->ei[FR->ne] = (unsigned char)i;
+        FR->ex[FR->ne] = (int)((xd - vx0) / pw * 16) + 8; FR->ey[FR->ne++] = r;
+      }
+    }
 }
 
 // ---------------------------------------------------------------- the key points
@@ -370,12 +401,13 @@ static NOINL void kpt_add(int kind, int f, const gen & x, const gen & y) {
   if (NK >= 40) return;
   const float xf = fl(x);
   if (!fin(xf)) return;
-  for (int j = 0; j < NK; ++j) // one point: its kinds (x^2's zero, minimum, y-intercept; a period's both ends)
-    if (K_[j].f == f && fabsf(K_[j].x - xf) <= 1e-3f * (1 + fabsf(xf))) { K_[j].kinds |= 1 << kind; return; }
+  float yf = fl(y);
+  if (!fin(yf)) yf = val(f, xf);
+  for (int j = 0; j < NK; ++j) // one point: its kinds (x^2's zero, minimum, y-intercept; a period's both ends; the circle's halves at (5, 0))
+    if (GRP[K_[j].f] == GRP[f] && fabsf(K_[j].x - xf) <= 1e-3f * (1 + fabsf(xf)) && !(fabsf(K_[j].y - yf) > 1e-3f * (1 + fabsf(yf)))) { K_[j].kinds |= 1 << kind; return; }
   kpt & k = K_[NK];
   k.x = xf;
-  k.y = fl(y);
-  if (!fin(k.y)) k.y = val(f, k.x);
+  k.y = yf;
   k.kinds = (unsigned char)(1 << kind); k.f = (unsigned char)f;
   { // its coordinates in decimals, for the graph: (1.73, 0)
     char u[16];
@@ -406,6 +438,7 @@ static NOINL void kpt_find() {
   giac::control_c_hook = focus_busy_tick;
   dconsole_mode = 0;
   for (int i = 0; i < NF && !giac::ctrl_c && !giac::interrupted; ++i) {
+    if (fin(VX[i])) continue; // (a vertical line)
     std::vector<an_pt> pts;
     gen per;
     analyze_points(F_[i], pts, per, contextptr);
@@ -419,13 +452,19 @@ static NOINL void kpt_find() {
         kpt_add(pts[j].kind, i, k ? ratnormal(x + gen(k) * per, contextptr) : x, pts[j].y);
     }
   }
-  for (int i = 0; i < NF; ++i) // two curves crossing
-    for (int j = i + 1; j < NF && !giac::ctrl_c; ++j) {
-      gen s = _solve(makesequence(symbolic(at_equal, makesequence(F_[i], F_[j])), *X_), contextptr);
-      if (s.type != _VECT) continue;
-      for (unsigned k = 0; k < s._VECTptr->size(); ++k) {
-        const gen x = normal((*s._VECTptr)[k], contextptr);
-        kpt_add(5, i, x, normal(subst(F_[i], *X_, x, false, contextptr), contextptr));
+  for (int g = 0; g < NGR; ++g) // two typed curves crossing: both equations, x and y solved for (y-f(x) for a function)
+    for (int h = g + 1; h < NGR && !giac::ctrl_c; ++h) {
+      gen sv = makevecteur(*X_, Yv_ ? *Yv_ : gen(identificateur("y")));
+      gen s2 = _solve(makesequence(makevecteur(symbolic(at_equal, makesequence(EQ_[g], 0)), symbolic(at_equal, makesequence(EQ_[h], 0))), sv), contextptr);
+      if (s2.type != _VECT) continue;
+      for (unsigned k = 0; k < s2._VECTptr->size(); ++k) {
+        const gen p = s2[k];
+        if (p.type != _VECT || p._VECTptr->size() != 2) continue;
+        const gen x = normal(p[0], contextptr), y = normal(p[1], contextptr);
+        const float xf = fl(x), yf = fl(y);
+        int f = -1; // the curve it is on (the circle's upper half, a line)
+        for (int i = 0; i < NF && f < 0; ++i) if ((GRP[i] == g || GRP[i] == h) && !(fabsf(val(i, xf) - yf) > 1e-3f * (1 + fabsf(yf)))) f = i;
+        if (f >= 0) kpt_add(5, f, x, y);
       }
     }
   for (int i = 1; i < NK; ++i) // left to right
@@ -510,11 +549,47 @@ static void readout(int b, int e) {
   if (yy + h <= b || yy >= e) return;
   ui_rrect(0, x0, yy, w, h, 6, UC_CARD, UC_BG);
   ui_rframe(0, x0, yy, w, h, 6, UC_LINE, UC_CARD);
-  if (mode) ui_rrect(0, x0 + 6, yy + 7, 6, 6, 3, COLS[tf], UC_CARD);
+  if (mode) ui_rrect(0, x0 + 6, yy + 7, 6, 6, 3, col(tf), UC_CARD);
   ui_draw_text(&ui_tb10, FR->ln, -1, x0 + (mode ? 16 : 8), yy + 14, ui_ramp(0, UC_INK, UC_CARD), 0);
   if (n) {
     ui_draw_text(&ui_tb10, nt, m ? (int)(m - nt) : -1, x0 + 8, base, ui_ramp(0, UC_ACC, UC_CARD), 0);
     if (m) ui_math_draw(L, m + 1, lv, x0 + 12 + tw, base, 0, UC_ACC, UC_CARD, UC_ACC);
+  }
+}
+// The equations F(x, y) = 0 not solved for y, in the band b..e: F at the corners of G x G pixel
+// cells, the curve across each cell between the edges where its sign changes (marching squares)
+static NOINL void implicit(int b, int e, int G) {
+  enum { NC = UI_W / 6 + 2 }; // (G >= 6)
+  float A[NC], B[NC], XS[NC];
+  signed char SA[NC], SB[NC]; // each value's sign (-1, 1), 0: none (computed once, not per cell: a float compare is a call)
+  const int nx = (UI_W - 1) / G + 1, lo = (b - 2) * 16, hi = (e + 2) * 16;
+  const float pw = (vx1 - vx0) / (UI_W - 1), ph = (vy1 - vy0) / (GH - 1);
+  { float x = vx0; for (int i = 0; i < nx; ++i, x += G * pw) XS[i] = x; } // (the columns' x once)
+  for (int m = 0; m < NI; ++m) {
+    const unsigned char * rp = ui_ramp(0, COLS[IG_[m] & 3], UC_BG);
+    int r = GT + (b - GT) / G * G;
+    float y = vy1 - (r - GT) * ph;
+    for (int i = 0; i < nx; ++i) { A[i] = run_prog(IP_[m], IM_[m], XS[i], y); SA[i] = !fin(A[i]) ? 0 : A[i] < 0 ? -1 : 1; }
+    for (; r < e; r += G) {
+      if (G < 14 && key_waiting()) return; // (a key: the frame stops, the key is read next)
+      y -= G * ph;
+      for (int i = 0; i < nx; ++i) { B[i] = run_prog(IP_[m], IM_[m], XS[i], y); SB[i] = !fin(B[i]) ? 0 : B[i] < 0 ? -1 : 1; }
+      for (int i = 0; i + 1 < nx; ++i) {
+        const signed char sg4[4] = {SA[i], SA[i + 1], SB[i + 1], SB[i]}; // the corners, clockwise from the top left
+        if (!sg4[0] || !sg4[1] || !sg4[2] || !sg4[3] || (sg4[0] == sg4[1] && sg4[1] == sg4[2] && sg4[2] == sg4[3])) continue;
+        const float v[4] = {A[i], A[i + 1], B[i + 1], B[i]};
+        int px[4], py[4], n = 0;
+        static const signed char cx[5] = {0, 1, 1, 0, 0}, cy[5] = {0, 0, 1, 1, 0};
+        for (int k = 0; k < 4; ++k) { // the edges where the sign changes, the crossing by interpolation
+          if (sg4[k] == sg4[(k + 1) & 3]) continue;
+          const float t = v[k] / (v[k] - v[(k + 1) & 3]);
+          px[n] = (int)(((i + cx[k] + (cx[k + 1] - cx[k]) * t) * G) * 16) + 8;
+          py[n++] = (int)((r + (cy[k] + (cy[k + 1] - cy[k]) * t) * G) * 16);
+        }
+        for (int k = 0; k + 1 < n; k += 2) seg16(px[k], py[k], px[k + 1], py[k + 1], lo, hi, 26, rp);
+      }
+      for (int i = 0; i < nx; ++i) { A[i] = B[i]; SA[i] = SB[i]; }
+    }
   }
 }
 static char tnote[48];
@@ -604,6 +679,7 @@ static NOINL void paint(bool fast) {
   const int lb = ay + 11 < GB - 2 ? (ay < GT ? GT + 10 : ay + 11) : GB - 3; // the x numbers' baseline
   const int rows = ui_band_open(64), r0 = rows ? (GH % rows ? GH % rows : rows) : GH; // (the bands end at the bottom: the card in one)
   for (int b = GT, e = GT + r0; b < GB; b = e, e += rows) {
+    if (NI && !fast && b > GT && key_waiting()) break; // (a slow frame, a key: stopped, the key read next)
     const int lo = (b - 2) * 16, hi = (e + 2) * 16;
     if (rows) ui_band_begin(b, e);
     ui_clip(0, b, UI_W, e);
@@ -636,7 +712,7 @@ static NOINL void paint(bool fast) {
     }
     for (int i = 0; i < NF; ++i) { // the curves
       const int * yr = F.y + i * UI_W;
-      const unsigned char * jn = F.j + i * UI_W, * r = ui_ramp(0, COLS[i], UC_BG);
+      const unsigned char * jn = F.j + i * UI_W, * r = ui_ramp(0, col(i), UC_BG);
       int pc = -1;
       for (int c = 0; c < UI_W; c += !fast || c == UI_W - 1 ? 1 : c + 3 < UI_W ? 3 : UI_W - 1 - c) { // (the columns sampled)
         const int z = yr[c];
@@ -650,21 +726,25 @@ static NOINL void paint(bool fast) {
         }
         pc = c;
       }
+      if (fin(VX[i])) { const int X = px_of(VX[i]); seg16(X * 16 + 8, lo, X * 16 + 8, hi, lo, hi, 26, r); } // (x = 3)
     }
+    for (int k = 0; k < F.ne; ++k) // to where a domain ends
+      seg16(F.ec[k] * 16 + 8, F.y[F.ei[k] * UI_W + F.ec[k]], F.ex[k], F.ey[k], lo, hi, 26, ui_ramp(0, col(F.ei[k]), UC_BG));
+    if (NI) implicit(b, e, fast ? 14 : 6);
     for (int k = 0; k < F.nd; ++k) { // the dots, their coordinates
       const dt & d = F.d[k];
-      if (d.y + 3 >= b && d.y - 3 < e) disc(d.x, d.y, 2, COLS[d.f], true);
-      if (d.t[0] && d.y - 5 > GT + 9 && d.y - 5 < GB - 4) text_at(d.t, d.w, d.x + 4, d.y - 5, COLS[d.f], b, e);
+      if (d.y + 3 >= b && d.y - 3 < e) disc(d.x, d.y, 2, col(d.f), true);
+      if (d.t[0] && d.y - 5 > GT + 9 && d.y - 5 < GB - 4) text_at(d.t, d.w, d.x + 4, d.y - 5, col(d.f), b, e);
     }
     for (int k = 0; k < NK && k < NKP; ++k) { // the key points, their coordinates
       if (F.ky[k] == NONE) continue;
-      if (F.ky[k] + 4 >= b && F.ky[k] - 4 < e) disc(F.kx[k], F.ky[k], 3, COLS[K_[k].f], false);
-      if (F.lx[k] >= 0) text_at(K_[k].lt, K_[k].lw, F.lx[k], F.ly[k], COLS[K_[k].f], b, e);
+      if (F.ky[k] + 4 >= b && F.ky[k] - 4 < e) disc(F.kx[k], F.ky[k], 3, col(K_[k].f), false);
+      if (F.lx[k] >= 0) text_at(K_[k].lt, K_[k].lw, F.lx[k], F.ly[k], col(K_[k].f), b, e);
     }
     if (tg) seg16(tl[0], tl[1], tl[2], tl[3], lo, hi, 18, ui_ramp(0, UC_SUB, UC_BG)); // the tangent
     if (mode) { // the trace point: a filled dot, faint lines through it
       vline(tpx, UC_ACCSOFT);
-      if (tpy != NONE) { hline(tpy, UC_ACCSOFT); disc(tpx, tpy, 4, COLS[tf], true); }
+      if (tpy != NONE) { hline(tpy, UC_ACCSOFT); disc(tpx, tpy, 4, col(tf), true); }
     } else { // pan: a small cross in the middle
       const int cx = UI_W / 2, cy = GT + GH / 2;
       ui_fill(cx - 5, cy, 11, 1, ui_col(0, UC_INK)); ui_fill(cx, cy - 5, 1, 11, ui_col(0, UC_INK));
@@ -983,6 +1063,7 @@ static NOINL void tangent_text(char * t, float m, float b) {
     strcat(t, u);
   }
 }
+static NOINL bool add_curve(const gen & f, int g, float vx);
 static NOINL void more_menu(int & nfun) {
   static const char * const lab[] = {"Tangent line here", "Area under the curve", "Graph f' too", "Analyze f(x)", "Point coordinates", "Grid"};
   const char * hint[6] = {tang ? "on" : "off", 0, 0, "the report", coords ? "on" : "off", grid ? "on" : "off"};
@@ -1019,10 +1100,10 @@ static NOINL void more_menu(int & nfun) {
   }
   if (c == 2 && nfun < NMAX) { // f' as another curve
     gen d = eval(derive(F_[tf], *X_, contextptr), 1, contextptr);
-    F_[nfun] = ratnormal(d, contextptr);
-    memset(&P_[nfun], 0, sizeof(prog));
-    P_[nfun].ok = comp(P_[nfun], F_[nfun], 0);
-    NF = ++nfun;
+    const int g = NGR < NGRP ? NGR++ : GRP[tf]; // (its own color)
+    EQ_[g] = gen(identificateur("y")) - d;
+    add_curve(ratnormal(d, contextptr), g, NAN);
+    nfun = NF;
     lev = 0;
     kpt_clear();
   }
@@ -1035,11 +1116,26 @@ static NOINL void more_menu(int & nfun) {
 }
 
 // ---------------------------------------------------------------- the screen
-static NOINL void run(float a, float b) {
+static NOINL void run(float a, float b, bool eqs) {
   vx0 = a; vx1 = b; vy0 = -10; vy1 = 10;
-  w0 = b - a;
+  if (eqs) { // equations: equal units (a circle round), the curves' extent in view
+    float x0 = 1e30f, x1 = -1e30f, y0 = 1e30f, y1 = -1e30f;
+    // the curves with ends (a circle: defined at neither -20 nor 20) and the vertical lines; none: all
+    for (int pass = 0, i = 0; pass < 2 && x0 > x1; ++pass, i = 0)
+     for (; i < NF; ++i)
+      if (pass || fin(VX[i]) || (!fin(val(i, -20)) && !fin(val(i, 20))))
+      for (int c = 0; c <= 80; ++c) {
+        const float x = fin(VX[i]) ? VX[i] : -20 + c * 0.5f, y = fin(VX[i]) ? 0 : val(i, x);
+        if (fin(y) && fabsf(y) < 1e4f) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+    if (x0 > x1) { x0 = -10; x1 = 10; y0 = y1 = 0; }
+    if (x1 - x0 < 1e-4f && y1 - y0 < 1e-4f) { x0 -= 10; x1 += 10; } // (x = 3 alone: 20 wide around it)
+    const float w = 1.3f * (x1 - x0 > (y1 - y0) * UI_W / GH ? x1 - x0 : (y1 - y0) * UI_W / GH) + 1e-3f, h = w * (GH - 1) / (UI_W - 1);
+    vx0 = (x0 + x1) / 2 - w / 2; vx1 = vx0 + w; vy0 = (y0 + y1) / 2 - h / 2; vy1 = vy0 + h;
+  }
+  w0 = vx1 - vx0;
   int in = 0, all = 0; // y from -10 to 10, unless the curves are mostly outside: fitted to them
-  for (int i = 0; i < NF; ++i)
+  for (int i = 0; i < NF && !eqs; ++i)
     for (int c = 0; c < UI_W; c += 4) {
       const float y = val(i, col_x(c));
       if (fin(y)) { ++all; if (y >= -10 && y <= 10) ++in; }
@@ -1047,6 +1143,7 @@ static NOINL void run(float a, float b) {
   if (4 * in < all) fit_y();
   if (vy1 - vy0 > 1e4f) { vy0 = -10; vy1 = 10; } // (1/x: not its 1e8 near 0)
   mode = 0; tf = 0; tx = 0; tang = false; area_a = area_b = 0; note[0] = 0;
+  while (tf < NF - 1 && fin(VX[tf])) ++tf; // (trace: a curve y = f(x))
   focus_view = 1;
   int nfun = NF;
   bar();
@@ -1058,8 +1155,8 @@ static NOINL void run(float a, float b) {
     focus_status_msg(0);
     if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_QUIT) break;
     if (key == KEY_CTRL_LEFT || key == KEY_CTRL_RIGHT || key == KEY_CTRL_UP || key == KEY_CTRL_DOWN || key == KEY_CHAR_PLUS || key == KEY_CHAR_MINUS) {
-      if (mode && (key == KEY_CTRL_UP || key == KEY_CTRL_DOWN)) { // trace: the next curve
-        tf = (tf + (key == KEY_CTRL_DOWN ? 1 : NF - 1)) % NF;
+      if (mode && (key == KEY_CTRL_UP || key == KEY_CTRL_DOWN)) { // trace: the next curve (not a vertical line)
+        for (int k = 0; k < NF; ++k) { tf = (tf + (key == KEY_CTRL_DOWN ? 1 : NF - 1)) % NF; if (!fin(VX[tf])) break; }
         follow(); paint(false);
         continue;
       }
@@ -1072,6 +1169,7 @@ static NOINL void run(float a, float b) {
       continue;
     }
     if (key == KEY_CTRL_F1) { // pan <-> trace
+      if (!mode && (!NF || fin(VX[tf]))) { focus_status_msg("Trace follows curves y = f(x)"); continue; }
       mode = !mode;
       if (mode) { tx = (vx0 + vx1) / 2; follow(); }
       bar(); paint(false);
@@ -1096,8 +1194,49 @@ static NOINL void run(float a, float b) {
   focus_invalidate();
 }
 
-// The functions of plot(f), plot([f,g]), plot(f,x=a..b) typed (or the Graph actions' input):
-// shown here when each is an expression in one variable (the same one), else 0 (KhiCAS's view)
+// one more curve y = f in equation g's color (false: no room)
+static NOINL bool add_curve(const gen & f, int g, float vx) {
+  if (NF >= NMAX) return false;
+  F_[NF] = f; GRP[NF] = (unsigned char)g; VX[NF] = vx;
+  memset(&P_[NF], 0, sizeof(prog));
+  if (!fin(vx)) P_[NF].ok = comp(P_[NF], f, 0);
+  ++NF;
+  return true;
+}
+// equation L = R (the g-th typed): y = f(x) as is; without y, its vertical lines (x = 3); a
+// polynomial of degree 1 or 2 in y, solved for it (a curve each: y = 3+sqrt(...), y = 3-sqrt(...));
+// else drawn as F(x, y) = 0 (marching squares). false: not drawn (no room, other letters)
+static NOINL bool add_eq(const gen & L, const gen & R, int g) {
+  const gen & y = *Yv_, D = eval(L - R, 1, contextptr);
+  EQ_[g] = D;
+  if (L == y && !depend(R, *y._IDNTptr)) return add_curve(R, g, NAN);
+  if (R == y && !depend(L, *y._IDNTptr)) return add_curve(L, g, NAN);
+  if (!depend(D, *y._IDNTptr)) { // x = 3, x^2 = 4: vertical lines
+    const gen r = _solve(makesequence(symbolic(at_equal, makesequence(D, 0)), *X_), contextptr);
+    if (r.type != _VECT) return false;
+    for (unsigned k = 0; k < r._VECTptr->size(); ++k) { const float c = fl(r[k]); if (fin(c) && !add_curve(r[k], g, c)) return false; }
+    return true;
+  }
+  const vecteur ly = lvarx(D, y);
+  const gen N = _numer(D, contextptr), cf = _coeff(makesequence(N, y), contextptr); // (a y^2 + b y + c: [a, b, c])
+  if (ly.size() == 1 && ly[0] == y && cf.type == _VECT && (cf._VECTptr->size() == 2 || cf._VECTptr->size() == 3)) {
+    // degree 1 or 2 in y: solved by the formula (giac's solve took 3 s on the calculator for a circle)
+    if (cf._VECTptr->size() == 2) return add_curve(normal(-cf[1] / cf[0], contextptr), g, NAN);
+    const gen a = cf[0], b = cf[1], c = cf[2], d = normal(b * b - 4 * a * c, contextptr);
+    if (is_zero(d)) return add_curve(normal(-b / (2 * a), contextptr), g, NAN);
+    const gen r = normal(symbolic(at_sqrt, d), contextptr); // (2*sqrt(25-x^2))
+    return NF + 2 <= NMAX && add_curve(normal((-b + r) / (2 * a), contextptr), g, NAN) && add_curve(normal((-b - r) / (2 * a), contextptr), g, NAN);
+  }
+  if (NI >= NGRP) return false;
+  IM_[NI] = D; IG_[NI] = (unsigned char)g;
+  memset(&IP_[NI], 0, sizeof(prog));
+  IP_[NI].ok = comp(IP_[NI], D, 0);
+  ++NI;
+  return true;
+}
+// The functions of plot(f), plot([f,g]), plot(f,x=a..b) typed (or the Graph actions' input), and
+// equations in x and y (plot(x^2+y^2=25), plot([x^2+y^2=25, y=x+1])): shown here; 0: KhiCAS's view
+// (other letters, other kinds of plot)
 int focus_graph_input(const char * in) {
   if (strncmp(in, "plot(", 5)) return 0;
   gen g(in, contextptr);
@@ -1108,7 +1247,9 @@ int focus_graph_input(const char * in) {
     fs = a[0]; rg = a[1];
   }
   vecteur v = fs.type == _VECT ? *fs._VECTptr : vecteur(1, fs);
-  if (v.empty() || v.size() > NMAX) return 0;
+  if (v.empty() || v.size() > NGRP) return 0;
+  static gen * xs, * ys;
+  if (!xs) { xs = new gen; ys = new gen(identificateur("y")); }
   gen x = 0;
   float lo = -10, hi = 10;
   if (rg.is_symb_of_sommet(at_equal) && rg._SYMBptr->feuille[0].type == _IDNT) { // x=a..b
@@ -1117,35 +1258,46 @@ int focus_graph_input(const char * in) {
     if (r.type == _VECT && r._VECTptr->size() == 2 && r[0].type == _DOUBLE_ && r[1].type == _DOUBLE_) { lo = (float)r[0]._DOUBLE_val; hi = (float)r[1]._DOUBLE_val; }
   }
   else if (rg.type == _IDNT) x = rg;
-  for (unsigned i = 0; i < v.size(); ++i) { // each in one variable, the same
+  bool eqs = false;
+  for (unsigned i = 0; i < v.size(); ++i) { // a function of one letter (the same), or an equation in x and y
     v[i] = eval(v[i], 1, contextptr);
-    if (v[i].type == _VECT || v[i].is_symb_of_sommet(at_equal) || v[i].type == _STRNG) return 0;
+    const bool eq = v[i].is_symb_of_sommet(at_equal);
+    eqs = eqs || eq;
+    if (v[i].type == _VECT || v[i].type == _STRNG) return 0;
     vecteur ids = lidnt(v[i]);
     for (unsigned j = 0; j < ids.size(); ++j) {
-      if (evalf(ids[j], 1, contextptr).type == _DOUBLE_) continue;
+      if (evalf(ids[j], 1, contextptr).type == _DOUBLE_ || (eq && ids[j] == *ys)) continue;
       if (is_zero(x)) x = ids[j];
       else if (ids[j] != x) return 0;
     }
   }
   if (is_zero(x)) x = gen(identificateur("x"));
-  static gen * xs;
-  if (!xs) xs = new gen;
-  *xs = x; X_ = xs;
-  NF = v.size();
-  F_ = new gen[NMAX];
-  P_ = (prog *)calloc(NMAX, sizeof(prog));
+  if (eqs && x == *ys) return 0;
+  *xs = x; X_ = xs; Yv_ = eqs ? ys : 0;
+  NF = NI = NGR = 0;
+  F_ = new gen[NMAX]; EQ_ = new gen[NGRP]; IM_ = new gen[NGRP];
+  P_ = (prog *)calloc(NMAX, sizeof(prog)); IP_ = (prog *)calloc(NGRP, sizeof(prog));
   FR = (frame *)malloc(sizeof(frame));
-  if (!P_ || !FR) { delete[] F_; free(P_); free(FR); FR = 0; return 0; }
-  for (int i = 0; i < NF; ++i) { F_[i] = v[i]; P_[i].ok = comp(P_[i], F_[i], 0); }
-  NK = -1; lev = 0;
-  run(lo < hi ? lo : -10, lo < hi ? hi : 10);
+  bool ok = P_ && IP_ && FR;
+  if (eqs) working(true); // (solving for y)
+  for (unsigned i = 0; i < v.size() && ok; ++i, ++NGR) {
+    if (v[i].is_symb_of_sommet(at_equal)) ok = add_eq(v[i]._SYMBptr->feuille[0], v[i]._SYMBptr->feuille[1], i);
+    else { EQ_[i] = *ys - v[i]; ok = add_curve(v[i], i, NAN); }
+  }
+  if (eqs) working(false);
+  if (!NF && !NI) ok = false; // (x^2 = -1: nothing to draw)
+  if (ok) {
+    NK = -1; lev = 0;
+    run(lo < hi ? lo : -10, lo < hi ? hi : 10, eqs);
+  }
   kpt_clear();
   free(K_); K_ = 0;
-  delete[] F_; F_ = 0;
-  free(P_); P_ = 0;
+  delete[] F_; F_ = 0; delete[] EQ_; EQ_ = 0; delete[] IM_; IM_ = 0;
+  free(P_); P_ = 0; free(IP_); IP_ = 0;
   free(FR); FR = 0;
   free(DP_); DP_ = 0;
   delete[] DF_; DF_ = 0;
-  return 1;
+  Yv_ = 0;
+  return ok ? 1 : 0;
 }
 #endif
