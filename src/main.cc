@@ -1225,6 +1225,17 @@ void do_run(const char * s){
     if (focus_on && !strstr(buf,"print"))
       dconsole_mode=0;
     giac::gen g(buf,contextptr);
+#ifdef FLOWCE_STEPS
+    if (focus_on && focus_graph_input(buf)){ // y = f(x): DeltaCE's graph screen (focus_graph.cc)
+      dconsole_mode=1;
+      if (defn)
+        giac::logptr(savelog,contextptr);
+      Console_Output("Graph");
+      Console_NewLine(LINE_TYPE_OUTPUT,1);
+      free(buf);
+      return;
+    }
+#endif
     answer_ctx actx; // the steps around eval are in answer.cc (the host tests run them too)
     focus_busy(1); // "Calculating" after 0.4 s, from giac's checks of the ON key
     giac::control_c_hook=focus_busy_tick;

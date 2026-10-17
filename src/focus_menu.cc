@@ -89,7 +89,7 @@ static void geometry(int id, const fm_menu & m) {
   if (m.grid) {
     cw = m.grid == 2 ? (m.cols == 3 ? 100 : 150) : m.cols == 3 ? 76 : 60;
     pw = m.cols * cw + 10; ph = ((m.n + m.cols - 1) / m.cols) * cellh(m) + 10;
-  } else { pw = LW; ph = m.n * RH + 10; }
+  } else { pw = LW; ph = (m.n < vis ? m.n : vis) * RH + 10; } // (a long list: vis rows, scrolled)
   int anchor = id < 5 ? 32 + 64 * id : UI_W / 2, mg = id < 5 ? 1 : 4; // (DeltaCE: a key's card over its whole tab)
   px = anchor - pw / 2;
   if (px < mg) px = mg;
@@ -233,13 +233,15 @@ static void repaint_item(const fm_menu & m, int k, int sel) {
 static void tab_text(int i, const char * w, int fg);
 // opens card m (its geometry set): the scene dims at once, tab col of the bar is drawn open
 // (layer 0: its icon and word; 2nd, alpha: its text label), the card is painted
+static const char * tab_word_; // (DeltaCE) the open tab's word instead of the console's (the graph's menus)
 static void open_card(const fm_menu & m, int col, int layer, int sel) {
   ui_dim(1);
   paint_rows(m, py, col < 5 ? SBOT : py + ph + 4, sel, 1);
   if (col < 5) { // (DeltaCE) its tab, joined to the card: the card rises out of its key
     int band = ui_band_open(32) >= 32;
     if (band) { ui_band_begin(SBOT - 4, UI_H); ui_band_load(); }
-    if (!layer) focus_tab(col, 1, 1);
+    if (tab_word_) tab_text(col, tab_word_, UC_ACC);
+    else if (!layer) focus_tab(col, 1, 1);
     else tab_text(col, console_fkey_label(layer, col), layer == 1 ? UC_BLUE : UC_GREEN);
     ui_clip(0, SBOT - 4, UI_W, UI_H);
     ui_fill(32 + 64 * col - 29, SBOT - 3, 58, 4, ui_col(1, UC_CARD)); // (the card's edge over the tab: gone)
@@ -705,6 +707,26 @@ static void tab_text(int i, const char * w, int fg) {
   ui_noclip();
 }
 void focus_tab_open(int i, const char * label) { tab_text(i, label, UC_ACC); }
+// (DeltaCE) a list on F-key col's tab (word: the tab's), its items' math (or 0) and words, 6 rows
+// shown at most (scrolled): the item picked, -1 if none
+int focus_card_list(int col, const char * word, const char * const * maths, const char * const * labels, const char * const * hints, int n, int sel) {
+  if (n <= 0) return -1;
+  fm_item * it = (fm_item *)malloc(n * sizeof(fm_item));
+  if (!it) return -1;
+  for (int k = 0; k < n; ++k) { it[k].text = maths ? maths[k] : 0; it[k].back = 0; it[k].pv = 0; it[k].label = labels[k]; it[k].hint = hints ? hints[k] : 0; it[k].act = 0; }
+  const fm_menu m = {0, 1, (char)(n > 60 ? 60 : n), it};
+  vis = 6; top = sel >= vis ? sel - vis + 1 : 0; hdr = 0; rh = RH;
+  tab_word_ = word;
+  geometry(col, m);
+  prepare(m);
+  open_card(m, col, 0, sel);
+  cur = col;
+  const int r = run_keys(m, sel, 0);
+  close_card(0, 0);
+  tab_word_ = 0; vis = 99; top = 0;
+  free(it);
+  return r;
+}
 // idx: the menu, numbered as console_menu does (key - F1: 0-4 plain, 5-9 2nd, 10-14 alpha, 15+
 // others). Returns the entry chosen, -1 if cancelled, -2 - j to open menu j instead.
 int focus_fmenu(int idx, const char * const * e, int n) {

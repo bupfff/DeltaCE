@@ -138,8 +138,14 @@ const unsigned char * ui_ramp(int bank, int fg, int bg) {
 void ui_fill(int x, int y, int w, int h, unsigned char idx) {
   int x0 = x < ui_cx0 ? ui_cx0 : x, x1 = x + w > ui_cx1 ? ui_cx1 : x + w;
   int y0 = y < ui_cy0 ? ui_cy0 : y, y1 = y + h > ui_cy1 ? ui_cy1 : y + h;
-  if (x1 <= x0) return;
-  for (; y0 < y1; ++y0) memset(ui_fb + y0 * UI_W + x0, idx, x1 - x0);
+  if (x1 <= x0 || y1 <= y0) return;
+  // the row's address once (a multiplication is a helper call on the eZ80), then UI_W further per
+  // row; a column (the graph's lines) without memset, the full width in one
+  unsigned char * p = ui_fb + y0 * UI_W + x0;
+  const int n = x1 - x0;
+  if (n == UI_W) { memset(p, idx, (size_t)(y1 - y0) * UI_W); return; }
+  if (n == 1) { for (; y0 < y1; ++y0, p += UI_W) *p = idx; return; }
+  for (; y0 < y1; ++y0, p += UI_W) memset(p, idx, n);
 }
 
 // pixel x of the framebuffer row row (inside the clip rows), shade lv: keeps the darker shade

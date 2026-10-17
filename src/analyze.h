@@ -16,4 +16,10 @@ struct an_line { unsigned char kind, sep; const char * text; std::string math; }
 // The analysis of f (parsed, not evaluated: as typed, its holes kept) in its variable. 0: done,
 // else why not.
 const char * analyze_of(const giac::gen & f, std::vector<an_line> & out, const giac::context * contextptr);
+
+// The graph's key points (focus_graph.cc): the analysis' points, exact; kind 0 zero, 1 y-intercept,
+// 2 local max, 3 local min, 4 inflection point. per: the period (0: none; the points are then the
+// period's, from 0), else 0. 0: done, else why not.
+struct an_pt { unsigned char kind; giac::gen x, y; };
+const char * analyze_points(const giac::gen & f, std::vector<an_pt> & pts, giac::gen & per, const giac::context * contextptr);
 #endif

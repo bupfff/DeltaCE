@@ -28,6 +28,9 @@ static gen * per_;          // the period (0: not periodic)
 static bool win_;           // studied on the window [lo_, hi_] only
 static double lo_, hi_;
 static gen * wlo_, * whi_;  // the window's ends, exact
+static std::vector<an_pt> * kp_; // analyze_points: the points, no report
+static gen * kper_;
+static NOINL void kp(int kind,const gen & x,const gen & y){ if (kp_){ an_pt p; p.kind=(unsigned char)kind; p.x=x; p.y=y; kp_->push_back(p); } }
 
 static NOINL bool stop(){ return ctrl_c || interrupted; }
 #ifdef HOSTGIAC
@@ -366,6 +369,7 @@ const char * analyze_of(const gen & f0,std::vector<an_line> & out,GIAC_CONTEXT){
   bool trig;
   gen per=period(f,trig), wlo=0, whi=0;
   per_=is_zero(per)?0:&per;
+  if (kper_) *kper_=per;
   win_=trig;
   if (trig){
     if (per_){ wlo=0; whi=per; } else { wlo=ev(-2*cst_pi); whi=ev(2*cst_pi); }
@@ -415,15 +419,15 @@ const char * analyze_of(const gen & f0,std::vector<an_line> & out,GIAC_CONTEXT){
   line(AN_SECTION,"INTERCEPTS",m);
   {
     double y;
-    if (inwin(0) && real(at(f,0),y)) line(AN_ROW,"y-intercept",point(0,at(f,0)));
+    if (inwin(0) && real(at(f,0),y)){ line(AN_ROW,"y-intercept",point(0,at(f,0))); kp(1,0,at(f,0)); }
     else line(AN_ROW,"y-intercept",std::string("\1none"));
     pts Z;
     zeros(f,Z);
-    for (unsigned i=0;i<Z.size();++i) if (real(at(f,Z[i].v),y) && mag(y)<=1000*TOL) item(m,point(Z[i].v,0));
+    for (unsigned i=0;i<Z.size();++i) if (real(at(f,Z[i].v),y) && mag(y)<=1000*TOL){ item(m,point(Z[i].v,0)); kp(0,Z[i].v,0); }
     line(AN_ROW,"x-intercepts",m.empty()?std::string("\1none"):m); m="";
   }
   // symmetry
-  {
+  if (!kp_){
     static const double ts[]={0.37,1.29,2.13,0.61,3.7};
     int ev_=1,od=1,both=0;
     for (int i=0;i<5;++i){
@@ -442,8 +446,8 @@ const char * analyze_of(const gen & f0,std::vector<an_line> & out,GIAC_CONTEXT){
   }
   if (stop()) goto done;
   // asymptotes and holes
-  line(AN_SECTION,"ASYMPTOTES",m);
-  {
+  if (!kp_){
+    line(AN_SECTION,"ASYMPTOTES",m);
     std::string va,ho;
     int k=0;
     for (unsigned i=0;i<B.size() && !stop();++i){
@@ -534,6 +538,7 @@ const char * analyze_of(const gen & f0,std::vector<an_line> & out,GIAC_CONTEXT){
       const signed char a=beside(Q,s,i,-1),b=beside(Q,s,i,1);
       if (a==2 || b==2 || a==b || !a || !b) continue;
       std::string t=point(Q[i].v,at(f,Q[i].v));
+      kp(o==2?4:a>0?2:3,Q[i].v,at(f,Q[i].v));
       if (o==2) item(m,t);
       else item(a>0?mx:mn,t);
     }
@@ -551,5 +556,13 @@ const char * analyze_of(const gen & f0,std::vector<an_line> & out,GIAC_CONTEXT){
   withsqrt(ws,CTX);
   logptr(log,CTX);
   return stop()?"Stopped":0;
+}
+const char * analyze_points(const gen & f,std::vector<an_pt> & pts,gen & per,GIAC_CONTEXT){
+  std::vector<an_line> out;
+  kp_=&pts; kper_=&per; per=0;
+  const char * r=analyze_of(f,out,contextptr);
+  kp_=0; kper_=0;
+  for (unsigned i=0;i<pts.size();++i) pts[i].y=nice(pts[i].y); // (3/4, as the report)
+  return r;
 }
 #endif

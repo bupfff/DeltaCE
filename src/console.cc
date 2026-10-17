@@ -2586,8 +2586,17 @@ int Console_GetKey(){
         for (int k=0;Current_Line<Last_Line && k<4000;++k)
           Console_MoveCursor(CURSOR_DOWN);
         Console_Clear_EditLine();
-        g="plot("+g+")";
-        Console_Input((const Char *)g.c_str());
+        int dep=0; // x^2, 2x+1: both, plot([x^2, 2x+1])
+        bool list=false;
+        for (unsigned k=0;k<g.size();++k){
+          const char c=g[k];
+          if (c=='(' || c=='[' || c=='{') ++dep;
+          else if (c==')' || c==']' || c=='}') --dep;
+          else if (c==',' && !dep) list=true;
+        }
+        string p=list?"plot([":"plot(";
+        p+=g; p+=list?"])":")";
+        Console_Input((const Char *)p.c_str());
         console_prepare_input();
         return Console_NewLine(LINE_TYPE_INPUT,1);
       }

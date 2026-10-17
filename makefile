@@ -78,7 +78,7 @@ endif
 # giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB
 # less; FlowCE's own files keep the default inlining
 INLFILE = -mllvm -inline-threshold=-10
-%/answer.cc.bc %/console.cc.bc %/fake.cc.bc %/file.cc.bc %/focus.cc.bc %/focus_catalog.cc.bc %/focus_edit.cc.bc %/focus_menu.cc.bc %/focus_steps.cc.bc %/main.cc.bc %/mathedit.cc.bc %/mathinput.cc.bc %/mathinput_glue.cc.bc %/menufr.cc.bc %/steps.cc.bc %/textGUI.cc.bc %/tiinput.cc.bc %/tiinput_glue.cc.bc %/ui_math.cc.bc: INLFILE :=
+%/answer.cc.bc %/console.cc.bc %/fake.cc.bc %/file.cc.bc %/focus.cc.bc %/focus_catalog.cc.bc %/focus_edit.cc.bc %/focus_graph.cc.bc %/focus_menu.cc.bc %/focus_steps.cc.bc %/main.cc.bc %/mathedit.cc.bc %/mathinput.cc.bc %/mathinput_glue.cc.bc %/menufr.cc.bc %/steps.cc.bc %/textGUI.cc.bc %/tiinput.cc.bc %/tiinput_glue.cc.bc %/ui_math.cc.bc: INLFILE :=
 
 # The Focus drawing code works per pixel: compiled for speed (with -Oz, shifts and multiplies
 # become helper calls). Small files: a few KB of flash.
