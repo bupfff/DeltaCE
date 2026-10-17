@@ -655,6 +655,9 @@ int focus_prompt(const char * t, const char * sub, std::string & s, bool numeric
       s.insert(s.begin() + pos, char(key));
       ++pos;
     }
+    else if (!numeric) // the keys that type a word: pi, sqrt(, sin(, ^2 (as on the edit line)
+      if (const char * a = keytostring(key, 0, false))
+        for (; *a && s.size() < 60; ++a, ++pos) s.insert(s.begin() + pos, *a);
   }
   ui_dim(0);
   if (!focus_view) {

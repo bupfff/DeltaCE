@@ -22,4 +22,8 @@ const char * analyze_of(const giac::gen & f, std::vector<an_line> & out, const g
 // period's, from 0), else 0. 0: done, else why not.
 struct an_pt { unsigned char kind; giac::gen x, y; };
 const char * analyze_points(const giac::gen & f, std::vector<an_pt> & pts, giac::gen & per, const giac::context * contextptr);
+// The real x where g is 0, exact when giac finds them (and with edges, the edges of g's domain:
+// where a derivative is undefined); on [lo, hi] when lo < hi (sin, cos, tan: their families there,
+// x mixed with them numerically), else all. Sorted, at most 24. For the graph's tools.
+void analyze_zeros(const giac::gen & g, const giac::gen & x, double lo, double hi, bool edges, giac::vecteur & out, const giac::context * contextptr);
 #endif

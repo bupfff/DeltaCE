@@ -557,6 +557,22 @@ const char * analyze_of(const gen & f0,std::vector<an_line> & out,GIAC_CONTEXT){
   logptr(log,CTX);
   return stop()?"Stopped":0;
 }
+void analyze_zeros(const gen & g,const gen & x,double lo,double hi,bool edg,vecteur & out,GIAC_CONTEXT){
+  ctx_=contextptr;
+  gen xx=x;
+  var_=&xx; per_=0;
+  win_=lo<hi; lo_=lo; hi_=hi;
+  const bool ats=all_trig_sol(CTX),ws=withsqrt(CTX);
+  stdostream * log=logptr(CTX);
+  logptr(0,CTX);
+  all_trig_sol(win_,CTX);
+  withsqrt(false,CTX);
+  pts v;
+  zeros(g,v);
+  if (edg) edges(g,v);
+  all_trig_sol(ats,CTX); withsqrt(ws,CTX); logptr(log,CTX);
+  for (unsigned i=0;i<v.size();++i) out.push_back(v[i].v);
+}
 const char * analyze_points(const gen & f,std::vector<an_pt> & pts,gen & per,GIAC_CONTEXT){
   std::vector<an_line> out;
   kp_=&pts; kper_=&per; per=0;

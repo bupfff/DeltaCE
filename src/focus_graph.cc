@@ -47,12 +47,16 @@ static NOINL bool emit(prog & p, int op, float c, int fn, int d) {
   if (d > p.depth) p.depth = (unsigned char)d;
   return d < SMAX;
 }
+// g as a float (NAN: not a real number)
+static NOINL float fl(const gen & g) {
+  const gen z = evalf(g, 1, contextptr);
+  return z.type == _INT_ ? (float)z.val : z.type == _DOUBLE_ ? (float)z._DOUBLE_val : NAN;
+}
+static bool fin(float v);
 static NOINL bool cnum(const gen & g, float & v) { // a number (pi, 2/3, sqrt(2) too)
   if (g.type == _IDNT && g == *X_) return false;
-  gen z = evalf(g, 1, contextptr);
-  if (z.type == _INT_) { v = (float)z.val; return true; }
-  if (z.type == _DOUBLE_) { v = (float)z._DOUBLE_val; return true; }
-  return false;
+  v = fl(g);
+  return fin(v);
 }
 // g compiled into p, its value at stack depth d (+1)
 static bool comp(prog & p, const gen & g, int d) {
@@ -133,17 +137,14 @@ static float fun1(int k, float u) {
   return NAN;
 }
 // v a number (not NaN, not infinite), by its bits: the CE's float library compares NaN equal to itself
-static NOINL NOINL bool fin(float v) {
+static NOINL bool fin(float v) {
   union { float f; unsigned long u; } q;
   q.f = v;
   return (q.u & 0x7f800000UL) != 0x7f800000UL;
 }
 // g at x: its program p, else giac (a function the programs cannot do: slow)
 static NOINL float run_prog(const prog & p, const gen & g, float x) {
-  if (!p.ok) {
-    gen z = evalf(subst(g, *X_, gen((double)x), false, contextptr), 1, contextptr);
-    return z.type == _DOUBLE_ ? (float)z._DOUBLE_val : z.type == _INT_ ? (float)z.val : NAN;
-  }
+  if (!p.ok) return fl(subst(g, *X_, gen((double)x), false, contextptr));
   float s[SMAX];
   int k = -1;
   for (int j = 0; j < p.n; ++j) {
@@ -184,16 +185,17 @@ static int mode;                          // 0 pan, 1 trace
 static int tf;                            // trace: the curve
 static float tx;                          // trace: x
 static bool coords, grid = true;          // dots' coordinates shown; the grid
+static bool klabels;                      // the key points' coordinates on the graph
 static bool tang;                         // the tangent line at the trace point
 static float area_a, area_b;              // the area under the curve shaded (a < b), else a = b
 static char note[64];                     // the readout's own line (a key point, the area, the tangent)
 static int note_x;                        // ... for the trace x it was made for (pixel column), -1: any
 
-static NOINL NOINL float col_x(float c) { return vx0 + (vx1 - vx0) * c / (UI_W - 1); }
-static NOINL NOINL float row_of(float y) { return GT + (vy1 - y) * (GH - 1) / (vy1 - vy0); }
+static NOINL float col_x(float c) { return vx0 + (vx1 - vx0) * c / (UI_W - 1); }
+static NOINL float row_of(float y) { return GT + (vy1 - y) * (GH - 1) / (vy1 - vy0); }
 static NOINL int clampi(float v) { return v < -1000 ? -1000 : v > 2000 ? 2000 : v >= 0 ? (int)(v + 0.5f) : -(int)(0.5f - v); } // (rounded; no floorf)
-static NOINL NOINL int px_of(float x) { return clampi((x - vx0) * (UI_W - 1) / (vx1 - vx0)); }
-static NOINL NOINL int py_of(float y) { return clampi(row_of(y)); }
+static NOINL int px_of(float x) { return clampi((x - vx0) * (UI_W - 1) / (vx1 - vx0)); }
+static NOINL int py_of(float y) { return clampi(row_of(y)); }
 
 // the step of the grid: 1, 2 or 5 x 10^k, at least minpx pixels apart (no log10f, powf: slow)
 static NOINL float step_of(float range, int pixels, int minpx) {
@@ -277,6 +279,7 @@ struct frame {
   gl gx[NG], gy[NG];
   dt d[ND];
   int kx[NKP], ky[NKP];          // the key points
+  short lx[NKP], ly[NKP];        // their coordinates' places (lx < 0: not shown, over another)
   char ln[64];                   // the readout's line
   int ngx, ngy, nd;
 };
@@ -353,28 +356,34 @@ static NOINL void sample(int every) {
 }
 
 // ---------------------------------------------------------------- the key points
-struct kpt { float x, y; unsigned char kinds, f; char * label; }; // kinds: 1 << kind; label: math (giac syntax)
+struct kpt { float x, y; unsigned char kinds, f, lw; char * label; char lt[24]; }; // kinds: 1 << kind; label: math (giac syntax); lt: in decimals, lw wide
 static kpt * K_;
 static int NK = -1; // -1: not computed yet
 static const char * const KIND[] = {"Zero", "y-intercept", "Local max", "Local min", "Inflection", "Crossing"};
-// a point's name: its main kind (x^2's (0, 0): local min; its coordinates say it is a zero)
+// a point's name: its main kind (x^2's (0, 0): local min, sin's zeros: zero, not inflection)
 static NOINL const char * kname(int m) {
-  static const unsigned char order[6] = {2, 3, 4, 5, 0, 1};
+  static const unsigned char order[6] = {2, 3, 0, 4, 5, 1};
   for (int k = 0; k < 6; ++k) if (m >> order[k] & 1) return KIND[order[k]];
   return "";
 }
 static NOINL void kpt_add(int kind, int f, const gen & x, const gen & y) {
   if (NK >= 40) return;
-  const gen fx = evalf(x, 1, contextptr), fy = evalf(y, 1, contextptr);
-  if (fx.type != _DOUBLE_ && fx.type != _INT_) return;
-  const float xf = fx.type == _INT_ ? (float)fx.val : (float)fx._DOUBLE_val;
+  const float xf = fl(x);
+  if (!fin(xf)) return;
   for (int j = 0; j < NK; ++j) // one point: its kinds (x^2's zero, minimum, y-intercept; a period's both ends)
     if (K_[j].f == f && fabsf(K_[j].x - xf) <= 1e-3f * (1 + fabsf(xf))) { K_[j].kinds |= 1 << kind; return; }
   kpt & k = K_[NK];
   k.x = xf;
-  k.y = fy.type == _INT_ ? (float)fy.val : fy.type == _DOUBLE_ ? (float)fy._DOUBLE_val : NAN;
+  k.y = fl(y);
   if (!fin(k.y)) k.y = val(f, k.x);
   k.kinds = (unsigned char)(1 << kind); k.f = (unsigned char)f;
+  { // its coordinates in decimals, for the graph: (1.73, 0)
+    char u[16];
+    strcpy(k.lt, "("); fmtg(u, k.x, 3); strcat(k.lt, u); strcat(k.lt, ", ");
+    if (fin(k.y)) fmtg(u, k.y, 3); else strcpy(u, "?");
+    strcat(k.lt, u); strcat(k.lt, ")");
+    k.lw = (unsigned char)ui_text_width(&ui_tr9, k.lt, -1);
+  }
   std::string s = "(";
   s += x.print(contextptr); s += ","; s += y.print(contextptr); s += ")";
   k.label = (char *)malloc(s.size() + 1);
@@ -400,13 +409,11 @@ static NOINL void kpt_find() {
     std::vector<an_pt> pts;
     gen per;
     analyze_points(F_[i], pts, per, contextptr);
-    float pf = 0;
-    gen pe = evalf(per, 1, contextptr);
-    if (pe.type == _DOUBLE_) pf = (float)pe._DOUBLE_val;
+    const float pf = is_zero(per) ? 0 : fl(per);
     for (unsigned j = 0; j < pts.size(); ++j) {
       if (pf <= 0 || pts[j].kind == 1) { kpt_add(pts[j].kind, i, pts[j].x, pts[j].y); continue; }
       const gen & x = pts[j].x; // periodic: each one over the view (and around it), as x + k period
-      const float x0 = (float)evalf(x, 1, contextptr)._DOUBLE_val;
+      const float x0 = fl(x);
       const int k0 = (int)floorf((vx0 - x0) / pf) - 1, k1 = (int)ceilf((vx1 - x0) / pf) + 1;
       for (int k = k0; k <= k1 && k - k0 < 12; ++k)
         kpt_add(pts[j].kind, i, k ? ratnormal(x + gen(k) * per, contextptr) : x, pts[j].y);
@@ -559,6 +566,18 @@ static NOINL void paint(bool fast) {
     if (shx != -1000 && lnk == NK) { F.kx[k] -= shx; if (F.ky[k] != NONE) F.ky[k] += shy; }
     else { F.kx[k] = px_of(K_[k].x); F.ky[k] = fin(K_[k].y) ? py_of(K_[k].y) : NONE; }
   lnk = NK;
+  for (int k = 0; k < NK && k < NKP; ++k) { // the coordinates: off the curve (a maximum's above it, a
+    // minimum's below, the others up and right), not over one already placed
+    F.lx[k] = -1;
+    const int X = F.kx[k], Y = F.ky[k], m = K_[k].kinds, w = K_[k].lw, y = m & 4 ? Y - 7 : m & 8 ? Y + 14 : Y - 5;
+    int x = m & 12 ? X - w / 2 : X + 5;
+    if (x + w > UI_W - 2) x = X - 5 - w; // (at the right edge: left of it)
+    if (!klabels || Y == NONE || x < 2 || x + w > UI_W - 2 || y < GT + 10 || y > GB - 4) continue;
+    bool free_ = true;
+    for (int j = 0; j < k && free_; ++j)
+      if (F.lx[j] >= 0 && x < F.lx[j] + K_[j].lw + 3 && F.lx[j] < x + w + 3 && y > F.ly[j] - 11 && y < F.ly[j] + 11) free_ = false;
+    if (free_) { F.lx[k] = (short)x; F.ly[k] = (short)y; }
+  }
   int tl[4]; // the tangent, cut to the plot (1/16 px)
   bool tg = tang && mode && fin(val(tf, tx));
   if (tg) { // (its equation in the readout, for the trace point)
@@ -583,7 +602,6 @@ static NOINL void paint(bool fast) {
   }
   const int pa = area_a < area_b ? (px_of(area_a) < 0 ? 0 : px_of(area_a)) : 1, pb = area_a < area_b ? (px_of(area_b) >= UI_W ? UI_W - 1 : px_of(area_b)) : 0;
   const int lb = ay + 11 < GB - 2 ? (ay < GT ? GT + 10 : ay + 11) : GB - 3; // the x numbers' baseline
-  const int lx = ax - 3 > 30 ? ax - 3 : ax < 0 ? 2 : ax + 4;                // the y numbers' side
   const int rows = ui_band_open(64), r0 = rows ? (GH % rows ? GH % rows : rows) : GH; // (the bands end at the bottom: the card in one)
   for (int b = GT, e = GT + r0; b < GB; b = e, e += rows) {
     const int lo = (b - 2) * 16, hi = (e + 2) * 16;
@@ -612,7 +630,9 @@ static NOINL void paint(bool fast) {
     }
     for (int k = 0; k < F.ngy; ++k) {
       const gl & g = F.gy[k];
-      if (g.t[0] && g.p + 4 > GT + 9 && g.p + 4 < GB - 2) text_at(g.t, g.w, ax - 3 > 30 ? lx - g.w : lx, g.p + 4, UC_SUB, b, e);
+      // left of the y-axis (right of it near the left edge); the axis off the screen: at that edge
+      const int x = ax < 0 ? 3 : ax >= UI_W ? UI_W - 3 - g.w : ax - 4 - g.w >= 2 ? ax - 4 - g.w : ax + 4;
+      if (g.t[0] && g.p + 4 > GT + 9 && g.p + 4 < GB - 2) text_at(g.t, g.w, x, g.p + 4, UC_SUB, b, e);
     }
     for (int i = 0; i < NF; ++i) { // the curves
       const int * yr = F.y + i * UI_W;
@@ -636,8 +656,11 @@ static NOINL void paint(bool fast) {
       if (d.y + 3 >= b && d.y - 3 < e) disc(d.x, d.y, 2, COLS[d.f], true);
       if (d.t[0] && d.y - 5 > GT + 9 && d.y - 5 < GB - 4) text_at(d.t, d.w, d.x + 4, d.y - 5, COLS[d.f], b, e);
     }
-    for (int k = 0; k < NK && k < NKP; ++k) // the key points
-      if (F.ky[k] != NONE && F.ky[k] + 4 >= b && F.ky[k] - 4 < e) disc(F.kx[k], F.ky[k], 3, COLS[K_[k].f], false);
+    for (int k = 0; k < NK && k < NKP; ++k) { // the key points, their coordinates
+      if (F.ky[k] == NONE) continue;
+      if (F.ky[k] + 4 >= b && F.ky[k] - 4 < e) disc(F.kx[k], F.ky[k], 3, COLS[K_[k].f], false);
+      if (F.lx[k] >= 0) text_at(K_[k].lt, K_[k].lw, F.lx[k], F.ly[k], COLS[K_[k].f], b, e);
+    }
     if (tg) seg16(tl[0], tl[1], tl[2], tl[3], lo, hi, 18, ui_ramp(0, UC_SUB, UC_BG)); // the tangent
     if (mode) { // the trace point: a filled dot, faint lines through it
       vline(tpx, UC_ACCSOFT);
@@ -731,14 +754,11 @@ static NOINL void fit_y() { // the y range of the curves over the view
 }
 static NOINL bool ask(const char * t, const char * sub, float & v, gen * exact = 0) {
   std::string s;
-  if (focus_prompt(t, sub, s, true) != KEY_CTRL_EXE || s.empty()) return false;
+  if (focus_prompt(t, sub, s, false) != KEY_CTRL_EXE || s.empty()) return false; // (pi/3, sqrt(2), 1/2)
   const gen e(s, contextptr);
   if (exact) *exact = eval(e, 1, contextptr);
-  gen g = evalf(e, 1, contextptr);
-  if (g.type == _INT_) { v = (float)g.val; return true; }
-  if (g.type != _DOUBLE_) return false;
-  v = (float)g._DOUBLE_val;
-  return true;
+  v = fl(e);
+  return fin(v);
 }
 static void bar();
 static void redraw() { bar(); paint(false); } // (a menu closed: gone before a prompt)
@@ -761,6 +781,114 @@ static void zoom_menu() {
   } break;
   }
 }
+// giac at work: "Calculating" after a moment, ON stops it, its notes nowhere
+static NOINL void working(bool on) {
+  if (on) { focus_busy(UI_H / 2); giac::control_c_hook = focus_busy_tick; dconsole_mode = 0; return; }
+  dconsole_mode = 1;
+  giac::control_c_hook = 0;
+  focus_busy(0);
+  giac::ctrl_c = giac::interrupted = false;
+}
+// (x,y), or x=x without y, in giac syntax into b (n bytes); else in decimals
+static NOINL void gtext(char * b, int n, const gen & x, const gen * y) {
+  std::string m = y ? "(" : "x=";
+  m += x.print(contextptr);
+  if (y) { m += ","; m += y->print(contextptr); m += ")"; }
+  if ((int)m.size() < n) { strcpy(b, m.c_str()); return; }
+  char u[16];
+  strcpy(b, y ? "(" : "x="); fmtg(u, fl(x), 4); strcat(b, u);
+  if (y) { strcat(b, ","); fmtg(u, fl(*y), 4); strcat(b, u); strcat(b, ")"); }
+}
+// f_i at x, exact (sin(pi/3): sqrt(3)/2), its value v; false if not a real number there
+static NOINL bool exact_at(int i, const gen & x, gen & y, float & v) {
+  y = normal(eval(subst(F_[i], *X_, x, false, contextptr), 1, contextptr), contextptr);
+  v = fl(y);
+  return fin(v);
+}
+// the trace point on curve i at x (exact x, y); the readout's note: words, then (x, y)
+static NOINL void point_at(int i, const gen & x, const gen & y, const char * words) {
+  mode = 1; tf = i; tx = fl(x);
+  follow();
+  strcpy(note, words); strcat(note, "\x01");
+  gtext(note + strlen(note), sizeof(note) - strlen(note), x, &y);
+  note_x = px_of(tx);
+}
+// Value at x: an x typed (exact: pi/3), the point there (also enter in trace mode)
+static NOINL void value_at() {
+  float x, y;
+  gen gx, gy;
+  if (!ask("Value at x =", "x", x, &gx)) return;
+  if (!exact_at(tf, gx, gy, y)) { focus_status_msg("Not defined there"); return; }
+  point_at(tf, gx, gy, "Point");
+}
+// Solve f(x) = c: every x (sin, cos, tan: in the view and a screen each side), exact when giac
+// finds it; several: a list to pick from
+static NOINL void solve_for() {
+  float c;
+  gen gc;
+  if (!ask("Solve  f(x) =", "y", c, &gc)) return;
+  const std::string fs = F_[tf].print(contextptr);
+  const bool t = fs.find("sin") != std::string::npos || fs.find("cos") != std::string::npos || fs.find("tan") != std::string::npos;
+  const float w = vx1 - vx0;
+  vecteur r;
+  working(true);
+  analyze_zeros(F_[tf] - gc, *X_, t ? vx0 - w : 0, t ? vx1 + w : 0, false, r, contextptr);
+  working(false);
+  const int n = r.size() < 24 ? r.size() : 24;
+  paint(false); // (the prompt gone)
+  if (!n) { focus_status_msg(t ? "No x near the view" : "No x gives that y"); return; }
+  int k = 0;
+  char * pool = n > 1 ? (char *)malloc(n * 48) : 0;
+  if (pool) { // which one: x exact, in decimals
+    const char * mth[24], * lab[24];
+    const float mid = mode ? tx : (vx0 + vx1) / 2;
+    int sel = 0;
+    for (int j = 0; j < n; ++j) {
+      const float v = fl(r[j]);
+      gtext(pool + 48 * j, 32, r[j], 0);
+      fmtg(pool + 48 * j + 32, v, 4);
+      mth[j] = pool + 48 * j; lab[j] = pool + 48 * j + 32;
+      if (fabsf(v - mid) < fabsf(fl(r[sel]) - mid)) sel = j; // (opens on the one nearest the middle)
+    }
+    k = focus_card_list(2, "points", mth, lab, 0, n, sel);
+    free(pool);
+    if (k < 0) return;
+  }
+  point_at(tf, r[k], gc, "Solution");
+}
+// Max and min on [a, b]: f at a, at b and where f' is 0 or undefined between: the largest, the
+// smallest (exact); the two to go to
+static NOINL void extrema_on() {
+  float a, b;
+  gen ga, gb;
+  if (!ask("Max and min from x =", "a", a, &ga) || !ask("Max and min to x =", "b", b, &gb) || a == b) return;
+  if (a > b) { const float t = a; a = b; b = t; }
+  vecteur r;
+  working(true);
+  analyze_zeros(eval(derive(F_[tf], *X_, contextptr), 1, contextptr), *X_, a, b, true, r, contextptr);
+  r.push_back(ga); r.push_back(gb);
+  gen bx[2], by[2];
+  float bv[2] = {0, 0};
+  bool any = false;
+  const float m = 1e-4f * (1 + fabsf(a) + fabsf(b));
+  for (unsigned j = 0; j < r.size() && !giac::ctrl_c; ++j) {
+    gen y;
+    float v;
+    const float x = fl(r[j]);
+    if (!(x >= a - m && x <= b + m) || !exact_at(tf, r[j], y, v)) continue;
+    for (int q = 0; q < 2; ++q)
+      if (!any || (q ? v < bv[1] : v > bv[0])) { bx[q] = r[j]; by[q] = y; bv[q] = v; }
+    any = true;
+  }
+  working(false);
+  paint(false);
+  if (!any) { focus_status_msg("Not defined there"); return; }
+  char ms[2][48];
+  const char * mth[2] = {ms[0], ms[1]}, * lab[2] = {"Absolute max", "Absolute min"};
+  for (int q = 0; q < 2; ++q) gtext(ms[q], 48, bx[q], &by[q]);
+  const int k = focus_card_list(2, "points", mth, lab, 0, 2, 0);
+  if (k >= 0) point_at(tf, bx[k], by[k], lab[k]);
+}
 static NOINL void jump_to(int k) { // the trace cursor on key point k
   mode = 1; tf = K_[k].f; tx = K_[k].x;
   follow();
@@ -768,13 +896,26 @@ static NOINL void jump_to(int k) { // the trace cursor on key point k
   strncat(note, K_[k].label, sizeof(note) - strlen(note) - 1);
   note_x = px_of(tx);
 }
+// F3: the tools on top, then the key points (zeros, extrema, inflection points, crossings)
 static void points_menu() {
   if (NK < 0) { kpt_find(); paint(false); } // (the busy dots gone)
-  if (NK <= 0) { focus_status_msg(NK == 0 ? "No key points found" : 0); return; }
-  const char * lab[40], * mth[40];
-  for (int k = 0; k < NK; ++k) { lab[k] = kname(K_[k].kinds); mth[k] = K_[k].label; }
-  const int c = focus_card_list(2, "points", mth, lab, 0, NK, 0);
-  if (c >= 0) jump_to(c);
+  enum { NT = 4 };
+  const char * lab[NT + 40], * mth[NT + 40], * hint[NT + 40];
+  static const char * const tools[NT] = {"Value at x", "Solve  f(x) = ...", "Max and min on [a, b]", "Labels on the graph"};
+  const int n = NT + (NK > 0 ? NK : 0);
+  for (int k = 0; k < n; ++k) {
+    lab[k] = k < NT ? tools[k] : kname(K_[k - NT].kinds);
+    mth[k] = k < NT ? 0 : K_[k - NT].label;
+    hint[k] = 0;
+  }
+  hint[3] = klabels ? "on" : "off";
+  const int c = focus_card_list(2, "points", mth, lab, hint, n, 0);
+  if (c >= NT) { jump_to(c - NT); return; }
+  if (c < 0 || c == 3) { if (c == 3) klabels = !klabels; return; }
+  redraw();
+  if (c == 0) value_at();
+  if (c == 1) solve_for();
+  if (c == 2) extrema_on();
 }
 static void next_point(int dir) { // 2nd left/right: the key point before/after the trace point
   if (NK < 0) { kpt_find(); paint(false); }
@@ -858,23 +999,18 @@ static NOINL void more_menu(int & nfun) {
       if (a > b) { float t = a; a = b; b = t; gen u = ga; ga = gb; gb = u; }
       area_a = a; area_b = b;
       // the integral from a to b (signed: below the x-axis counts less), exact when giac finds it
-      focus_busy(UI_H / 2);
-      giac::control_c_hook = focus_busy_tick;
-      dconsole_mode = 0;
+      working(true);
       gen I = _integrate(makesequence(F_[tf], *X_, ga, gb), contextptr);
-      dconsole_mode = 1;
-      giac::control_c_hook = 0;
-      focus_busy(0);
-      giac::ctrl_c = giac::interrupted = false;
-      gen v = evalf(I, 1, contextptr);
+      working(false);
+      const float v = fl(I);
       std::string ex = I.print(contextptr);
       strcpy(note, "Integral");
       if (!is_undef(I) && I.type != _DOUBLE_ && ex.size() < 30 && ex.find('.') == std::string::npos && ex.find("int") == std::string::npos) {
         strcat(note, " = \x01"); strcat(note, ex.c_str()); // exact: 8/3
       }
-      else if (v.type == _DOUBLE_ || v.type == _INT_) {
+      else if (fin(v)) {
         char t[20];
-        fmtg(t, v.type == _INT_ ? (float)v.val : (float)v._DOUBLE_val);
+        fmtg(t, v);
         strcat(note, " = "); strcat(note, t);
       }
       else strcat(note, ": not found");
@@ -942,10 +1078,9 @@ static NOINL void run(float a, float b) {
       if (mode) focus_status_msg("2nd left right: key points");
       continue;
     }
-    if (key == KEY_CTRL_EXE && mode) { // trace: an x to go to
-      float x;
+    if (key == KEY_CTRL_EXE && mode) { // trace: an x to go to, its point exact
       redraw();
-      if (ask("Go to x =", "x", x)) { tx = x; follow(); }
+      value_at();
       bar(); paint(false);
       continue;
     }
