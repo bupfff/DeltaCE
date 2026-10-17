@@ -335,6 +335,7 @@ static int pcall(int nm) { // name( args ): normal or special call
     T[nm].f |= F_FN; // a function name: upright
     if (na == 1 && T[t].k == K_EMPTY && (!(M->flags & MI_F_CALLBOX) || namei(nm, "ans"))) T[t].f |= F_NOBOX; // f(), ans(): no box
     if (na == 1 && T[t].k == K_EMPTY && namei(nm, "ans") && (T[cl].f & F_CLOSED)) T[cl].f |= F_HID; // ans(): Ans, as on a TI
+    if (na == 1 && namei(nm, "_") && (T[cl].f & F_CLOSED) && (M->flags & (MI_F_IMPLDOT | MI_F_TIDY))) T[cl].f |= F_HID; // (DeltaCE) 0.5_(m/s): m/s without parentheses (not while typed)
     if ((M->flags & MI_F_HINTS) && mi_arg_label) { // its empty arguments show their names
       for (int i = 0, q = T[nm].nx; q; q = T[q].nx) {
         if (T[q].k == K_SEP) { ++i; continue; }

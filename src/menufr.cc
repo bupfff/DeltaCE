@@ -527,7 +527,6 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
     {"_qe_", nullptr, "charge de l'electron", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_qme_", nullptr, "_q_/_me_", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_rad", nullptr, "Angle en radians", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
-    {"_rem", nullptr, "Radioactivite: rem", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_s", nullptr, "Temps: seconde", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_sd_", nullptr, "Jour sideral", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_syr_", nullptr, "Annee siderale", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
@@ -840,7 +839,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     {"_qme_", nullptr, "_q_/_me_", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},
     {"_qt", "_qt", "US quart (volume), 0.946 liter", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_rad", nullptr, "radians", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
-    {"_rem", nullptr, "rem", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_rev", "_rev", "revolution (angle), one turn", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY}, // (DeltaCE)
     {"_s", nullptr, "second", nullptr, nullptr, CAT_CATEGORY_UNIT | XCAS_ONLY},
     {"_sd_", nullptr, "Sideral day", nullptr, nullptr, CAT_CATEGORY_PHYS | XCAS_ONLY},

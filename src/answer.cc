@@ -3292,6 +3292,33 @@ static __attribute__((noinline)) giac::gen drop_constants(const giac::gen & g,co
 }
 
 // ---- do_run's steps ----
+#ifdef WITH_UNITS
+// (DeltaCE) X=>_m/_s: convert(X,_m/_s). giac's => converts to one unit name (5_mi=>_km), and
+// stored into the compound one: "Some units could not be converted to MKSA"
+static __attribute__((noinline)) void unit_convert(char * buf,int cap){
+  char * p=0;
+  int depth=0;
+  for (char * q=buf;*q;++q){
+    if (*q=='(' || *q=='[') ++depth;
+    else if (*q==')' || *q==']') --depth;
+    else if (!depth && q[0]=='=' && q[1]=='>') p=q;
+  }
+  if (!p) return;
+  const char * r=p+2;
+  while (*r==' ') ++r;
+  if (*r!='_') return;
+  bool op=false;
+  for (const char * t=r;*t;++t){
+    if (*t=='*' || *t=='/' || *t=='^') op=true;
+    else if (!isalnum((unsigned char)*t) && !strchr("_()-. ",*t)) return; // (a unit's text only)
+  }
+  const int L=p-buf,R=strlen(r);
+  if (!op || L+R+11>cap) return;
+  std::string s("convert(");
+  s.append(buf,L); s+=","; s+=r; s+=")";
+  strcpy(buf,s.c_str());
+}
+#endif
 void answer_prepass(char * buf,int cap,bool focus){
   // paper notation and TI implicit multiplication (2sinx -> 2*sin(x), f(x)=... -> f(x):=...)
   // here and not in the console, so that the history keeps what the user typed
@@ -3299,6 +3326,9 @@ void answer_prepass(char * buf,int cap,bool focus){
   if (focus){ // TI and textbooks: log is base 10 (giac's log is ln): log(100) is 2
     ti_log10(buf,cap);
     sum_index_i(buf);
+#ifdef WITH_UNITS
+    unit_convert(buf,cap);
+#endif
   }
 }
 
@@ -3515,8 +3545,36 @@ const char * answer_diverges(const giac::gen & g,const answer_ctx & a){
 #if defined FLOWCE_STEPS || defined HOSTGIAC
 giac::gen steps_derivative(const giac::gen & f,const giac::gen & x,const giac::context * contextptr); // steps.cc
 #endif
+#ifdef WITH_UNITS
+// (DeltaCE) what a quantity measures, from its SI units as giac's mksa prints them ("" unknown)
+static __attribute__((noinline)) const char * unit_kind(const giac::gen & q){
+  using namespace giac;
+  static const char * const kinds[]={"m","length","(m^2)","area","(m^3)","volume","kg","mass","s","time",
+    "(m*s^-1)","speed","(m*s^-2)","acceleration","(kg*m*s^-2)","force","(kg*m^2*s^-2)","energy",
+    "(kg*m^2*s^-3)","power","(kg*m^-1*s^-2)","pressure","(s^-1)","frequency","(s*A)","charge",
+    "(kg*m^2*s^-3*A^-1)","voltage","A","current","(kg*m^2*s^-3*A^-2)","resistance","K","temperature","mol","amount"};
+  const std::string t=(*at_mksa)(q,contextptr).print(contextptr);
+  const size_t u=t.find('_');
+  if (u==std::string::npos) return t.find_first_of("\"/")==std::string::npos?"an angle or a number":"";
+  for (unsigned k=0;k<sizeof(kinds)/sizeof(kinds[0]);k+=2)
+    if (t.compare(u+1,t.size()-u-1,kinds[k])==0) return kinds[k+1];
+  return "";
+}
+#endif
 void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen & graw){
   using namespace giac;
+#ifdef WITH_UNITS
+  // a conversion between units of different kinds (5_m=>_kg): says so, not giac's "Some units
+  // could not be converted to MKSA Error: Bad Argument Value"
+  if (g.type==_STRNG && g._STRNGptr->find("MKSA")!=std::string::npos && (a.gin.is_symb_of_sommet(at_sto) || a.gin.is_symb_of_sommet(at_convert))
+      && a.gin._SYMBptr->feuille.type==_VECT && a.gin._SYMBptr->feuille._VECTptr->size()==2){
+    const char * k1=unit_kind(eval(a.gin._SYMBptr->feuille[0],1,contextptr)),* k2=unit_kind(eval(a.gin._SYMBptr->feuille[1],1,contextptr));
+    msg="Can't convert";
+    if (*k1 && *k2 && strcmp(k1,k2)){ msg+=" "; msg+=k1; msg+=" to "; msg+=k2; }
+    msg+=": different kinds of units";
+    return;
+  }
+#endif
   answer_simplify(); // autosimplify(0) typed: the status bar shows it with this answer
   if (a.definite && a.real_in && has_i(g) && !has_inf_or_undef(g))
     g=real_ftc(a.gin,g); // x^(-1/3) from -1 to 8: 9/2
@@ -3658,6 +3716,57 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
   }
 }
 
+#ifdef WITH_UNITS
+// (DeltaCE) a result's units as textbooks write them, still giac's syntax (the history is typed
+// again): 120.0_mn is 120_min, 200.0_(cm) 200_cm, 0.555556_(m*s^-1) 0.555556_(m/s), 2.0e-5_km 2e-5_km
+static __attribute__((noinline)) void units_text(std::string & s){
+  std::string o;
+  for (size_t i=0;i<s.size();){
+    const char c=s[i];
+    if (c=='.' && i+1<s.size() && s[i+1]=='0' && i && isdigit((unsigned char)s[i-1]) && i+2<=s.size() && (i+2==s.size() || s[i+2]=='_' || s[i+2]=='e')){ i+=2; continue; } // 120.0_: 120_
+    if ((c=='e') && i && isdigit((unsigned char)s[i-1]) && i+1<s.size() && s[i+1]>='1' && s[i+1]<='6' && (i+2==s.size() || !isdigit((unsigned char)s[i+2]))){
+      // 2e5_cm (the calculator's floats): 200000_cm, up to a million
+      size_t m=o.size();
+      while (m && (isdigit((unsigned char)o[m-1]) || o[m-1]=='.')) --m;
+      std::string d=o.substr(m,o.size()-m);
+      const size_t dot=d.find('.');
+      int ex=s[i+1]-'0';
+      if (dot!=std::string::npos){ ex-=d.size()-dot-1; d.erase(d.begin()+dot); }
+      if (ex>=0 && (m==0 || !isalpha((unsigned char)o[m-1]))){ o.erase(o.begin()+m,o.end()); o+=d; while (ex--) o+='0'; i+=2; continue; }
+    }
+    if (c=='_' && s.compare(i,3,"_mn")==0 && (i+3==s.size() || !isalnum((unsigned char)s[i+3]))){ o+="_min"; i+=3; continue; } // giac's minute
+    if (c=='_' && i+1<s.size() && s[i+1]=='('){ // _(cm): _cm; _(m*s^-1): _(m/s)
+      const size_t e=s.find(')',i);
+      if (e==std::string::npos){ o+=c; ++i; continue; }
+      const std::string in=s.substr(i+2,e-i-2);
+      bool word=true;
+      for (size_t k=0;k<in.size();++k) word=word && isalpha((unsigned char)in[k]);
+      if (word){ o+="_"; o+=in; i=e+1; continue; }
+      std::string num,den;
+      int nd=0;
+      for (size_t k=0;k<=in.size();){ // its factors: x^-n under the bar
+        size_t f=in.find('*',k);
+        if (f==std::string::npos) f=in.size();
+        const std::string t=in.substr(k,f-k);
+        const size_t m=t.find("^-");
+        if (m==std::string::npos){ if (!num.empty()) num+="*"; num+=t; }
+        else { if (!den.empty()) den+="*"; den+=t.substr(0,m); if (t.compare(m+2,t.size()-m-2,"1")) { den+="^"; den+=t.substr(m+2,t.size()-m-2); } ++nd; }
+        k=f+1;
+      }
+      if (num.empty() || !nd){ o.append(s,i,e+1-i); i=e+1; continue; }
+      o+="_("; o+=num; o+="/";
+      if (nd>1) o+="(";
+      o+=den;
+      if (nd>1) o+=")";
+      o+=")";
+      i=e+1;
+      continue;
+    }
+    o+=c; ++i;
+  }
+  s=o;
+}
+#endif
 std::string answer_print(const giac::gen & g,const giac::gen & graw,const answer_ctx & a){
   using namespace giac;
   std::string printed=g.print(contextptr);
@@ -3680,5 +3789,9 @@ std::string answer_print(const giac::gen & g,const giac::gen & graw,const answer
   focus_phase=86;
   textbook(printed);
   textbook_constants(printed);
+#ifdef WITH_UNITS
+  if (printed.find('_')!=std::string::npos)
+    units_text(printed);
+#endif
   return printed;
 }
