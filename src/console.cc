@@ -935,6 +935,7 @@ void menu_setup(){
         Console_Disp(1);
         continue;
       }
+#if !focus_on
       if (smallmenu.selection>=4) {
 	textArea text;
 	text.editable=false;
@@ -945,6 +946,7 @@ void menu_setup(){
 	doTextArea(&text);
 	continue;
       }
+#endif
     }
   }
 }
@@ -2738,7 +2740,8 @@ int Console_GetKey(){
       continue;
     }
 #endif
-    if (!focus_on && (key==KEY_CTRL_RIGHT || key==KEY_CTRL_LEFT || key==KEY_EQW_TEMPLATE) && Current_Line<Last_Line){ // (Focus: history keys above)
+#if !focus_on
+    if ((key==KEY_CTRL_RIGHT || key==KEY_CTRL_LEFT || key==KEY_EQW_TEMPLATE) && Current_Line<Last_Line){
       int l=Current_Line;
       bool graph=strcmp((const char *)Line[l].str,"Graphic object")==0;
       if (graph && l>0) --l;
@@ -2776,6 +2779,7 @@ int Console_GetKey(){
       Console_Disp(1);
       continue;
     }
+#endif
     if (key==KEY_CTRL_SYMB){
       const int nmath=sizeof(math_items)/sizeof(math_items[0]);
       int k=quick_menu("math",math_items,nmath);
@@ -2841,20 +2845,36 @@ int Console_GetKey(){
 #endif
 #endif
       smallmenuitems[smallmenu.numitems-1].text = (char*) (lang?"Quitter":"Quit");
+      // the entries by their number in the full list (sel); DeltaCE has no script editor (2026-10-17,
+      // 17 KB): Script editor, Open script and Clear script are not shown
+      const int nall=smallmenu.numitems;
+      const char * full[18];
+      unsigned char sel_of[18];
+      int nshown=0;
+      for (int i=0;i<nall;++i){
+        full[i]=smallmenuitems[i].text;
+#ifndef WITH_EDITOR
+        if (i==5 || i==6 || i==9) continue;
+#endif
+        smallmenuitems[nshown]=smallmenuitems[i];
+        sel_of[nshown++]=i+1;
+      }
+      smallmenu.numitems=nshown;
       // smallmenuitems[2].text = (char*)(isRecording ? "Stop Recording" : "Record Script");
       while(1) {
         int sres = doMenu(&smallmenu);
         if(sres == MENU_RETURN_SELECTION) {
           const char * ptr=nullptr;
-          if (smallmenu.selection==1){
+          int sel=sel_of[smallmenu.selection-1];
+          if (sel==1){
             if (strcmp(session_filename,"session")==0)
-              smallmenu.selection=2;
+              sel=2;
             else {
               save(session_filename);
               break;
             }
           }
-          if (smallmenu.selection==2){
+          if (sel==2){
             char buf[270];
             if (get_filename(buf,".xw")){
               save(buf);
@@ -2865,7 +2885,7 @@ int Console_GetKey(){
             }
             break;
           }
-          if (smallmenu.selection==3){
+          if (sel==3){
             char filename[MAX_FILENAME_SIZE+1];
             if (fileBrowser(filename, (char*)"*.xw", (char *)"Sessions")){
               if (console_changed==0 || strcmp(session_filename,"session")==0 || confirm(lang?"Session courante perdue?":"Current session will be lost",lang?"F1: annul, F5: ok":"F1: cancel, F5: ok")==KEY_CTRL_F5){
@@ -2876,7 +2896,7 @@ int Console_GetKey(){
             }
             break;
           }
-          if (0 && smallmenu.selection==3) {
+          if (0 && sel==3) {
             // FIXME: make a menu catalog?
             char buf[512];
             if (doCatalogMenu(buf,"CATALOG",0))
@@ -2884,7 +2904,7 @@ int Console_GetKey(){
              oldkeyflag=-1;
              break;
           }
-          if (smallmenu.selection==4) {
+          if (sel==4) {
             char filename[MAX_FILENAME_SIZE+1];
             if (!focus_on) // (Focus: the prompt card over the console)
               drawRectangle(0, 16, LCD_WIDTH_PX, LCD_HEIGHT_PX-24, _WHITE);
@@ -2899,39 +2919,43 @@ int Console_GetKey(){
             }
             break;
           }
-          if (smallmenu.selection==5) {
+          if (sel==5) {
             run_session();
             break;
           }
-          if (smallmenu.selection==6) {
+#ifdef WITH_EDITOR
+          if (sel==6) {
             if (!edptr || merge_area(edptr->elements).size()<2)
               edit_script((remove_extension(session_filename)+".py").c_str());
             else
               doTextArea(edptr);
             break;
           }
-          if (smallmenu.selection==7) {
+          if (sel==7) {
             char filename[MAX_FILENAME_SIZE+1];
             drawRectangle(0, 16, LCD_WIDTH_PX, LCD_HEIGHT_PX-24, _WHITE);
             if (fileBrowser(filename, (char*)"*.py", (char *)"Scripts"))
               edit_script(filename);
             break;
           }
-          if (smallmenu.selection==8) {
+#endif
+          if (sel==8) {
             select_script_and_run();
             break;
           }
-          if(smallmenu.selection == 9) {
+          if(sel == 9) {
             chk_restart();
             Console_Init();
             Console_Clear_EditLine();
             break;
           }
-          if (smallmenu.selection==10){
+#ifdef WITH_EDITOR
+          if (sel==10){
             erase_script();
             break;
           }
-          if (smallmenu.selection==12){
+#endif
+          if (sel==12){
 #if defined WITH_EQW && !focus_on
             const char * matrix_ptr=input_matrix(false);
             if (matrix_ptr)
@@ -2955,7 +2979,7 @@ int Console_GetKey(){
             continue;
 #endif
           }
-          if (smallmenu.selection == 11){
+          if (sel == 11){
 #if defined WITH_EQW && !focus_on
             char buf[GEN_PRINT_BUFSIZE+2];
             buf[0]='0'; buf[1]=0;
@@ -2981,38 +3005,40 @@ int Console_GetKey(){
             continue;
 #endif
           }
-          if (smallmenu.selection == 13){
+          if (sel == 13){
             menu_setup();
             continue;
           }
 #ifdef WITH_PERIODIC
-          if (smallmenu.selection == 16)
+          if (sel == 16)
             return Console_Input(run_periodic_table().c_str());
 #ifdef WITH_SHEET
-          if (smallmenu.selection == 17){
+          if (sel == 17){
             sheet();
             return 0;
           }
 #endif
 #endif
-          if (smallmenu.selection == smallmenu.numitems){
+          if (sel == nall){
             return -2;
           }
-          if (smallmenu.selection >= 14 && focus_on){ // Shortcuts, About
-            focus_text(smallmenuitems[smallmenu.selection-1].text,smallmenu.selection==14?shortcuts_string:apropos_string);
+          if (sel >= 14 && focus_on){ // Shortcuts, About
+            focus_text(full[sel-1],sel==14?shortcuts_string:apropos_string);
             Console_Disp(1);
             continue;
           }
-          if(smallmenu.selection >= 14) {
+#if !focus_on
+          if(sel >= 14) {
             textArea text;
             text.editable=false;
             text.clipline=-1;
-            text.title = smallmenuitems[smallmenu.selection-1].text;
-            add(&text,smallmenu.selection==14?shortcuts_string:apropos_string);
+            text.title = smallmenuitems[sel-1].text;
+            add(&text,sel==14?shortcuts_string:apropos_string);
             text.minimini=false;
             doTextArea(&text);
             continue;
           }
+#endif
         }
         break;
       } // end while(1)
@@ -3140,6 +3166,7 @@ int Console_GetKey(){
     }
     if (key == KEY_SHIFT_LEFT)	return Console_MoveCursor(CURSOR_SHIFT_LEFT);
     if (key == KEY_SHIFT_RIGHT)	return Console_MoveCursor(CURSOR_SHIFT_RIGHT);
+#ifdef WITH_EDITOR
     if (key==KEY_CTRL_PRGM){
       if (!edptr)
         edit_script((remove_extension(session_filename)+".py").c_str());
@@ -3147,6 +3174,7 @@ int Console_GetKey(){
         doTextArea(edptr);
       Console_Disp(1);
     }
+#endif
     if (key == KEY_CTRL_EXIT){
       if (Last_Line==Current_Line){
         if (strlen(Edit_Line))

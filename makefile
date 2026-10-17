@@ -30,6 +30,8 @@ endif
 # UNITS=1: they fit together with CE toolchain v15, 2026-10-15)
 ifeq ($(STEPS),1)
     FEATURE_DEFS += -DFLOWCE_STEPS
+else
+    FEATURE_DEFS += -DWITH_EDITOR # (DeltaCE, the steps build: no script editor, 17 KB, 2026-10-17)
 endif
 
 ifeq ($(APPLANG),fr)
@@ -69,10 +71,12 @@ LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -inline-threshold=-10
 # on the emulator (same answers) take 1.0% less time than with v14.2 for an app 5.6% smaller
 # (2,561,255 B vs 2,712,385); inline thresholds -10 and -20 save 56 and 76 KB more but cost
 # 4.7% and 9.6% of time (calls to small helpers such as unary_function_ptr::operator==).
+# DeltaCE 1.2: threshold 0 saves 29 KB at no measurable cost (the quick suite's median time 1.00,
+# the same answers); -5 saves 36 KB but costs 4%.
 CEDEV_MAJOR := $(firstword $(subst ., ,$(patsubst v%,%,$(shell cedev-config --version 2>/dev/null))))
 ifeq ($(shell [ "0$(CEDEV_MAJOR)" -ge 15 ] && echo y),y)
 CXXFLAGS += -include src/toolchain_compat.h
-LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -z80-frame-bias-policy=auto
+LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -z80-frame-bias-policy=auto -mllvm -inline-threshold=0
 endif
 
 # giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB

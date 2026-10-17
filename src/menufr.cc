@@ -1220,6 +1220,24 @@ int doCatalogMenu(char* insertText, const char* title, int category,const char *
         return sres;
       }
       int index=menuitems[menu.selection-1].isfolder;
+#ifndef WITH_EDITOR
+      // the command's help on DeltaCE's text page (the script editor's text area is not built):
+      // its name, what it does, its examples (F2, F3 in the list type them)
+      if(sres == KEY_CTRL_F5 || sres==KEY_CTRL_F10 || sres==KEY_CTRL_F15) {
+	std::string t(index<allcmds?completeCat[index].name:menuitems[menu.selection-1].text);
+	t += "\n\n";
+	t += index<allcmds?completeCat[index].desc:"Sorry, no help available";
+	for (int k=0;k<2 && index<allcmds;++k){
+	  const char * ex=k?completeCat[index].example2:completeCat[index].example;
+	  if (!ex) break;
+	  t += k?"\nF3: ":"\n\nF2: ";
+	  if (ex[0]=='#') t += ex+1;
+	  else { t += insert_string(index); t += ex; t += ")"; }
+	}
+	focus_text("Help on command",t.c_str());
+	sres=0;
+      }
+#else
       if(sres == KEY_CTRL_F5 || sres==KEY_CTRL_F10 || sres==KEY_CTRL_F15) {
 	const char * example=index<allcmds?completeCat[index].example:nullptr;
 	const char * example2=index<allcmds?completeCat[index].example2:nullptr;
@@ -1285,6 +1303,7 @@ int doCatalogMenu(char* insertText, const char* title, int category,const char *
 	}
 	sres=doTextArea(&text);
       }
+#endif
       if (sres == KEY_CTRL_F2 || sres==KEY_CTRL_F3 ||
 	  sres == KEY_CTRL_F7 || sres==KEY_CTRL_F8 ||
 	  sres == KEY_CTRL_F12 || sres==KEY_CTRL_F13
