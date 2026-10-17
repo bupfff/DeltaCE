@@ -73,7 +73,26 @@ static int alg_able(const char * s) {
   }
   return v != 0;
 }
+// (DeltaCE) one name besides the calls, no function of it (canonical_form(x^2+6x+5), propfrac((x^3+1)/(x-2)))
+static int one_name(const char * s) {
+  static const char * const no[] = {"sin(", "cos(", "tan(", "log", "ln(", "exp(", "e^", "abs(", "sqrt(", "^("};
+  for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]); ++k) if (strstr(s, no[k])) return 0;
+  const char * v = 0;
+  int vn = 0;
+  for (const char * p = s; *p;) {
+    if (!isalpha((unsigned char)*p) && *p != '_') { ++p; continue; }
+    const char * q = p;
+    while (isalnum((unsigned char)*q) || *q == '_') ++q;
+    if (*q != '(') {
+      if (!v) { v = p; vn = q - p; }
+      else if (q - p != vn || strncmp(v, p, vn)) return 0;
+    }
+    p = q;
+  }
+  return v != 0;
+}
 int focus_steps_able(const char * s) {
+  if (starts(s, "canonical_form(") || starts(s, "propfrac(") || starts(s, "partfrac(")) return one_name(s);
   static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum("};
   for (const char * p = s; *p; ++p)
     if (p == s || !isalnum((unsigned char)p[-1]))

@@ -614,6 +614,20 @@ bool console_form_check(const char * s){
   return console_form_of(s) && form_idx && (forms->order[form_idx-1]==FORM_CHECK || forms->order[form_idx-1]==FORM_CHECKD);
 }
 static void form_busy(){ statuslinemsg("computing..."); }
+#ifdef FLOWCE_STEPS
+// (DeltaCE) line s shows a form with steps (completed square, long division, factored): the command
+// that gives it from the result, canonical_form(x^2+6*x+5), propfrac(...), factor(...); 0 for none
+const char * console_form_steps(const char * s){
+  static std::string * in; // (no static constructor in the app)
+  if (!console_form_of(s) || !form_idx) return 0;
+  const int f=forms->order[form_idx-1];
+  if (f!=FORM_SQR && f!=FORM_DIV && f!=FORM_FACT) return 0;
+  if (!in && !(in=new std::string)) return 0;
+  *in=f==FORM_SQR?"canonical_form(":f==FORM_DIV?"propfrac(":"factor(";
+  *in+=forms->orig; *in+=")";
+  return in->c_str();
+}
+#endif
 void console_cycle_form(int l){
   using namespace giac;
   if (!forms)

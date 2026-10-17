@@ -26,7 +26,10 @@ enum {
   R_ADIST, R_ALCD, R_ASWAP, R_ASUB, R_AADD, R_ADIV, R_ACONT, R_ATRUE, R_AFALSE,
   R_QSTD, R_QABC, R_QFORM, R_QDISC, R_QSIMP, R_ALINE, R_QTWO, R_QTWO2, R_QONE, R_QNONE,
   R_FGCF, R_FDSQ, R_FSUMC, R_FDIFC, R_FPSQ, R_FTWO, R_FSPLIT, R_FGROUP, R_FQUAD, R_FROOT, R_FZERO, R_FSOLVE, R_FNOREAL, R_FPRIME, R_FPRIME2,
-  R_REXCL, R_RLCD, R_RKEEP, R_RDROP, R_RSQ, R_ROK, R_RBAD, R_RNONE, R_NRULES
+  R_REXCL, R_RLCD, R_RKEEP, R_RDROP, R_RSQ, R_ROK, R_RBAD, R_RNONE,
+  R_CSGROUP, R_CSFACT, R_CSHALF, R_CSADD, R_CSSQ, R_CSDIST, R_CSCOMB, R_CSVERT, R_CSIN, R_CSBACK,
+  R_DLEAD, R_DSUB, R_DREM, R_DCHECK,
+  R_PFDIV, R_PFFACT, R_PFSET, R_PFMULT, R_PFROOT, R_PFCOEF, R_PFSOLVE, R_PFRES, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -156,6 +159,30 @@ static const char * const RULES[]={
   "Check in the equation: both sides agree",0,"A",
   "Check: the sides differ, extraneous",0,"A",
   "Every candidate is extraneous: no solution",0,"A",
+  // F4's forms (DeltaCE): completing the square, long division; A a line written as text
+  "Group the x terms",0,"A",
+  "Factor a out of the x terms",0,"A",
+  "Half the x coefficient, squared","(b/2)^2","A",
+  "Add it and subtract it",0,"A",
+  "Write the perfect square",0,"A",
+  "Distribute",0,"A",
+  "Combine the numbers",0,"A",
+  "The vertex","a*(x-h)^2+k: (h,k)","A",
+  "Complete the square in",0,"A",
+  "Put it back",0,"A",
+  "Divide the leading terms",0,"A",
+  "Multiply back and subtract",0,"A",
+  "The remainder's degree is lower: done",0,"A",
+  "Check: divisor times quotient, plus remainder",0,"A",
+  // partial fractions (DeltaCE)
+  "The top's degree is not lower: divide first",0,"A",
+  "Factor the denominator",0,"A",
+  "A fraction for each factor",0,"A",
+  "Multiply both sides by the denominator",0,"A",
+  "Put in a root of the denominator",0,"A",
+  "Match the coefficients of each power of x",0,"A",
+  "Solve for the unknowns",0,"A",
+  "Put the values in",0,"A",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -2007,7 +2034,7 @@ gen steps_derivative(const gen & f,const gen & x,GIAC_CONTEXT){
 }
 // the problem as typed (mergek without its rewrites: one denominator, 1/(n(n+2)), not 1/n/(n+2))
 gen steps_problem(const gen & input,GIAC_CONTEXT){
-  if (input.is_symb_of_sommet(at_factor)){ ctx_=contextptr; return ev(arg(input).type==_VECT?arg(input,0):arg(input)); } // (the polynomial)
+  if (input.is_symb_of_sommet(at_factor) || input.is_symb_of_sommet(at_canonical_form) || input.is_symb_of_sommet(at_propfrac) || input.is_symb_of_sommet(at_partfrac)){ ctx_=contextptr; return ev(arg(input).type==_VECT?arg(input,0):arg(input)); } // (the polynomial; F4's forms: the expression)
   if (input.is_symb_of_sommet(at_solve) && lop(input,at_derive).empty() && lop(input,at_integrate).empty() && lop(input,at_limit).empty() && lop(input,at_sum).empty()){ // the equation, its sides as giac writes them
     ctx_=contextptr;
     gen e=arg(input).type==_VECT?arg(input,0):arg(input);
@@ -2530,6 +2557,266 @@ static NOINL bool eq_steps(const gen & input){
   return eq_poly(L,R);
 }
 
+// ---------------------------------------------------------------- F4's forms (DeltaCE)
+gen positive_first(const gen & g); // answer.cc: a sum's positive term first (7-2x)
+// (canonical_form(f): f's square completed; propfrac(f): its long division. The console's F4
+// shows these forms; Enter on one shows its steps with these commands, focus.cc)
+static NOINL std::string sg(const gen & c){ // c after other terms: +5, -9/4 ("" for 0)
+  std::string s;
+  if (is_zero(c)) return s;
+  const std::string t=pr(c);
+  if (t[0]!='-') s+="+";
+  s+=t;
+  return s;
+}
+// f's one variable (X), false if several or none
+static NOINL bool one_var(const gen & f){
+  vecteur ids=lidnt(f);
+  gen v=0;
+  EACH(it,ids) if (evalf(*it,1,CTX).type!=_DOUBLE_){ if (!is_zero(v) && *it!=v) return false; v=*it; }
+  if (is_zero(v)) return false;
+  X=v;
+  return true;
+}
+// q a quadratic with an x term (rational coefficients): a, b, c
+static NOINL bool quad(const gen & q,gen & a,gen & b,gen & c){
+  if (!dep(q) || dep(_denom(ratnormal(q,CTX),CTX)) || _degree(makesequence(_numer(ratnormal(q,CTX),CTX),X),CTX)!=2) return false;
+  const gen p=ev(expand(q,CTX));
+  a=co(p,2); b=co(p,1); c=co(p,0);
+  return !is_zero(b) && !dep(a) && !dep(b) && !dep(c);
+}
+// a x^2 + b x + c with its square completed as a textbook does it (a factored out of the x terms,
+// half the x coefficient squared, added and subtracted, the perfect square, the numbers
+// combined), then its vertex; the result written as F4 writes it (answer.cc): (x+3)^2-4, 5-(x-2)^2
+static NOINL gen cs_quad(const gen & a,const gen & b,const gen & c,bool top){
+  const gen B=ratnormal(b/a,CTX),h=ratnormal(B/2,CTX),q=ratnormal(h*h,CTX),k=ratnormal(c-a*q,CTX);
+  const bool one=is_one(a);
+  std::string in=pr(X); in+="^2"; in+=sg(ev(B*X)); // x^2+6*x
+  std::string A; // a as a factor: "", "-", "2*"
+  if (is_minus_one(a)) A="-";
+  else if (!one){ A=par(a); A+="*"; }
+  const std::string sq=pr(symb_pow(X+h,2)); // (x+3)^2
+  std::string t;
+  if (!one || !is_zero(c)){ t=A; t+="("; t+=in; t+=")"; t+=sg(c); S(one?R_CSGROUP:R_CSFACT,txt(t),0); }
+  PL(R_CSHALF,B.type==_FRAC?"(#0/2)^2=%1":"(%0/2)^2=%1",B,q); // ((3/2)/2)^2, (-4/2)^2
+  t=A; t+="("; t+=in; t+=sg(q); if (!one) t+=sg(ev(-q)); t+=")"; if (one) t+=sg(ev(-q)); t+=sg(c);
+  S(R_CSADD,txt(t),0);
+  t=A; if (!one) t+="("; t+=sq; t+=sg(ev(-q)); if (!one) t+=")"; t+=sg(c);
+  S(R_CSSQ,txt(t),0);
+  if (!one){ t=A; t+=sq; t+=sg(ratnormal(-a*q,CTX)); t+=sg(c); S(R_CSDIST,txt(t),0); }
+  const gen s=symb_pow(X+h,2),u=one?s:is_minus_one(a)?symb_neg(s):symb_prod(a,s);
+  const gen r=is_zero(k)?u:is_strictly_positive(-a,CTX) && is_strictly_positive(k,CTX)?SYM2(at_plus,k,u):SYM2(at_plus,u,k);
+  if (pr(r)!=pr(txt(t))) S(R_CSCOMB,r,0);
+  if (top) PL(R_CSVERT,"(%0,%1)",ratnormal(-h,CTX),k); // (inside sqrt(4x-x^2): no vertex)
+  return r;
+}
+// every quadratic of g with an x term (sums only below the top, as F4: n(n+2) stays): completed,
+// its steps first
+static NOINL gen cs_in(const gen & g,bool top){
+  gen a,b,c;
+  if (g.type==_SYMB && (top || g.is_plus()) && quad(g,a,b,c)){
+    if (!top) S(R_CSIN,g,0);
+    return cs_quad(a,b,c,top);
+  }
+  if (g.type!=_SYMB) return g;
+  if (arg(g).type!=_VECT) return symbolic(g._SYMBptr->sommet,cs_in(arg(g),false));
+  vecteur v=*arg(g)._VECTptr;
+  EACHW(it,v) *it=cs_in(*it,false);
+  return symbolic(g._SYMBptr->sommet,gen(v,arg(g).subtype));
+}
+static NOINL bool cs_steps(const gen & input){
+  const gen e=ev(arg(input).type==_VECT?arg(input,0):arg(input));
+  if (!one_var(e)) return false;
+  const size_t m=mark();
+  const gen r=cs_in(e,true);
+  if (mark()==m) return false;
+  if (out_->front().rule==R_CSIN) S(R_CSBACK,r,0); // (inside: the whole again)
+  return true;
+}
+// long division of a polynomial by one of lower or equal degree: the leading terms divided, the
+// divisor times that subtracted, again until the remainder's degree is lower; then the check
+// (top = divisor * quotient + remainder) and quotient plus remainder over the divisor
+static NOINL gen lead(const gen & p,int & d){ // p's leading term (its degree d)
+  const gen g=_degree(makesequence(p,X),CTX);
+  d=g.type==_INT_?g.val:0;
+  return ev(_coeff(makesequence(p,X,d),CTX)*symb_pow(X,d));
+}
+static NOINL bool div_steps(const gen & input){
+  const gen e=ev(arg(input).type==_VECT?arg(input,0):arg(input));
+  if (!one_var(e)) return false;
+  const gen r=ratnormal(e,CTX),n=ev(expand(_numer(r,CTX),CTX)),d=ev(expand(_denom(r,CTX),CTX));
+  if (!dep(d) || !polyf(n) || !polyf(d)) return false;
+  int dn,dd;
+  gen ld=lead(d,dd),N=n,Q=0;
+  lead(N,dn);
+  if (dn<dd) return false;
+  for (int guard=0;dn>=dd && !is_zero(N) && guard<12 && !ctrl_c && !interrupted;++guard){
+    const gen ln=lead(N,dn);
+    if (dn<dd) break;
+    const gen t=ratnormal(ln/ld,CTX),N2=ev(expand(N-t*d,CTX));
+    PL(R_DLEAD,"(%0)/(%1)=%2",ln,ld,t);
+    PL(R_DSUB,"(%0)-#1*(%2)=%3",N,t,d,N2);
+    Q=ev(Q+t); N=N2;
+    if (is_zero(N)) break;
+    lead(N,dn);
+  }
+  if (!is_zero(N)) S(R_DREM,N,0);
+  PL(R_DCHECK,"%0=(%1)*(%2)%3",n,d,Q,txt(sg(N))); // (then the answer: quotient plus remainder over the divisor)
+  return true;
+}
+// Partial fractions: the long division first when the top's degree is not lower, the denominator
+// factored, a fraction for each factor (A/(x-1), (B x+C)/(x^2+1), each power of a repeated
+// one), both sides times the denominator, the unknowns: a root put in for each factor when they
+// are all linear and different, else the coefficients of each power of x matched and solved;
+// then the fractions with their values. The unknowns are worked out as pf_0, pf_1... (A, B could
+// be the user's variables) and shown as A, B, C
+static vecteur * PU_, * PD_; // the unknowns worked out (pf_0, pf_1...: A, B could be the user's variables), shown (A, B)
+static NOINL gen sh(const gen & g){ return subst(g,*PU_,*PD_,true,CTX); }
+static NOINL gen evx(const gen & g){ return ev(expand(g,CTX)); }
+static NOINL int deg(const gen & g){ const gen d=_degree(makesequence(g,X),CTX); return d.type==_INT_?d.val:0; }
+static NOINL gen cof(const gen & g,int p){ return _coeff(makesequence(g,X,p),CTX); }
+static NOINL gen sumof(const vecteur & v){ return v.empty()?gen(0):v.size()==1?v.front():symbolic(at_plus,gen(v,_SEQ__VECT)); }
+static NOINL gen prodof2(const vecteur & v){ return v.size()==1?v.front():symbolic(at_prod,gen(v,_SEQ__VECT)); }
+static NOINL gen unknown(){ // a new unknown: pf_k worked out, shown as the next capital
+  std::string a("pf_0"),b("A");
+  a[3]+=PU_->size(); b[0]+=PD_->size();
+  PD_->push_back(gen(identificateur(b))); // (the string one: a char * is kept, not copied)
+  PU_->push_back(gen(identificateur(a)));
+  return PU_->back();
+}
+// e (linear in the unknowns) written with them in order: A+B-2*C
+static NOINL std::string lin(const gen & e){
+  std::string s;
+  for (unsigned i=0;i<PU_->size();++i){
+    const gen k=ev(derive(e,(*PU_)[i],CTX));
+    if (is_zero(k)) continue;
+    if (is_one(k)) s+="+";
+    else if (is_minus_one(k)) s+="-";
+    else { s+=sg(k); s+="*"; }
+    s+=pr((*PD_)[i]);
+  }
+  s+=sg(ev(subst(e,*PU_,vecteur(PU_->size(),0),false,CTX)));
+  if (s.empty()) s="0";
+  if (s[0]=='+') s.erase(s.begin());
+  return s;
+}
+// the fraction v/d written as an answer is: 1/(2*(x-1)), -x/(2*(x^2+1)) (0: none)
+static NOINL gen fr(const gen & v,const gen & d){
+  const gen n=normal(v,CTX);
+  if (is_zero(n)) return 0;
+  const gen q=_denom(n,CTX);
+  return symb_prod(_numer(n,CTX),symb_inv(is_one(q)?d:symb_prod(q,d)));
+}
+// g's denominator as written (giac's denom simplifies first)
+static NOINL gen typed_den(const gen & g){
+  vecteur f;
+  flat(at_prod,g,f);
+  gen td=1;
+  EACH(it,f){
+    if (it->is_symb_of_sommet(at_inv)) td=td*arg(*it);
+    else if (it->is_pow() && arg(*it,1).type==_INT_ && arg(*it,1).val<0) td=td*symb_pow(arg(*it,0),-arg(*it,1).val);
+  }
+  return td;
+}
+// x = the root of the linear factor b: every term of rhs but the i-th is 0; its unknown's value
+static NOINL gen pf_root(const gen & n2,const gen & b,const gen & prod,int i){
+  const gen x0=ratnormal(-co(b,0)/co(b,1),CTX),lv=ratnormal(subst(n2,X,x0,false,CTX),CTX);
+  const gen c=ratnormal(subst(ratnormal(prod/(*PU_)[i],CTX),X,x0,false,CTX),CTX);
+  const gen v=is_strictly_positive(-c,CTX)?ratnormal(-lv/ev(-c),CTX):ratnormal(lv/c,CTX); // (1/2 over -2: -1/4, not 1/-4)
+  std::string t=pr(X); t+="="; t+=pr(x0); t+=","; t+=pr(lv); t+="="; // x=1,1=2*A,A=1/2 (no spaces: a name with one is quoted)
+  if (is_minus_one(c)) t+="-";
+  else if (!is_one(c)){ t+=c.type==_FRAC?par(c):pr(c); t+="*"; }
+  t+=pr((*PD_)[i]); t+=","; t+=pr((*PD_)[i]); t+="="; t+=pr(v);
+  S(R_PFROOT,txt(t),0);
+  return v;
+}
+// the coefficients of each power of x matched, the system solved: the values (false: none)
+static NOINL bool pf_coeffs(const gen & n2,const gen & rhs,vecteur & val){
+  const gen ex=evx(rhs);
+  std::string eqs,w;
+  vecteur sys;
+  for (int p=deg(ex);p>=0;--p){
+    const gen a=cof(ex,p),b=cof(n2,p);
+    if (!eqs.empty()) eqs+=",";
+    eqs+=lin(a); eqs+="="; eqs+=pr(b);
+    sys.push_back(SYM2(at_equal,a,b));
+  }
+  S(R_PFCOEF,txt(eqs),0);
+  const gen sol=_linsolve(makesequence(gen(sys,_SEQ__VECT),gen(*PU_,_SEQ__VECT)),CTX);
+  if (sol.type!=_VECT || sol._VECTptr->size()!=PU_->size()) return false;
+  for (unsigned i=0;i<val.size();++i){ val[i]=normal(sol[i],CTX); if (i) w+=","; w+=pr((*PD_)[i]); w+="="; w+=pr(val[i]); }
+  S(R_PFSOLVE,txt(w),0);
+  return true;
+}
+// Partial fractions: a common factor cancelled, the long division first when the top's degree is
+// not lower, the denominator factored, a fraction for each factor (A/(x-1), (B x+C)/(x^2+1),
+// each power of a repeated one), both sides times the denominator, the unknowns (a root put in
+// for each factor when they are all linear and different, else the coefficients of each power of
+// x matched and solved), the fractions with their values
+static NOINL bool pf_steps(const gen & input){
+  const gen e=ev(arg(input).type==_VECT?arg(input,0):arg(input));
+  if (!one_var(e)) return false;
+  const gen r=ratnormal(e,CTX),d=evx(_denom(r,CTX));
+  gen n=evx(_numer(r,CTX)),Q=0;
+  if (!dep(d) || !polyf(n) || !polyf(d)) return false;
+  if (deg(d)<deg(evx(typed_den(e)))) S(R_QSIMP,r,0); // ((x^3+1)/(x^2-1) is (x^2-x+1)/(x-1))
+  if (deg(n)>=deg(d)){ // improper: the quotient, then the remainder's fractions
+    Q=_quo(makesequence(n,d,X),CTX);
+    n=_rem(makesequence(n,d,X),CTX);
+    if (is_zero(n)) return false;
+    S(R_PFDIV,SYM2(at_plus,Q,symb_prod(n,symb_inv(d))),0);
+  }
+  const gen fd=_factor(d,CTX);
+  vecteur fs,base,fp;
+  std::vector<int> pw;
+  gen k=1;
+  flat(at_prod,fd,fs);
+  EACH(it,fs){
+    gen b;
+    const gen p=pexp(*it,b);
+    if (!dep(b)){ k=k*(*it); continue; }
+    if (p.type!=_INT_ || p.val<1 || deg(b)>2) return false;
+    base.push_back(b); pw.push_back(p.val); fp.push_back(*it);
+  }
+  if (base.empty()) return false;
+  if (base.size()==1 && pw[0]==1) return !is_zero(Q); // (one factor: nothing to split; a division gave it)
+  if (!written(fd,d)) PL(R_PFFACT,"%0=%1",d,fd);
+  if (!PU_){ PU_=new vecteur; PD_=new vecteur; }
+  PU_->clear(); PD_->clear();
+  vecteur terms,prods,dens; // each fraction; its unknown times the other factors; its denominator
+  bool roots=true; // every factor linear and once
+  for (unsigned i=0;i<base.size();++i){
+    const bool l1=deg(base[i])==1;
+    roots=roots && l1 && pw[i]==1;
+    for (int j=1;j<=pw[i];++j){
+      if (PU_->size()>8) return false;
+      gen t=unknown();
+      if (!l1) t=SYM2(at_plus,symb_prod(t,X),unknown()); // (B x+C)
+      const gen dj=j==1?base[i]:symb_pow(base[i],j);
+      dens.push_back(dj);
+      terms.push_back(symb_prod(t,symb_inv(dj)));
+      vecteur o(1,t); // the other factors: the denominator over this one's
+      for (unsigned m=0;m<base.size();++m){
+        const int q=m==i?pw[m]-j:pw[m];
+        if (q) o.push_back(q==1?base[m]:symb_pow(base[m],q));
+      }
+      prods.push_back(prodof2(o));
+    }
+  }
+  const gen n2=ratnormal(n/k,CTX),rhs=sumof(prods); // (2 x^2-2: 1/2 over (x-1)(x+1))
+  PL(R_PFSET,"%0=%1",symb_prod(n2,symb_inv(prodof2(fp))),sh(sumof(terms)));
+  PL(R_PFMULT,"%0=%1",n2,sh(rhs));
+  vecteur val(PU_->size());
+  if (roots) for (unsigned i=0;i<base.size();++i) val[i]=pf_root(n2,base[i],prods[i],i);
+  else if (!pf_coeffs(n2,rhs,val)) return false;
+  vecteur res(1,Q); // the fractions with their values, written as the answers are
+  for (unsigned i=0;i<dens.size();++i) res.push_back(fr(subst(symb_prod(terms[i],dens[i]),*PU_,val,false,CTX),dens[i]));
+  vecteur res2;
+  EACH(it,res) if (!is_zero(*it)) res2.push_back(*it);
+  S(R_PFRES,sumof(res2),0);
+  return true;
+}
+
 bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){
   static gen * in0; // the input as the steps take it (in_ points to it; no static constructor in the app)
   if (!in0) in0=new gen;
@@ -2538,6 +2825,9 @@ bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){
   if (input.is_symb_of_sommet(at_solve) && lop(input,at_derive).empty() && lop(input,at_integrate).empty() && lop(input,at_limit).empty() && lop(input,at_sum).empty())
     return eq_steps(input) && !out.empty(); // (an equation; solve(diff(f,x)=0,x): its derivative's steps first, below)
   if (input.is_symb_of_sommet(at_factor)) return factor_steps(input);
+  if (input.is_symb_of_sommet(at_canonical_form)) return cs_steps(input) && !out.empty();
+  if (input.is_symb_of_sommet(at_propfrac)) return div_steps(input) && !out.empty();
+  if (input.is_symb_of_sommet(at_partfrac)) return pf_steps(input) && !out.empty();
   *in0=serfix(input);
   gen ls=limit_simp(*in0);
   if (ls!=*in0){ S(R_SIMP,*in0,ls); *in0=ls; }

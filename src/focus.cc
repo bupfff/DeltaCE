@@ -26,6 +26,7 @@ int console_caret();                // console.cc: caret index in the edit line,
 extern const char * console_form_name; // main.cc: the form F4 last gave (console_form_of)
 bool console_form_check(const char * s); // main.cc: s shows the check of an antiderivative (no + C)
 bool console_form_of(const char * s);
+const char * console_form_steps(const char * s); // main.cc: F4's form on line s has steps: their input
 extern const char * console_approx_for; // main.cc: the decimal value of that printed result
 extern bool answer_simplify_on;     // answer.cc: Simplify answers (mode) is on, as last read
 const char * console_approx();
@@ -159,6 +160,7 @@ static int NE;
 // answer), else 0
 static const char * steps_input(const fent & e) {
   const char * r = e.out < 0 ? 0 : shown((const char *)Line[e.out].str);
+  if (const char * f = e.out < 0 ? 0 : console_form_steps((const char *)Line[e.out].str)) return focus_steps_able(f) ? f : 0; // (DeltaCE: F4's completed square, long division, factored)
   if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14) && strncmp(r, "diverges", 8) && strncmp(r, "no limit", 8) && strncmp(r, "no solution", 11))) return 0; // (a limit's "does not exist" or "no limit", a series' "diverges", an equation's "no solution" too)
   const char * s = (const char *)Line[e.in].str;
   return focus_steps_able(s) ? s : 0;
