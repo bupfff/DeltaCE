@@ -8,186 +8,272 @@
 <meta property="og:title" content="DeltaCE: calculus, step by step, on your TI-84 Plus CE">
 <meta property="og:description" content="Exact answers in textbook form, the steps behind them, and graphs with their key points. Free and open source.">
 <meta property="og:image" content="media/screenshots/steps_parts.png">
+<meta name="theme-color" content="#0b1416">
 <link rel="icon" href="media/icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=STIX+Two+Text:ital,wght@1,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=STIX+Two+Text:ital,wght@0,500;1,500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script>
+  // site.js reveals what is marked data-reveal; if it never runs, nothing stays hidden
+  document.documentElement.classList.add('js');
+  setTimeout(function () { if (!window.deltaAnim) document.documentElement.classList.remove('js'); }, 2500);
+</script>
 </head>
 <body>
 
-<header class="top">
-  <div class="wrap top-in">
-    <a class="wordmark" href="#"><span class="delta" aria-hidden="true">Δ</span>Delta<span>CE</span></a>
-    <nav>
-      <a href="#install">Install</a>
-      <a href="#features">Features</a>
-      <a href="#screens">Screens</a>
-      <a href="https://github.com/bupfff/DeltaCE">GitHub</a>
-    </nav>
+<nav class="pill" aria-label="Sections">
+  <a class="pill-mark" href="#top" aria-label="DeltaCE, back to the top"><span aria-hidden="true">Δ</span></a>
+  <a href="#tour">Tour</a>
+  <a href="#install">Install</a>
+  <a href="#versions">Versions</a>
+  <a href="https://github.com/bupfff/DeltaCE">GitHub</a>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="hero-in">
+    <div class="hero-copy">
+      <p class="eyebrow" data-reveal>For the TI-84 Plus CE</p>
+      <h1 class="mark" id="mark" data-reveal>Delta<span class="ce">CE</span></h1>
+      <p class="tagline" data-reveal>The calculus of change, shown&nbsp;step&nbsp;by&nbsp;step.</p>
+      <p class="intro" data-reveal>A computer algebra system for your calculator: math typed the way it looks, exact answers the way your textbook writes them, and the steps behind them.</p>
+      <div class="cta" data-reveal>
+        <a class="btn primary" href="#install">Install DeltaCE</a>
+        <a class="btn ghost" href="#tour">Take the tour</a>
+      </div>
+      <p class="hero-fine" data-reveal>Free and open source · <span class="ver-tag">v1.8</span> · a fork of <a href="https://github.com/tommyb3ll/FlowCE">FlowCE</a></p>
+    </div>
+
+    <figure class="secant" data-reveal aria-label="A curve; a secant line through two of its points turns into the tangent line as the second point slides to the first: Δy over Δx becomes the derivative">
+      <svg id="secant" viewBox="0 0 640 440" role="img">
+        <defs>
+          <linearGradient id="curve-ink" x1="0" x2="1">
+            <stop offset="0" stop-color="#2fb7a9"/><stop offset="1" stop-color="#7fe6da"/>
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <g class="axes"><line x1="30" y1="390" x2="620" y2="390"/><line x1="60" y1="20" x2="60" y2="410"/></g>
+        <path id="curve" class="curve" d=""/>
+        <g id="secant-group" class="sec">
+          <line id="sec-line" class="sec-line"/>
+          <line id="leg-x" class="leg"/>
+          <line id="leg-y" class="leg"/>
+          <text id="lab-x" class="leg-lab">Δx</text>
+          <text id="lab-y" class="leg-lab">Δy</text>
+          <circle id="dot-q" class="dot q" r="6"/>
+        </g>
+        <circle id="pulse" class="pulse" r="6"/>
+        <circle id="dot-p" class="dot p" r="7"/>
+      </svg>
+      <figcaption class="readout" aria-live="off">
+        <span class="ro-eq"><i>Δy</i> / <i>Δx</i> = <b id="ro-val">0.000</b></span>
+        <span class="ro-lim" id="ro-lim">→ <i>f</i>′(<i>x</i>₀)</span>
+      </figcaption>
+    </figure>
   </div>
+  <a class="scroll-cue" href="#tour" aria-label="Scroll to the tour"><span></span></a>
 </header>
 
 <main>
-<section class="hero wrap">
-  <div class="hero-text">
-    <h1><span class="wordmark big">Delta<span>CE</span></span></h1>
-    <p class="lead">The calculus of change, shown step by step.</p>
-    <p>A computer algebra system for your TI-84 Plus CE. Type math the way it looks, get exact answers the way your textbook writes them, and see the steps behind them.</p>
-    <div class="cta">
-      <a class="btn primary" href="#install">Install</a>
-      <a class="btn" href="#features">What it does</a>
-    </div>
-    <p class="fine">Free and open source. For the TI-84 Plus CE and TI-83 Premium CE. Based on <a href="https://github.com/tommyb3ll/FlowCE">FlowCE</a> and KhiCAS.</p>
+<section id="tour" class="tour-sec">
+  <div class="sec-head" data-reveal>
+    <p class="eyebrow">The tour</p>
+    <h2>Six things your calculator couldn't do before.</h2>
   </div>
-  <figure class="screen hero-screen">
-    <picture>
-      <source srcset="media/deltace_dark.gif" media="(prefers-color-scheme: dark)">
-      <img src="media/deltace_light.gif" width="640" height="480" alt="DeltaCE on the calculator: a definite integral typed in 2D, the sum of 1/n² giving π²/6, then x³ − 3x graphed from the row of actions under it, with its key points labeled">
-    </picture>
-  </figure>
-</section>
-
-<section id="features" class="wrap">
-  <h2>What it does</h2>
-  <div class="features">
-    <article class="feat">
-      <img src="media/screenshots/steps_parts.png" loading="lazy" width="640" height="480" alt="Steps for the integral of x sin x: integration by parts">
-      <h3>The steps</h3>
-      <p>Press <kbd>enter</kbd> after an answer to see how to get it: derivatives, integrals, limits, sums and Taylor series, and in algebra, equations (linear, quadratic, rational, radical) and factoring. Each step names its rule.</p>
-    </article>
-    <article class="feat">
-      <img src="media/screenshots/graph_points.png" loading="lazy" width="640" height="480" alt="The graph of x³ − 3x with its zeros, maximum and minimum labeled exactly">
-      <h3>Graphs that know their key points</h3>
-      <p>Zeros, extrema, inflection points and crossings, found exactly. Trace, pan and zoom while a key is held, a table, the tangent line, the area. Circles and conics, parametric and polar curves, slope fields.</p>
-    </article>
-    <article class="feat">
-      <img src="media/screenshots/action_row.png" loading="lazy" width="640" height="480" alt="An answer on its card, with the row of actions under it: Factor, Solve = 0, Graph">
-      <h3>What to do next, one key away</h3>
-      <p>Under an answer, its likeliest next steps: Factor, Solve = 0, Graph, or Derivative and Integral. <kbd>▶</kbd> picks one, <kbd>enter</kbd> does it. <kbd>F4</kbd> shows the answer's other forms, with their work.</p>
-    </article>
-    <article class="feat">
-      <img src="media/screenshots/analyze.png" loading="lazy" width="640" height="480" alt="The analysis of (x² − 1)/(x − 2): its domain and intercepts">
-      <h3>Function analysis</h3>
-      <p><code>analyze(f)</code> goes through a function the way a test asks: domain, intercepts, symmetry, asymptotes and holes, where it increases and decreases, extrema, concavity, inflection points.</p>
-    </article>
-    <article class="feat">
-      <img src="media/screenshots/units.png" loading="lazy" width="640" height="480" alt="60 miles per hour converted to 96.5606 kilometers per hour">
-      <h3>Units</h3>
-      <p>A units menu on <kbd>alpha</kbd> <kbd>F4</kbd>: lengths, speeds, energy, pressure and more, Celsius to Fahrenheit, written the way a textbook writes them.</p>
-    </article>
-    <article class="feat">
-      <img src="media/screenshots/basel.png" loading="lazy" width="640" height="480" alt="The sum of 1 over n squared equals pi squared over 6, with its decimal value">
-      <h3>Exact answers</h3>
-      <p><span class="m">π²/6</span>, not 1.64493; <span class="m">ln|sec x + tan x| + C</span>. The decimal value sits right under the exact one. Calculus 1, 2 and 3: series, differential equations, multiple integrals, vectors and matrices too.</p>
-    </article>
-  </div>
-</section>
-
-<section id="install" class="wrap">
-  <h2>Install</h2>
-
-  <p class="need">You need a TI-84 Plus CE on OS 5.3 to 5.8.4, its USB cable, and Chrome or Edge on a computer (Safari and Firefox can't reach a calculator: use <a href="#manual">TI Connect CE</a> there). <strong>Installing erases the calculator's apps and archived files.</strong></p>
-
-  <div class="installer" id="installer">
-    <div class="notice" id="no-usb" hidden>
-      <strong>This browser can't reach a calculator.</strong> Use Chrome or Edge on a computer, or <a href="#manual">TI Connect CE</a>.
-    </div>
-    <div class="notice" id="win-note" hidden>
-      <strong>On Windows:</strong> install <a href="https://education.ti.com/en/products/computer-software/ti-connect-ce-sw">TI Connect CE</a> 6.1 or newer first. The page uses its USB driver; you don't need to open it.
+  <div class="tour">
+    <div class="chapters">
+      <article class="chapter" data-shot="steps_parts.png" data-alt="Steps for the integral of x sin x: integration by parts">
+        <span class="ch-num">Δ1</span>
+        <h3>The steps behind the answer</h3>
+        <p>Press <kbd>enter</kbd> after an answer and DeltaCE shows how to get it, the way a worked example does: derivatives, integrals, limits, sums and Taylor series, and in algebra, equations and factoring. Every step names its rule.</p>
+        <img class="ch-img" src="media/screenshots/steps_parts.png" loading="lazy" width="640" height="480" alt="Steps for the integral of x sin x: integration by parts">
+      </article>
+      <article class="chapter" data-shot="action_row.png" data-alt="An answer on its card, with Factor, Solve = 0 and Graph under it">
+        <span class="ch-num">Δ2</span>
+        <h3>What to do next, one key away</h3>
+        <p>Under each answer, its likeliest next moves: Factor, Solve = 0, Graph, or Derivative and Integral. <kbd>▶</kbd> picks one, <kbd>enter</kbd> does it. No menus to dig through.</p>
+        <img class="ch-img" src="media/screenshots/action_row.png" loading="lazy" width="640" height="480" alt="An answer on its card, with Factor, Solve = 0 and Graph under it">
+      </article>
+      <article class="chapter" data-shot="graph_points.png" data-alt="The graph of x³ − 3x with its zeros, maximum and minimum labeled">
+        <span class="ch-num">Δ3</span>
+        <h3>Graphs that know their key points</h3>
+        <p>Zeros, extrema, inflection points and crossings, found exactly and labeled on the graph. Pan and zoom while a key is held; trace, tables, tangent lines and areas. Conics, parametric and polar curves, slope fields.</p>
+        <img class="ch-img" src="media/screenshots/graph_points.png" loading="lazy" width="640" height="480" alt="The graph of x³ − 3x with its zeros, maximum and minimum labeled">
+      </article>
+      <article class="chapter" data-shot="analyze.png" data-alt="The analysis of (x² − 1)/(x − 2): its domain and intercepts">
+        <span class="ch-num">Δ4</span>
+        <h3>A function, analyzed</h3>
+        <p><code>analyze(f)</code> walks through a function the way a test asks: domain, intercepts, symmetry, asymptotes and holes, increasing and decreasing, extrema, concavity, inflection points.</p>
+        <img class="ch-img" src="media/screenshots/analyze.png" loading="lazy" width="640" height="480" alt="The analysis of (x² − 1)/(x − 2): its domain and intercepts">
+      </article>
+      <article class="chapter" data-shot="steps_quadratic.png" data-alt="Steps for 2x² − 3x − 5 = 0: a, b and c, then the quadratic formula">
+        <span class="ch-num">Δ5</span>
+        <h3>Algebra, worked out</h3>
+        <p>Linear and quadratic equations (always by the formula, every value shown), rational and radical equations with each candidate checked, factoring by GCF, special products, grouping or rational roots.</p>
+        <img class="ch-img" src="media/screenshots/steps_quadratic.png" loading="lazy" width="640" height="480" alt="Steps for 2x² − 3x − 5 = 0: a, b and c, then the quadratic formula">
+      </article>
+      <article class="chapter" data-shot="units.png" data-alt="60 miles per hour converted to 96.5606 kilometers per hour">
+        <span class="ch-num">Δ6</span>
+        <h3>Units, written properly</h3>
+        <p>A units menu on <kbd>alpha</kbd> <kbd>F4</kbd>: speeds, energy, pressure and more, Celsius to Fahrenheit, results written the way a textbook writes them.</p>
+        <img class="ch-img" src="media/screenshots/units.png" loading="lazy" width="640" height="480" alt="60 miles per hour converted to 96.5606 kilometers per hour">
+      </article>
     </div>
 
-    <ol class="steps">
-      <li class="step" data-step="connect">
-        <div class="step-head"><span class="num">1</span><h3>Connect</h3></div>
-        <div class="step-body">
-          <p>Plug in the calculator and turn it on. Close TI Connect CE if it's open.</p>
-          <button class="btn primary" id="btn-connect">Connect calculator</button>
-          <div class="status" id="st-connect" aria-live="polite"></div>
+    <div class="stage" aria-hidden="true">
+      <div class="device" data-reveal>
+        <div class="screen">
+          <img id="shot-a" class="shot" src="media/screenshots/steps_parts.png" width="640" height="480" alt="">
+          <img id="shot-b" class="shot" src="media/screenshots/steps_parts.png" width="640" height="480" alt="" style="opacity:0">
         </div>
-      </li>
-
-      <li class="step" data-step="install">
-        <div class="step-head"><span class="num">2</span><h3>Install</h3></div>
-        <div class="step-body">
-          <div id="erase-part">
-            <label class="confirm"><input type="checkbox" id="erase-ok"> <span>Erase all apps and archived files on my calculator</span></label>
-          </div>
-          <button class="btn primary" id="btn-install" disabled>Install DeltaCE</button>
-          <button class="btn primary" id="btn-reconnect" hidden>Reconnect calculator</button>
-          <div class="progress" id="progress" hidden><div class="bar"><span id="bar"></span></div></div>
-          <div class="status" id="st-install" aria-live="polite"></div>
-          <p class="fine">Sends <span id="version">DeltaCE</span>.</p>
+        <div class="keys">
+          <span class="frow"><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="krow"><i></i><i></i><i></i><i class="pad"></i></span>
+          <span class="krow"><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="krow"><i></i><i></i><i></i><i></i><i></i></span>
         </div>
-      </li>
-
-      <li class="step" data-step="finish">
-        <div class="step-head"><span class="num">3</span><h3>Press enter on the calculator</h3></div>
-        <div class="step-body">
-          <p>When it shows <strong>INST</strong>, press <kbd>enter</kbd> once. It installs and restarts by itself (<em>"RAM Cleared"</em>). Then <kbd>apps</kbd> → <strong>DeltaCE</strong>.</p>
-          <div class="status" id="st-finish" aria-live="polite"></div>
-          <img class="gif" src="media/install/install_web.gif" loading="lazy" width="640" height="544" alt="The arTIfiCE shell with INST, enter, the countdown, RAM Cleared, then apps and DeltaCE">
-        </div>
-      </li>
-    </ol>
+      </div>
+      <ol class="rail"><li></li><li></li><li></li><li></li><li></li><li></li></ol>
+    </div>
   </div>
-
-  <details class="manual" id="manual">
-    <summary>Install with TI Connect CE instead</summary>
-    <ol>
-      <li>Clear the archive: <kbd>2nd</kbd> <kbd>+</kbd> (MEM) → <kbd>7</kbd> → ▶ <strong>ARCHIVE</strong> → <kbd>3</kbd> → <kbd>2</kbd>.</li>
-      <li>Download <a id="dl" href="files/DeltaCE.b84" download>DeltaCE.b84</a> and send it with <a href="https://education.ti.com/en/products/computer-software/ti-connect-ce-sw">TI Connect CE</a>.</li>
-      <li><kbd>prgm</kbd> → <kbd>enter</kbd> → <kbd>enter</kbd> opens arTIfiCE. <kbd>enter</kbd> starts INST, <kbd>enter</kbd> again installs.</li>
-      <li>At <em>"Success! Will now reset"</em>, press <kbd>enter</kbd>. Then <kbd>clear</kbd>, <kbd>apps</kbd> → <strong>DeltaCE</strong>.</li>
-    </ol>
-  </details>
-
-  <details class="manual">
-    <summary>Trouble?</summary>
-    <ul>
-      <li><strong>Connect fails on Windows:</strong> update TI Connect CE to 6.1 or newer, then unplug and replug the calculator.</li>
-      <li><strong>Connect fails on a Mac or Chromebook:</strong> close TI Connect CE, then unplug and replug.</li>
-      <li><strong>Linux:</strong> add a udev rule such as <code>SUBSYSTEM=="usb", ATTRS{idVendor}=="0451", ATTRS{idProduct}=="e008", TAG+="uaccess"</code> in <code>/etc/udev/rules.d/69-ti-calc.rules</code>, then replug.</li>
-      <li><strong>Still not enough memory after the erase:</strong> some apps survive it (often TI's language apps). Delete them: <kbd>2nd</kbd> <kbd>+</kbd> → <kbd>2</kbd> → Apps, <kbd>del</kbd> on each.</li>
-      <li><strong>"RAM Cleared" but this page still waits:</strong> DeltaCE is installed. Press <kbd>apps</kbd> → <strong>DeltaCE</strong>.</li>
-      <li><strong>Frozen at "Success! Will now reset":</strong> press the reset button on the back (a pen tip). DeltaCE stays installed.</li>
-      <li><strong>The calculator acts strangely:</strong> clear the RAM: <kbd>2nd</kbd> <kbd>+</kbd> → <kbd>7</kbd> → <kbd>1</kbd> → <kbd>2</kbd>. DeltaCE stays installed.</li>
-      <li><strong>OS 5.8.5 or newer:</strong> not supported yet (the installer's arTIfiCE v2.1 works up to 5.8.4).</li>
-    </ul>
-    <p class="fine">Something else, or a wrong answer? <a href="https://github.com/bupfff/DeltaCE/issues">Open an issue on GitHub</a> with what you typed.</p>
-  </details>
 </section>
 
-<section id="screens" class="wrap">
-  <h2>Screens</h2>
-  <div class="gallery">
-    <figure><img src="media/screenshots/steps_quadratic.png" loading="lazy" width="640" height="480" alt="Steps for 2x² − 3x − 5 = 0: a, b and c, then the quadratic formula"><figcaption>steps: a quadratic equation</figcaption></figure>
-    <figure><img src="media/screenshots/steps_factor.png" loading="lazy" width="640" height="480" alt="Steps for factoring x³ + 2x² − 5x − 6: a rational root, then two numbers"><figcaption>steps: factoring</figcaption></figure>
-    <figure><img src="media/screenshots/steps_limit.png" loading="lazy" width="640" height="480" alt="Steps for a limit with L'Hôpital's rule"><figcaption>steps: a limit</figcaption></figure>
-    <figure><img src="media/screenshots/typing_integral.png" loading="lazy" width="640" height="480" alt="A definite integral being typed in 2D"><figcaption>type it as it looks</figcaption></figure>
-    <figure><img src="media/screenshots/graph_conic.png" loading="lazy" width="640" height="480" alt="An ellipse and a line graphed together"><figcaption>an ellipse and a line</figcaption></figure>
-    <figure><img src="media/screenshots/graph_polar.png" loading="lazy" width="640" height="480" alt="The polar curve r = 1 + 2 cos θ, a limaçon"><figcaption>polar: r = 1 + 2 cos θ</figcaption></figure>
-    <figure><img src="media/screenshots/graph_field.png" loading="lazy" width="640" height="480" alt="The slope field of y′ = x − y with the solution through (0, 1)"><figcaption>a slope field and a solution</figcaption></figure>
-    <figure><img src="media/screenshots/forms.png" loading="lazy" width="640" height="480" alt="F4 showing the expanded form of (x + 1)³"><figcaption><kbd>F4</kbd>: other forms</figcaption></figure>
-    <figure><img src="media/screenshots/night.png" loading="lazy" width="640" height="480" alt="A definite integral in the Night theme"><figcaption>the Night theme</figcaption></figure>
+<section class="also">
+  <div class="sec-head" data-reveal>
+    <p class="eyebrow">And the rest</p>
+    <h2>Calc 1, 2 and 3, exact.</h2>
+    <p class="sec-lead"><span class="m">π²/6</span>, not 1.64493; <span class="m">ln|sec x + tan x| + C</span>. The decimal sits right under the exact answer.</p>
   </div>
-  <ul class="tips">
-    <li><kbd>F1</kbd>–<kbd>F5</kbd> menus</li>
-    <li><kbd>▲</kbd> history</li>
-    <li><kbd>▼</kbd> search commands</li>
-    <li><kbd>enter</kbd> after an answer: its steps</li>
-    <li><kbd>▶</kbd> after an answer: what to do next</li>
-    <li><kbd>F4</kbd> other forms</li>
-    <li><kbd>on</kbd> stops a calculation</li>
+  <ul class="tags" data-reveal>
+    <li>Integration by parts</li><li>Trig substitution</li><li>Partial fractions</li><li>Improper integrals</li>
+    <li>Limits that say <em>does not exist</em></li><li>L'Hôpital's rule</li><li>Riemann sums</li><li>Taylor series</li>
+    <li>Power series</li><li>Series tests</li><li>Differential equations</li><li>Initial values</li>
+    <li>Arc length</li><li>Polar areas</li><li>Gradients</li><li>Multiple integrals</li>
+    <li>Vectors</li><li>Matrices</li><li>Complex numbers</li><li><kbd>F4</kbd> other forms, with their work</li>
+    <li>Completed square</li><li>Long division</li><li>2D math as you type</li><li>History <kbd>▲</kbd></li>
+    <li>Every command searchable <kbd>▼</kbd></li><li>Paper and Night themes</li><li><kbd>on</kbd> stops a calculation</li>
   </ul>
+</section>
+
+<section id="install" class="install-sec">
+  <div class="install">
+    <div class="install-copy" data-reveal>
+      <p class="eyebrow">Install</p>
+      <h2>On your calculator in three steps.</h2>
+      <p>Plug the calculator into a computer, open this page in <strong>Chrome or Edge</strong>, and click. The page checks the calculator, makes room, sends DeltaCE and starts its installer: press <kbd>enter</kbd> once on the calculator and it installs by itself.</p>
+      <ul class="needs">
+        <li>A TI-84 Plus CE or TI-83 Premium CE on OS 5.3 to 5.8.4, and its USB cable</li>
+        <li><strong>Installing erases the calculator's apps and archived files</strong>: back up what you want to keep</li>
+        <li>Safari and Firefox can't reach a calculator: use <a href="#manual">TI Connect CE</a> there</li>
+      </ul>
+      <p class="fine">DeltaCE is a computer algebra system: follow your class and test rules (some tests, like the ACT, don't allow one).</p>
+    </div>
+
+    <div class="installer" id="installer" data-reveal>
+      <div class="notice" id="no-usb" hidden>
+        <strong>This browser can't reach a calculator.</strong> Use Chrome or Edge on a computer, or <a href="#manual">TI Connect CE</a>.
+      </div>
+      <div class="notice" id="win-note" hidden>
+        <strong>On Windows:</strong> install <a href="https://education.ti.com/en/products/computer-software/ti-connect-ce-sw">TI Connect CE</a> 6.1 or newer first. The page uses its USB driver; you don't need to open it.
+      </div>
+      <ol class="steps">
+        <li class="step" data-step="connect">
+          <div class="step-head"><span class="num">1</span><h3>Connect</h3></div>
+          <div class="step-body">
+            <p>Plug in the calculator and turn it on. Close TI Connect CE if it's open.</p>
+            <button class="btn primary" id="btn-connect">Connect calculator</button>
+            <div class="status" id="st-connect" aria-live="polite"></div>
+          </div>
+        </li>
+        <li class="step" data-step="install">
+          <div class="step-head"><span class="num">2</span><h3>Install</h3></div>
+          <div class="step-body">
+            <div id="erase-part">
+              <label class="confirm"><input type="checkbox" id="erase-ok"> <span>Erase all apps and archived files on my calculator</span></label>
+            </div>
+            <button class="btn primary" id="btn-install" disabled>Install DeltaCE</button>
+            <button class="btn primary" id="btn-reconnect" hidden>Reconnect calculator</button>
+            <div class="progress" id="progress" hidden><div class="bar"><span id="bar"></span></div></div>
+            <div class="status" id="st-install" aria-live="polite"></div>
+            <p class="fine">Sends <span id="version">DeltaCE</span>.</p>
+          </div>
+        </li>
+        <li class="step" data-step="finish">
+          <div class="step-head"><span class="num">3</span><h3>Press enter on the calculator</h3></div>
+          <div class="step-body">
+            <p>When it shows <strong>INST</strong>, press <kbd>enter</kbd> once. It installs and restarts by itself (<em>"RAM Cleared"</em>). Then <kbd>apps</kbd> → <strong>DeltaCE</strong>.</p>
+            <div class="status" id="st-finish" aria-live="polite"></div>
+            <img class="gif" src="media/install/install_web.gif" loading="lazy" width="640" height="544" alt="The arTIfiCE shell with INST, enter, the countdown, RAM Cleared, then apps and DeltaCE">
+          </div>
+        </li>
+      </ol>
+
+      <details class="more" id="manual">
+        <summary>Install with TI Connect CE instead</summary>
+        <ol>
+          <li>Clear the archive: <kbd>2nd</kbd> <kbd>+</kbd> (MEM) → <kbd>7</kbd> → ▶ <strong>ARCHIVE</strong> → <kbd>3</kbd> → <kbd>2</kbd>.</li>
+          <li>Download <a id="dl" href="files/DeltaCE.b84" download>DeltaCE.b84</a> and send it with <a href="https://education.ti.com/en/products/computer-software/ti-connect-ce-sw">TI Connect CE</a>.</li>
+          <li><kbd>prgm</kbd> → <kbd>enter</kbd> → <kbd>enter</kbd> opens arTIfiCE. <kbd>enter</kbd> starts INST, <kbd>enter</kbd> again installs.</li>
+          <li>At <em>"Success! Will now reset"</em>, press <kbd>enter</kbd>. Then <kbd>clear</kbd>, <kbd>apps</kbd> → <strong>DeltaCE</strong>.</li>
+        </ol>
+      </details>
+      <details class="more">
+        <summary>Trouble?</summary>
+        <ul>
+          <li><strong>Connect fails on Windows:</strong> update TI Connect CE to 6.1 or newer, then unplug and replug the calculator.</li>
+          <li><strong>Connect fails on a Mac or Chromebook:</strong> close TI Connect CE, then unplug and replug.</li>
+          <li><strong>Linux:</strong> add a udev rule such as <code>SUBSYSTEM=="usb", ATTRS{idVendor}=="0451", ATTRS{idProduct}=="e008", TAG+="uaccess"</code> in <code>/etc/udev/rules.d/69-ti-calc.rules</code>, then replug.</li>
+          <li><strong>Still not enough memory after the erase:</strong> some apps survive it (often TI's language apps). Delete them: <kbd>2nd</kbd> <kbd>+</kbd> → <kbd>2</kbd> → Apps, <kbd>del</kbd> on each.</li>
+          <li><strong>"RAM Cleared" but this page still waits:</strong> DeltaCE is installed. Press <kbd>apps</kbd> → <strong>DeltaCE</strong>.</li>
+          <li><strong>Frozen at "Success! Will now reset":</strong> press the reset button on the back (a pen tip). DeltaCE stays installed.</li>
+          <li><strong>The calculator acts strangely:</strong> clear the RAM: <kbd>2nd</kbd> <kbd>+</kbd> → <kbd>7</kbd> → <kbd>1</kbd> → <kbd>2</kbd>. DeltaCE stays installed.</li>
+          <li><strong>OS 5.8.5 or newer:</strong> not supported yet (the installer's arTIfiCE v2.1 works up to 5.8.4).</li>
+        </ul>
+        <p class="fine">Something else, or a wrong answer? <a href="https://github.com/bupfff/DeltaCE/issues">Open an issue on GitHub</a> with what you typed.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="versions" class="versions-sec">
+  <div class="sec-head" data-reveal>
+    <p class="eyebrow">Versions</p>
+    <h2>Eighteen releases, each one a change.</h2>
+  </div>
+  <ol class="timeline" data-reveal>
+    <li class="now"><b>1.8</b><span>A look of its own: the teal status bar, the answer card, and the action row under each answer.</span></li>
+    <li><b>1.7</b><span>Parametric and polar curves, slope fields; engine fixes for the calculator's 24-bit integers.</span></li>
+    <li><b>1.6</b><span>Code placed for the flash cache: heavy calculus 6–8% faster.</span></li>
+    <li><b>1.5</b><span>Units fixed everywhere and written the way textbooks write them.</span></li>
+    <li><b>1.4</b><span>Equations in x and y on the graph: circles, ellipses, hyperbolas.</span></li>
+    <li><b>1.3</b><span>The work behind <kbd>F4</kbd>'s forms: completed square, long division, partial fractions.</span></li>
+    <li class="older"><b>1.2</b><span>64 KB more room.</span></li>
+    <li class="older"><b>1.1</b><span>Graph tools: value at x, solve f(x) = …, max and min, labels.</span></li>
+    <li class="older"><b>1.0</b><span>A new graph screen: pan, trace, exact key points, tables.</span></li>
+    <li class="older"><b>0.9</b><span>Actions on an answer, menus that remember, step navigation.</span></li>
+    <li class="older"><b>0.8</b><span>Steps for rational and radical equations.</span></li>
+    <li class="older"><b>0.7</b><span>Factoring steps.</span></li>
+    <li class="older"><b>0.6</b><span>Steps for linear and quadratic equations.</span></li>
+    <li class="older"><b>0.5</b><span>Function analysis.</span></li>
+    <li class="older"><b>0.4</b><span>The teal accent and the Δ mark.</span></li>
+    <li class="older"><b>0.3</b><span>Celsius and Fahrenheit, the antiderivative check, value at x.</span></li>
+    <li class="older"><b>0.2</b><span>Physical units: 72 of them in 8 categories.</span></li>
+    <li class="older"><b>0.1</b><span>The fork: DeltaCE's name and start screen.</span></li>
+  </ol>
+  <button class="btn ghost dark-ghost" id="more-versions" type="button" aria-expanded="false">All versions</button>
 </section>
 </main>
 
-<footer class="wrap foot">
-  <p>DeltaCE is a fork of <a href="https://github.com/tommyb3ll/FlowCE">FlowCE</a> by Tommy Bell, itself a fork of <a href="https://www-fourier.univ-grenoble-alpes.fr/~parisse/">KhiCAS</a> by Bernard Parisse. Math engine: Giac, by Bernard Parisse and contributors (Institut Fourier, Université Grenoble Alpes). Console adapted from Eigenmath for the Casio Prizm by G. Maia, Mike Smith, Nemhardy and LePhenixNoir. Thanks to Adrien Bertrand, Xavier Andreani and the TI-83/84 community, especially Jacob Young, commandblockguy and Matt Waltz. Installer: <a href="https://yvantt.github.io/arTIfiCE/">arTIfiCE</a> by YvanTT; this page's USB code is FlowCE's, adapted from <a href="https://github.com/Timendus/ticalc-usb">ticalc-usb</a> by Tim Franssen and <a href="https://github.com/debrouxl/tilibs">tilibs</a>. Fonts: Atkinson Hyperlegible and STIX Two.</p>
-  <p>Free software under the <a href="https://github.com/bupfff/DeltaCE/blob/main/LICENSE">GNU GPL</a> v3 or later, with no warranty. DeltaCE is a computer algebra system: follow your class and test rules. Not affiliated with Texas Instruments; TI-84 Plus CE is a trademark of Texas Instruments.</p>
+<footer class="foot">
+  <div class="foot-in">
+    <p class="foot-mark">Delta<span>CE</span></p>
+    <p>DeltaCE is a fork of <a href="https://github.com/tommyb3ll/FlowCE">FlowCE</a> by Tommy Bell, itself a fork of <a href="https://www-fourier.univ-grenoble-alpes.fr/~parisse/">KhiCAS</a> by Bernard Parisse. Math engine: Giac, by Bernard Parisse and contributors (Institut Fourier, Université Grenoble Alpes). Console adapted from Eigenmath for the Casio Prizm by G. Maia, Mike Smith, Nemhardy and LePhenixNoir. Thanks to Adrien Bertrand, Xavier Andreani and the TI-83/84 community, especially Jacob Young, commandblockguy and Matt Waltz. Installer: <a href="https://yvantt.github.io/arTIfiCE/">arTIfiCE</a> by YvanTT; the page's USB code is FlowCE's, adapted from <a href="https://github.com/Timendus/ticalc-usb">ticalc-usb</a> by Tim Franssen and <a href="https://github.com/debrouxl/tilibs">tilibs</a>. Animation: <a href="https://animejs.com">anime.js</a> by Julian Garnier (MIT). Fonts: Manrope, STIX Two, Atkinson Hyperlegible.</p>
+    <p>Free software under the <a href="https://github.com/bupfff/DeltaCE/blob/main/LICENSE">GNU GPL</a> v3 or later, with no warranty. Not affiliated with Texas Instruments; TI-84 Plus CE is a trademark of Texas Instruments.</p>
+  </div>
 </footer>
 
 <script type="module" src="installer.js"></script>
+<script type="module" src="site.js"></script>
 </body>
 </html>

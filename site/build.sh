@@ -10,7 +10,8 @@ VER=${2:-}
 OUT=_site
 rm -rf "$OUT"
 mkdir -p "$OUT/media/screenshots" "$OUT/media/install" "$OUT/files"
-cp site/index.html site/style.css site/installer.js site/dusb.js "$OUT/"
+cp site/index.html site/style.css site/installer.js site/dusb.js site/site.js "$OUT/"
+mkdir -p "$OUT/vendor" && cp site/vendor/* "$OUT/vendor/"
 cp site/icon.svg "$OUT/media/icon.svg"
 cp docs/deltace_light.gif docs/deltace_dark.gif "$OUT/media/"
 cp docs/screenshots/*.png "$OUT/media/screenshots/"
