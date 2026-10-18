@@ -192,7 +192,9 @@ kbd {
 .btn.ghost:hover { border-color: var(--acc-bright); }
 .hero-fine { font-size: .88rem; color: var(--night-sub); }
 .hero-fine a { color: var(--acc-bright); }
-.ver-tag { padding: .05rem .5rem; border-radius: 999px; background: rgba(52, 204, 188, .15); color: var(--acc-bright); font-weight: 800; }
+.ver-tag { padding: .05rem .5rem; border-radius: 999px; background: rgba(52, 204, 188, .15); color: var(--acc-bright); font-weight: 800; text-decoration: none; }
+.hero-fine a.ver-tag:hover { background: rgba(52, 204, 188, .28); }
+.btn.gh { gap: .5rem; }
 
 /* the secant turning into the tangent (site.js draws and animates it) */
 .secant {
@@ -440,6 +442,7 @@ details.more li { margin-bottom: .45rem; }
 .foot a { color: var(--acc-bright); }
 .foot-mark { font: italic 500 2rem/1 "STIX Two Text", Georgia, serif; color: var(--night-ink); margin-bottom: 1.2rem; }
 .foot-mark span { color: var(--acc-bright); }
+.foot-links { font-size: .95rem; font-weight: 700; margin-bottom: 1.4rem; }
 
 /* what site.js reveals as it scrolls into view (visible without scripts or with reduced motion) */
 .js [data-reveal] { opacity: 0; }
