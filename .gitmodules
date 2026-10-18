@@ -1,3 +1,4 @@
 [submodule "src/giac"]
 	path = src/giac
-	url = https://github.com/tommyb3ll/ti-ce-giac.git
+	url = https://github.com/bupfff/ti-ce-giac.git
+	branch = deltace
