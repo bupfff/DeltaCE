@@ -1240,11 +1240,12 @@ void do_run(const char * s){
       dconsole_mode=0;
     giac::gen g(buf,contextptr);
 #ifdef FLOWCE_STEPS
-    if (focus_on && focus_graph_input(buf)){ // y = f(x): DeltaCE's graph screen (focus_graph.cc)
+    int graphed=focus_on?focus_graph_input(buf):0;
+    if (graphed){ // plot(...): DeltaCE's graph screen (focus_graph.cc)
       dconsole_mode=1;
       if (defn)
         giac::logptr(savelog,contextptr);
-      Console_Output("Graph");
+      Console_Output(graphed>0?"Graph":"Can't graph that: one letter, 4 curves at most");
       Console_NewLine(LINE_TYPE_OUTPUT,1);
       free(buf);
       return;

@@ -22,16 +22,19 @@ STEPS ?= 0
 # Physical units (WITH_UNITS, 34.6 KB) are traded for giac's Python syntax (its translator,
 # 28.4 KB; B. Parisse's suggestion, 2026-10-08): both do not fit. UNITS=1 builds units and no
 # Python syntax, as up to v1.7 (released as FlowCE-units.b84 since v1.8).
-FEATURE_DEFS = -DWITH_LAPLACE -DWITH_DESOLVE -DWITH_EQW -DWITH_PLOT
+FEATURE_DEFS = -DWITH_LAPLACE -DWITH_DESOLVE -DWITH_EQW
 ifeq ($(UNITS),1)
     FEATURE_DEFS += -DWITH_UNITS
 endif
 # The step-by-step build (FlowCE.b84 from 2.0): no Python syntax. DeltaCE: with units too (STEPS=1
 # UNITS=1: they fit together with CE toolchain v15, 2026-10-15)
+# DeltaCE (the steps build) draws its graphs on its own screen (src/focus_graph.cc: functions,
+# equations, parametric, polar, slope fields): KhiCAS's plot commands and graph viewer (WITH_PLOT,
+# 146 KB: cobweb, histograms, bar charts, point lists, geometry figures) are out (2026-10-17)
 ifeq ($(STEPS),1)
     FEATURE_DEFS += -DFLOWCE_STEPS
 else
-    FEATURE_DEFS += -DWITH_EDITOR # (DeltaCE, the steps build: no script editor, 17 KB, 2026-10-17)
+    FEATURE_DEFS += -DWITH_EDITOR -DWITH_PLOT # (DeltaCE, the steps build: no script editor, 17 KB, 2026-10-17)
 endif
 
 ifeq ($(APPLANG),fr)

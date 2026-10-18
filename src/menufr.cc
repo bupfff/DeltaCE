@@ -545,7 +545,9 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"arg(z)", nullptr, "Argument du complexe z.", "1+i", nullptr, CAT_CATEGORY_COMPLEXNUM},
   {"asc(string)", nullptr, "Liste des codes ASCII d'une chaine", "\"Bonjour\"", nullptr, CAT_CATEGORY_ARIT},
   {"assume(hyp)", nullptr, "Hypothese sur une variable.", "x>1", "x>-1 and x<1", CAT_CATEGORY_PROGCMD },
+#ifdef WITH_PLOT
   {"barplot(list)", nullptr, "Diagramme en batons d'une serie statistique 1d.", "[3/2,2,1,1/2,3,2,3/2]", nullptr, (CAT_CATEGORY_PLOT<<8)},
+#endif
   {"binomial(n,p,k)", nullptr, "binomial(n,p,k) probabilite de k succes avec n essais ou p est la proba de succes d'un essai.", "10,5,.4", nullptr, CAT_CATEGORY_REAL},
   {"bitxor", "bitxor", "Ou exclusif", "#bitxor(1,2)", nullptr, CAT_CATEGORY_PROGCMD},
   {"black", "black", "Option d'affichage", "#display=black", nullptr, CAT_CATEGORY_OPTIONS},
@@ -554,7 +556,9 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"cfactor(p)", nullptr, "Factorisation sur C.", "x^4-1", nullptr, CAT_CATEGORY_ALGEBRA | (CAT_CATEGORY_COMPLEXNUM << 8)},
   {"char(liste)", nullptr, "Chaine donnee par une liste de code ASCII", "[97,98,99]", nullptr, CAT_CATEGORY_ARIT},
   {"charpoly(M,x)", nullptr, "Polynome caracteristique de la matrice M en la variable x.", "[[1,2],[3,4]],x", nullptr, CAT_CATEGORY_MATRIX},
+#ifdef WITH_PLOT
   {"circle(centre,rayon)", nullptr, "Cercle donne par centre et rayon ou par un diametre", "2+i,3", "1-i,1+i", CAT_CATEGORY_PLOT},
+#endif
   {"coeff(p,x,n)", nullptr, "Coefficient de x^n dans le polynome p.", "(1+x)^6,x,3", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"comb(n,k)", nullptr, "Renvoie k parmi n.", "10,4", nullptr, CAT_CATEGORY_REAL},
   //{"cond(A,[1,2,inf])", 0, "Nombre de condition d'une matrice par rapport a la norme specifiee (par defaut 1)", "[[1,2],[3,4]]", 0, CAT_CATEGORY_MATRIX},
@@ -601,7 +605,9 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"gcd(a,b,...)", nullptr, "Plus grand commun diviseur. Voir iegcd ou egcd pour Bezout.", "23,13", "x^2-1,x^3-1", CAT_CATEGORY_ARIT | (CAT_CATEGORY_POLYNOMIAL << 8)},
   {"green", "green", "Option d'affichage", "#display=green", nullptr, CAT_CATEGORY_OPTIONS},
   {"halftan(expr)", nullptr, "Exprime cos, sin, tan avec tan(angle/2).","cos(x)", nullptr, CAT_CATEGORY_TRIG},
+#ifdef WITH_PLOT
   {"histogram(list,min,size)", nullptr, "Histogramme d'une liste de donneees, classes commencant a min de taille size.","ranv(100)/100.,0,0.1", nullptr, (CAT_CATEGORY_PLOT<<8)},
+#endif
   {"iabcuv(a,b,c)", nullptr, "Cherche 2 entiers u,v tels que a*u+b*v=c","23,13,15", nullptr, CAT_CATEGORY_ARIT},
   {"ichinrem([a,m],[b,n])", nullptr,"Restes chinois entiers de a mod m et b mod n.", "[3,13],[2,7]", nullptr, CAT_CATEGORY_ARIT},
   {"idivis(n)", nullptr, "Liste des diviseurs d'un entier n.", "10", nullptr, CAT_CATEGORY_ARIT},
@@ -622,7 +628,9 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"lcm(a,b,...)", nullptr, "Plus petit commun multiple.", "23,13", "x^3-1,x^2-1", CAT_CATEGORY_ARIT | (CAT_CATEGORY_POLYNOMIAL << 8)},
   {"lcoeff(p,x)", nullptr, "Coefficient dominant du polynome p.", "x^4-1", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"limit(f,x=a)", nullptr, "Limite de f en x = a. Ajouter 1 ou -1 pour une limite a droite ou a gauche, limit(sin(x)/x,x=0) ou limit(abs(x)/x,x=0,1).", "sin(x)/x,x=0", "exp(-1/x),x=0,1", CAT_CATEGORY_CALCULUS},
+#ifdef WITH_PLOT
   {"line(equation)", nullptr, "Droite donnee par une equation ou 2 points", "y=2x+1", "[1,1],[2,-1]", CAT_CATEGORY_PLOT },
+#endif
   {"linsolve([eq1,eq2,..],[x,y,..])", nullptr, "Resolution de systeme lineaire. Peut utiliser le resultat de lu pour resolution en O(n^2).","[x+y=1,x-y=2],[x,y]", "#p,l,u:=lu([[1,2],[3,4]]); linsolve(p,l,u,[5,6])", CAT_CATEGORY_SOLVE | (CAT_CATEGORY_LINALG <<8) | (CAT_CATEGORY_MATRIX << 16)},
   //{"lu(A)", 0, "decomposition LU de la matrice A, P*A=L*U, renvoie P permutation, L et U triangulaires inferieure et superieure", "[[1,2],[3,4]]", 0, CAT_CATEGORY_MATRIX},
   {"magenta", "magenta", "Option d'affichage", "#display=magenta", nullptr, CAT_CATEGORY_OPTIONS},
@@ -639,7 +647,7 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"odesolve(f(t,y),[t,y],[t0,y0],t1)", nullptr, "Solution approchee d'equation differentielle y'=f(t,y) et y(t0)=y0, valeur en t1 (ajouter curve pour les valeurs intermediaires de y)", "sin(t*y),[t,y],[0,1],2", "0..pi,(t,v)->{[-v[1],v[0]]},[0,1]", CAT_CATEGORY_SOLVE},
 #endif
   {"partfrac(p,x)", nullptr, "Decomposition en elements simples. Raccourci p=>+", "1/(x^4-1)", nullptr, CAT_CATEGORY_ALGEBRA},
-#ifdef WITH_PLOT
+#if defined WITH_PLOT || defined FLOWCE_STEPS
   {"plot(expr,x)", nullptr, "Graphe de fonction.", "ln(x),x=0..5", "1/x,x=1..5,xstep=1", CAT_CATEGORY_PLOT},
   //{"plotarea(expr,x=a..b,[n,meth])", 0, "Aire sous la courbe selon une methode d'integration.", "1/x,x=1..3,2,trapeze", 0, CAT_CATEGORY_PLOT},
   {"plotfield(f(t,y), [t=tmin..tmax,y=ymin..ymax])", nullptr, "Champ des tangentes de y'=f(t,y), optionnellement graphe avec arg. optionnel plotode=[t0,y0]", "sin(t*y), [t=-3..3,y=-3..3]", "5*[-y,x], [x=-1..1,y=-1..1]", CAT_CATEGORY_PLOT},
@@ -648,9 +656,13 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"plotpolar(r,theta)", nullptr, "Graphe en polaire.","cos(3*x),x,0,pi", "1/(1+cos(x)),x=0..pi,xstep=0.05", CAT_CATEGORY_PLOT},
   //{"plotcontour(expr,[x=xm..xM,y=ym..yM],niveaux)", 0, "Lignes de niveau de expr.", "x^2+2y^2, [x=-2..2,y=-2..2],[1,2]", 0, CAT_CATEGORY_PLOT},
   //{"plotlist(list)", 0, "Graphe d'une liste", "[3/2,2,1,1/2,3,2,3/2]", "[1,13],[2,10],[3,15],[4,16]", CAT_CATEGORY_PLOT},
+#ifdef WITH_PLOT
   {"plotseq(f(x),x=[u0,m,M],n)", nullptr, "Trace f(x) sur [m,M] et n termes de la suite recurrente u_{n+1}=f(u_n) de 1er terme u0.","sqrt(2+x),x=[6,0,7],5", nullptr, CAT_CATEGORY_PLOT},
 #endif
+#endif
+#ifdef WITH_PLOT
   {"point(x,y)", nullptr, "Point", "1,2", "1+2i", CAT_CATEGORY_PLOT },
+#endif
   // {"pour (boucle Xcas)", "pour  de  jusque  faire  fpour;", "Boucle definie.","#pour j de 1 jusque 10 faire print(j,j^2); fpour;", 0, CAT_CATEGORY_PROG},
   {"powmod(a,n,p[,P,x])", nullptr, "Renvoie a^n mod p, ou a^n mod un entier p et un polynome P en x.","123,456,789", "x+1,452,19,x^4+x+1,x", CAT_CATEGORY_ARIT},
   {"print(expr)", nullptr, "Afficher dans la console", nullptr, nullptr, CAT_CATEGORY_PROG},
@@ -872,14 +884,18 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"atan(x)", nullptr, "Inverse tangent arctan(x), between -pi/2 and pi/2.", "1", nullptr, CAT_CATEGORY_TRIG},
   {"axes", "axes", "Axes visible or not axes=1 or 0", "#axes=0", nullptr, CAT_CATEGORY_PROGCMD << 8},
   //{"binomial(n,p,k)", 0, "binomial(n,p,k) probability to get k success with n trials where p is the probability of success of 1 trial. binomial_cdf(n,p,k) is the probability to get at most k successes. binomial_icdf(n,p,t) returns the smallest k such that binomial_cdf(n,p,k)>=t", "10,.5,4", 0, CAT_CATEGORY_PROBA},
+#ifdef WITH_PLOT
   {"barplot(list)", nullptr, "Bar plot of 1-d statistic series data in list.", "[3/2,2,1,1/2,3,2,3/2]", nullptr, CAT_CATEGORY_PLOT},
+#endif
   {"black", "black", "Display option", "#display=black", nullptr, CAT_CATEGORY_OPTIONS},
   {"blue", "blue", "Display option", "#display=blue", nullptr, CAT_CATEGORY_OPTIONS},
   {"ceil(x)", nullptr, "Smallest integer not less than x", "1.2", nullptr, CAT_CATEGORY_REAL},
   {"cfactor(p)", nullptr, "Factorization over C.", "x^4-1", nullptr, CAT_CATEGORY_ALGEBRA | (CAT_CATEGORY_COMPLEXNUM << 8)},
   {"char(list)", nullptr, "Converts a list of ASCII codes to a string.", "[97,98,99]", nullptr, CAT_CATEGORY_ARIT},
   {"charpoly(M,x)", nullptr, "Characteristic polynomial of matrix M in variable x.", "[[1,2],[3,4]],x", nullptr, CAT_CATEGORY_MATRIX},
+#ifdef WITH_PLOT
   {"circle(center,radius)", nullptr, "Circle", "2+i,3", "1-i,1+i", CAT_CATEGORY_PLOT },
+#endif
   {"clearscreen()", "clearscreen()", "Clear screen.", nullptr, nullptr, CAT_CATEGORY_PROGCMD},
   {"coeff(p,x,n)", nullptr, "Coefficient of x^n in polynomial p.", nullptr, nullptr, CAT_CATEGORY_POLYNOMIAL},
   //{"comb(n,k)", 0, "Returns nCk", "10,4", 0, CAT_CATEGORY_PROBA},
@@ -930,7 +946,9 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"gcd(a,b,...)", nullptr, "Greatest common divisor. See also iegcd and egcd for extended GCD.", "23,13", "x^2-1,x^3-1", CAT_CATEGORY_ARIT | (CAT_CATEGORY_POLYNOMIAL << 8)},
   {"green", "green", "Display option", "#display=green", nullptr, CAT_CATEGORY_OPTIONS},
   {"halftan(expr)", nullptr, "Convert cos, sin, tan with tan(angle/2).","cos(x)", nullptr, CAT_CATEGORY_TRIG},
+#ifdef WITH_PLOT
   {"histogram(list,min,size)", nullptr, "Histogram of data in list, classes begin at min of size size.","ranv(100)/100.,0,0.1", nullptr, CAT_CATEGORY_PLOT},
+#endif
   {"iabcuv(a,b,c)", nullptr, "Find 2 integers u,v such that a*u+b*v=c","23,13,15", nullptr, CAT_CATEGORY_ARIT},
   {"ichinrem([a,m],[b,n])", nullptr,"Integer chinese remainder of a mod m and b mod n.", "[3,13],[2,7]", nullptr, CAT_CATEGORY_ARIT},
    {"idivis(n)", nullptr, "Returns the list of divisors of an integer n.", "10", nullptr, CAT_CATEGORY_ARIT},
@@ -955,7 +973,9 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   //{"legendre(n)", 0, "n-the Legendre polynomial.", "10", "10,t", CAT_CATEGORY_POLYNOMIAL},
   {"len(l)", nullptr, "Size of a list.", "[3/2,2,1,1/2,3,2,3/2]", nullptr, CAT_CATEGORY_LIST},
   {"limit(f,x=a)", nullptr, "Limit of f at x = a. Add 1 or -1 for unidirectional limits, e.g. limit(sin(x)/x,x=0) or limit(abs(x)/x,x=0,1).", "sin(x)/x,x=0", "exp(-1/x),x=0,1", CAT_CATEGORY_CALCULUS},
+#ifdef WITH_PLOT
   {"line(equation)", nullptr, "Line of equation or from 2 points", "y=2x+1", "[1,2],[3,1]", CAT_CATEGORY_PLOT},
+#endif
   {"linsolve([eq1,eq2,..],[x,y,..])", nullptr, "Linear system solving. May use the output of lu for O(n^2) solving (see example 2).","[x+y=1,x-y=2],[x,y]", "#p,l,u:=lu([[1,2],[3,4]]); linsolve(p,l,u,[5,6])", CAT_CATEGORY_SOLVE | (CAT_CATEGORY_LINALG <<8) | (CAT_CATEGORY_MATRIX << 16)},
   {"ln(x)", nullptr, "Natural logarithm (base e).", "e^2", nullptr, CAT_CATEGORY_REAL},
   {"log(x,[b])", nullptr, "Logarithm in base 10, or in base b: log(8,2) is 3.", "100", "8,2", CAT_CATEGORY_REAL},
@@ -972,18 +992,16 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"odesolve(f(t,y),[t,y],[t0,y0],t1)", nullptr, "Approx. solution of differential equation y'=f(t,y) and y(t0)=y0, value for t=t1 (add curve to get intermediate values of y)", "sin(t*y),[t,y],[0,1],2", "0..pi,(t,v)->{[-v[1],v[0]]},[0,1]", CAT_CATEGORY_SOLVE},
 #endif
   {"partfrac(p,x)", nullptr, "Partial fraction expansion. Shortcut p=>+", "1/(x^4-1)", nullptr, CAT_CATEGORY_ALGEBRA},
-#ifdef WITH_PLOT
-  {"plot(expr,x)", nullptr, "Plot an expression. For example plot(sin(x)), plot(ln(x),x.0,5)", "ln(x),x,0,5", "1/x,x=1..5,xstep=1", CAT_CATEGORY_PLOT},
-  //{"plotarea(expr,x=a..b,[n,meth])", 0, "Area under curve with specified quadrature.", "1/x,x=1..3,2,trapezoid", 0, CAT_CATEGORY_PLOT},
-  //{"plotcontour(expr,[x=xm..xM,y=ym..yM],levels)", 0, "Levels of expr.", "x^2+2y^2,[x=-2..2,y=-2..2],[1,2]", 0, CAT_CATEGORY_PLOT},
-  {"plotfield(f(t,y),[t=tmin..tmax,y=ymin..ymax])", nullptr, "Plot field of differential equation y'=f(t,y), and optionally one solution by adding plotode=[t0,y0]", "sin(t*y),[t=-3..3,y=-3..3],plotode=[0,1]", nullptr, CAT_CATEGORY_PLOT},
-  //{"plotlist(list)", 0, "Plot a list", "[3/2,2,1,1/2,3,2,3/2]", 0, CAT_CATEGORY_PLOT},
-  {"plotode(f(t,y),[t=tmin..tmax,y],[t0,y0])", nullptr, "Plot solution of differential equation y'=f(t,y), y(t0)=y0.", "sin(t*y),[t=-3..3,y],[0,1]", nullptr, CAT_CATEGORY_PLOT},
-  {"plotparam([x,y],t)", nullptr, "Parametric plot. For example plotparam([sin(3t),cos(2t)],t,0,pi) or plotparam(exp(i*t),t,0,pi)", "[cos(3t),sin(2t)],t,0,2*pi", "[t^2,t^3],t=-1..1,tstep=0.1", CAT_CATEGORY_PLOT},
-  {"plotpolar(r,theta)", nullptr, "Polar plot.","cos(3*x),x,0,pi", "1/(1+cos(x)),x=0..pi,xstep=0.05", CAT_CATEGORY_PLOT},
-  {"plotseq(f(x),x=[u0,m,M],n)", nullptr, "Plot f(x) on [m,M] and n terms of the sequence defined by u_{n+1}=f(u_n) and u0.","sqrt(2+x),x=[6,0,7],5", nullptr, CAT_CATEGORY_PLOT},
+#if defined WITH_PLOT || defined FLOWCE_STEPS // (DeltaCE: its graph screen draws these)
+  {"plot(expr,x)", nullptr, "Graph of y = f(x), a list of up to 4, or equations in x and y", "ln(x),x,0,5", "[x^2+y^2=25,y=x+1]", CAT_CATEGORY_PLOT},
+  {"plotfield(f(x,y))", nullptr, "Slope field of y' = f(x,y); F3 points: solutions through points", "x-y", "-x/y,[x=-3..3,y=-3..3]", CAT_CATEGORY_PLOT},
+  {"plotode(f(x,y),[x0,y0])", nullptr, "Slope field of y' = f(x,y) and the solution through (x0,y0)", "x*y,[0,1]", "y-x,[x=-4..4,y],[0,1]", CAT_CATEGORY_PLOT},
+  {"plotparam([x,y],t)", nullptr, "Parametric x(t), y(t), t from 0 to 2pi; or add a,b: t from a to b", "[cos(3t),sin(2t)],t", "[t^2,t^3],t,-2,2", CAT_CATEGORY_PLOT},
+  {"plotpolar(r,theta)", nullptr, "Polar r(theta), theta from 0 to 2pi; or add a,b: theta from a to b","1+cos(theta),theta", "sin(4*theta),theta,0,pi", CAT_CATEGORY_PLOT},
 #endif
+#ifdef WITH_PLOT
   {"point(x,y)", nullptr, "Point", "1,2", "1+2i", CAT_CATEGORY_PLOT },
+#endif
   {"powmod(a,n,p)", nullptr, "Returns a^n mod p.","123,456,789", nullptr, CAT_CATEGORY_ARIT},
   {"print(expr)", nullptr, "Print expr in console", nullptr, nullptr, CAT_CATEGORY_PROG},
   {"proot(p)", nullptr, "Returns real and complex roots of polynomial p. Example proot([1,2.1,3,4.2]) or proot(x^3+2.1*x^2+3x+4.2)", "x^3+2.1*x^2+3x+4.2", nullptr, CAT_CATEGORY_POLYNOMIAL},
@@ -1072,9 +1090,9 @@ std::string insert_string(int index){
 int showCatalog(char* insertText,int preselect,int menupos) {
   // returns 0 on failure (user exit) and 1 on success (user chose a option)
 #ifdef WITH_UNITS
-#ifdef WITH_PLOT
+#if defined WITH_PLOT || defined FLOWCE_STEPS
   MenuItem menuitems[CAT_CATEGORY_PLOT+1];
-  menuitems[CAT_CATEGORY_PLOT].text = (char*)((lang==1)?"Courbes, points":"Curves, points");
+  menuitems[CAT_CATEGORY_PLOT].text = (char*)((lang==1)?"Courbes, points":"Graphs");
 #else
   MenuItem menuitems[CAT_CATEGORY_UNIT+1];
 #endif

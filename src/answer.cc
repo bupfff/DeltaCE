@@ -799,6 +799,23 @@ static __attribute__((noinline)) giac::gen combine_numbers(const giac::gen & s){
     rest.push_back(c);
   return rest.empty()?gen(0):rest.size()==1?rest.front():sym1(at_plus,gen(rest,_SEQ__VECT));
 }
+// a power of a sum to an exponent of 8 or more in g ((asin(5x)+atan(4-x))^26): ratnormal expands it
+// into hundreds of terms, bigger than g in the end (the calculator ran out of memory and quit)
+static bool big_power(const giac::gen & g){
+  using namespace giac;
+  if (g.type==_VECT){
+    for (unsigned i=0;i<g._VECTptr->size();++i)
+      if (big_power((*g._VECTptr)[i]))
+        return true;
+    return false;
+  }
+  if (g.type!=_SYMB)
+    return false;
+  const gen & f=g._SYMBptr->feuille;
+  if (g._SYMBptr->sommet==at_pow && f.type==_VECT && f._VECTptr->size()==2 && f[1].type==_INT_ && (f[1].val>=8 || f[1].val<=-8) && f[0].is_symb_of_sommet(at_plus))
+    return true;
+  return big_power(f);
+}
 static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
   using namespace giac;
   if ((g.type!=_SYMB && g.type!=_VECT) || is_undef(g) || taille(g,100)>=100)
@@ -814,14 +831,18 @@ static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
   const gen kf=keep_factored(g);
   if (!is_undef(kf))
     return kf;
+  if (big_power(g))
+    return g;
   // giac's simplify took 5.8 s of the 6.4 s of d/dx sin(x)/x (on any small trig answer): trig
   // answers now get ratnormal and the cheap sin^2+cos^2=1 rewrite below
   const bool trig=false;
+  focus_phase=100; // (the phases of these steps, for tools/emu: 100-106 here, 110-111 in answer_after)
   gen s=combine_numbers(ratnormal(g,contextptr));
   trace_step("ratnormal",s);
   if (!trig && g.type==_SYMB && radicals(s)>=0){ // factored denominator: 1/(x+1)^2, not 1/(x^2+2x+1)
+    focus_phase=101;
     gen d=_denom(s,contextptr);
-    if (d.type==_SYMB){
+    if (d.type==_SYMB){ // (not sqrfree: giac's drops a factor without the main variable, x*ln(x)^2 was x)
       gen n=_numer(s,contextptr),f=_factor(d,contextptr);
       if (!is_undef(f) && f.type!=_STRNG)
         s=is_one(n)?symb_inv(f):symb_prod(n,symb_inv(f));
@@ -839,8 +860,10 @@ static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
       if (!(ids[k]==cst_pi))
         var=true;
     if (var){
+      focus_phase=102;
       const gen sc=_tan2sincos(g,contextptr);
       for (int k=0;k<3;++k){ // (k=2 trig combined: cos(2x) for the derivative of sin(x)cos(x))
+        focus_phase=103+k;
         const gen t=k==2?_tlin(g,contextptr):ratnormal(k?_trigcos(sc,contextptr):_trigsin(sc,contextptr),contextptr);
         if (!is_undef(t) && t.type!=_STRNG && taille(t,1000)<taille(s,1000))
           s=t;
@@ -848,6 +871,7 @@ static __attribute__((noinline)) giac::gen auto_simplify(const giac::gen & g){
     }
   }
   if (!trig && xcas::has_radical(s) && !lidnt(s).empty()){ // a trig substitution: normal gives
+    focus_phase=106;
     const gen n=safe_normal(s);                           // -sqrt(4-x^2)/(4*x) for
     if (!is_undef(n) && n.type!=_STRNG && taille(n,1000)<taille(s,1000)) // (x^2+2*sqrt(4-x^2)-4)/(4*(sqrt(4-x^2)-2)*x)
       s=n;
@@ -3668,10 +3692,12 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
     }
   }
   if (a.autosimp && !a.tabled && g.type==_SYMB && taille(g,200)<200){
+    focus_phase=110;
     g=textbook_powers(normal_args(g));
     trace_step("normal_args",g);
   }
   if (a.ivar.type==_IDNT && !a.tabled){
+    focus_phase=111;
     g=drop_constants(map_nodes(g,ln_conjugate,a.ivar),a.ivar);
     if (contains(g,at_exp) && top_sum(_numer(g,contextptr))){ // e^x(sin(x)+cos(x))/2, not
       const gen fg=form_op(FORM_FACT,g);                       // (e^x*cos(x)+e^x*sin(x))/2

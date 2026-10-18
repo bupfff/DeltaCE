@@ -9,7 +9,7 @@ extern "C" {
 #endif
 #define focus_on 1 // the console is drawn by focus.cc (a constant: the classic screen's paths compile away)
 // DeltaCE, a fork of FlowCE: its own version, in the status bar and on the start screen
-#define DELTACE_VERSION "1.6"
+#define DELTACE_VERSION "1.7"
 #ifdef FLOWCE_STEPS
 #define FLOWCE_VERSION "2.0b1" // the step-by-step build, in beta (the FlowCE release DeltaCE is based on)
 #else
@@ -65,7 +65,7 @@ void focus_bar_editor(const char * const * labels, int keyflag); // the program 
 void focus_tab_open(int i, const char * label); // tab i drawn open (bright) while its menu's card is shown
 void focus_tab_open_box(int i);           // (DeltaCE) tab i's open shape, joined to the card above
 int focus_card_list(int col, const char * word, const char * const * maths, const char * const * labels, const char * const * hints, int n, int sel);
-int focus_graph_input(const char * in); // (DeltaCE) plot(f), plot([f,g]): the graph screen (focus_graph.cc); 0: not such a plot
+int focus_graph_input(const char * in); // (DeltaCE) plot, plotparam, plotpolar, plotfield, plotode: the graph screen (focus_graph.cc); 0: not a plot, -1: one it cannot draw
 void focus_tab(int i, int on, int bank); // the standard layer's tab of F-key i (on: its menu is open)
 void focus_bar_tabs(const char * const * labels, int on); // the F-key bar as 5 text tabs, tab on selected
 enum { IC_X2, IC_INT, IC_WAVE, IC_PI, IC_FORMS, IC_MORE, IC_SEARCH };
