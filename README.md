@@ -1,4 +1,4 @@
-<h1 align="center">ΔDeltaCE</h1>
+<h1 align="center">DeltaCE</h1>
 
 <p align="center">
   <b>The calculus of change, shown step by step, on your TI-84 Plus CE.</b><br>
