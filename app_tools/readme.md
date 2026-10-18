@@ -8,3 +8,10 @@ project's makefile with path to the `makefile` file in this repository.
 and therefore cannot be sent to an unmodified calculator.
         
 make_segments.py can be used to generate a list of appvars named AppIns*, that can be concatenated to an app located at the end of user archive with the INST program.
+**INST.8xp (DeltaCE).** The INST program here is patched for newer boot code (OS 5.8.4): to
+write the app, INST searches the boot code for its flash-write routine by a byte pattern, and the
+original searched for an older form of it, so on newer calculators it stopped with "Unknown OS
+version" although the OS was fine. The patched INST finds the newer form and checks it before
+using it. Tested on OS 5.8.4.0058 (calculator and emulator: 41- to 44-piece builds). DeltaCE's
+bundle ships this INST; the web installer (site/installer.js) patches it further as it sends it
+(no prompts, and the calculator resets by itself).

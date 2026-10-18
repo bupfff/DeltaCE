@@ -2,17 +2,19 @@
 """The install, recorded in the emulator as captioned GIFs for the README: what the calculator
 shows at each step and which keys to press. The same key presses as install.py, from a fresh ROM.
 
-usage (WSL): installgif.py <outdir> [variant=en]
+usage: installgif.py <outdir> <DeltaCE.b84>   (the bundle's arTIfiCE, INST and pieces are sent)
 Writes install_1_reset.gif, install_3_run.gif, install_5_start.gif (and the frames).
 """
-import glob
 import os
 import sys
+import tempfile
+import zipfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cemu import Emu, KB, ROM
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+FONTS = ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf']
+FONT = next((f for f in FONTS if os.path.exists(f)), FONTS[0])  # (Linux, macOS)
 BAR = 64  # caption bar height (2x screenshots: 640x480)
 
 
@@ -48,10 +50,14 @@ def press(e, key, ms=600):
 
 
 def main():
-    out = sys.argv[1]
-    variant = sys.argv[2] if len(sys.argv) > 2 else 'en'
+    out, b84 = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
-    apps = sorted(glob.glob(f'{KB}/out/{variant}/AppIns*.8xv'))
+    tmp = tempfile.mkdtemp()
+    with zipfile.ZipFile(b84) as z:
+        names = [n for n in z.namelist() if n.lower().endswith(('.8xp', '.8xv'))]
+        z.extractall(tmp, names)
+    progs = sorted(os.path.join(tmp, n) for n in names if n.lower().endswith('.8xp'))
+    apps = sorted(os.path.join(tmp, n) for n in names if n.lower().startswith('appins'))
     e = Emu(rom=ROM, shotdir=out)
     r = Rec(e, out)
     try:
@@ -65,10 +71,10 @@ def main():
         press(e, '2', 3000); r.frame(800, '2: Reset')
         e.run(3000); r.frame(2200, 'Memory cleared')
         r.save('install_1_reset.gif')
-        # step 2 (on the computer): send FlowCE.b84
+        # step 2 (on the computer): send DeltaCE.b84
         e.key('clear'); e.run(500)
-        e.send(f'{KB}/emu/arTIfiCE.8xp', 'ram')
-        e.send(f'{KB}/src/app_tools/INST.8xp', 'ram')
+        for p in progs:  # arTIfiCE and INST
+            e.send(p, 'ram')
         for a in apps:
             e.send(a, 'archive')
         e.run(500)
@@ -87,17 +93,17 @@ def main():
         e.run(3000); r.frame(3000, 'Success! Press enter')
         # (enter resets the calculator on real hardware; it can freeze instead, as it does in the
         # emulator: then the reset button on the back. The GIF shows that reset.)
-        e.reset(); e.run(6000); r.frame(2600, 'Reset done: FlowCE is installed')
+        e.reset(); e.run(6000); r.frame(2600, 'Reset done: DeltaCE is installed')
         r.save('install_3_run.gif')
-        # step 5: start FlowCE
+        # step 5: start DeltaCE
         e.key('clear'); e.run(600)
-        r.frame(1200, 'Step 5: start FlowCE')
+        r.frame(1200, 'Step 5: start DeltaCE')
         press(e, 'clear'); press(e, 'apps', 1000); r.frame(1600, 'apps')
         e.cmd('key 2 80'); e.ms += 80
         for _ in range(14):
             e.run(100)
-            r.frame(100, '2: FlowCE')
-        e.run(1500); r.frame(2500, 'FlowCE is ready')
+            r.frame(100, '2: DeltaCE')
+        e.run(1500); r.frame(2500, 'DeltaCE is ready')
         r.save('install_5_start.gif')
     finally:
         e.close()

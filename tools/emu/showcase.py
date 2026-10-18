@@ -27,7 +27,7 @@ SCENES = {
     'menu_2nd':       [('k', '{2nd,yequ}{right}{right}')],
     'search':         [('k', '{graph}2'), ('w', 1500), ('k', 'int')],
     'graph':          [('k', 'x{sq}-2{graph}1'), ('w', 6000)],
-    'graph_sin_trace': [('k', 'sin(x{graph}1'), ('w', 6000), ('k', '{right}{right}{right}{right}{right}{right}{right}{right}')],
+    'graph_sin_trace': [('k', 'sin(x{graph}1'), ('w', 6000), ('k', '{yequ}'), ('w', 1000), ('k', '{right}{right}{right}{right}{right}{right}{right}{right}')],
     'forms':          [('p', '(x+1)^3'), ('k', '{trace}')],
     'night':          [('night',), ('p', 'integrate(1/(x^2+4),x,0,2)')],
     'night_graph':    [('night',), ('k', 'sin(x)*e^(-x/5){graph}1'), ('w', 7000)],
@@ -36,7 +36,7 @@ SCENES = {
     'sec':            [('p', 'integrate(sec(x)^3,x)')],
     'arclength':      [('p', 'integrate(sqrt(1+(3/2*sqrt(x))^2),x,0,4)')],
     'ivp':            [('p', "desolve([y''+4y=0,y(0)=1,y'(0)=0],y)")],
-    'table':          [('k', 'x{sq}-2{graph}1'), ('w', 6000), ('k', '{2nd,graph}'), ('w', 2000)],
+    'table':          [('k', 'x{sq}-2{graph}1'), ('w', 6000), ('k', '{trace}'), ('w', 3000)],
     'root':           [('k', 'x{sq}-2{graph}1'), ('w', 6000), ('k', '{window}{enter}{down}{down}{down}{enter}'), ('w', 4000)],
     'trigsub':        [('p', 'integrate(1/(x^2*sqrt(4-x^2)),x)')],
     'power_series':   [('p', 'sum(x^n/n,n,1,inf)')],
@@ -55,6 +55,17 @@ SCENES = {
     'steps_hint':     [('p', 'integrate(x*e^x,x)')],
     'steps_parts_end': [('p', 'integrate(x*sin(x),x)'), ('k', '{enter}'), ('w', 8000), ('k', '{down}{down}{down}'), ('w', 1500)],
     'steps_subst':    [('p', 'integrate(2x*cos(x^2),x)'), ('k', '{enter}'), ('w', 8000)],
+    # DeltaCE: the action row, algebra steps, the analysis, units, the graph screen's kinds
+    'action_row':     [('p', 'expand((x+1)*(x-2)*(x+3))'), ('k', '{right}')],
+    'steps_quadratic': [('p', 'solve(2x^2-3x-5=0,x)'), ('k', '{enter}'), ('w', 6000)],
+    'steps_factor':   [('p', 'factor(x^3+2x^2-5x-6)'), ('k', '{enter}'), ('w', 6000)],
+    'analyze':        [('p', 'analyze((x^2-1)/(x-2))'), ('w', 8000)],
+    'units':          [('p', '60_mph=>_km/_h')],
+    'graph_points':   [('p', 'plot(x^3-3x)'), ('w', 5000), ('k', '{zoom}'), ('w', 1500), ('k', '4'), ('w', 5000)],
+    'graph_conic':    [('p', 'plot([x^2/9+y^2/4=1,y=x-1])'), ('w', 6000)],
+    'graph_param':    [('p', 'plotparam([cos(3t),sin(2t)],t)'), ('w', 5000)],
+    'graph_polar':    [('p', 'plotpolar(1+2cos(theta),theta)'), ('w', 5000)],
+    'graph_field':    [('p', 'plotode(x-y,[0,1])'), ('w', 6000)],
 }
 
 

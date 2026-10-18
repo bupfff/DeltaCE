@@ -1,7 +1,7 @@
-// The FlowCE web installer: checks the calculator, erases it (after the user agrees), sends the
-// version picked (files/FlowCE.b84, or files/FlowCE-steps.b84 for the steps build) over WebUSB
-// and opens its installer, which then needs one key press on the calculator. Steps and texts:
-// index.html.
+// The DeltaCE web installer (FlowCE's): checks the calculator, erases it (after the user agrees),
+// sends files/DeltaCE.b84 over WebUSB and opens its installer, which then needs one key press on
+// the calculator. Steps and texts: index.html. (FlowCE's page offered two versions, picked with
+// radios: the code still takes a list of them; DeltaCE has one.)
 import { Calculator, KEY, LinkError, TI_CE, readBundle, readTIFile } from './dusb.js';
 
 const $ = id => document.getElementById(id);
@@ -15,8 +15,7 @@ const WINDOWS = /Windows/i.test(navigator.userAgentData ? navigator.userAgentDat
 
 // The versions the page installs, with their version texts (site/build.sh puts them in files/)
 const BUILDS = {
-  normal: { file: 'FlowCE.b84', ver: 'version.txt', name: 'FlowCE' },
-  steps: { file: 'FlowCE-steps.b84', ver: 'version-steps.txt', name: 'FlowCE Steps' },
+  normal: { file: 'DeltaCE.b84', ver: 'version.txt', name: 'DeltaCE' },
 };
 const versions = {};      // their version texts once read ('' if the site doesn't have it)
 let build = 'normal';     // the version picked
@@ -102,7 +101,7 @@ function friendly(e) {
   if (e && e.code === 'timeout')
     return 'The calculator stopped answering. Make sure it is on the home screen, unplug it and plug it back in, then press Connect calculator again.';
   if (e && e.code === 'calc')
-    return 'The calculator refused a file. Usually part of FlowCE is already on it: erase it, then try again.';
+    return 'The calculator refused a file. Usually part of DeltaCE is already on it: erase it, then try again.';
   if (e && e.code === 'short')
     return 'The calculator still doesn\'t have enough free memory: some apps stay after the erase (on some calculators, ' +
       'TI\'s language apps). Delete them in TI Connect CE (select them in the calculator\'s file list, then Delete), or on ' +
@@ -136,7 +135,7 @@ async function loadBundle() {
   list.sort((a, b) => (a.name.startsWith('AppIns') - b.name.startsWith('AppIns')) || a.name.localeCompare(b.name));
   const inst = list.find(v => v.name === 'INST');
   if (list.filter(v => v.name.startsWith('AppIns')).length < 2 || !inst)
-    throw new Error('the FlowCE download is incomplete');
+    throw new Error('the DeltaCE download is incomplete');
   const patched = patchInst(inst.data);
   if (patched) inst.data = patched;
   autoInst = !!patched;
@@ -195,14 +194,14 @@ async function check(c = calc) {
     blocked = true;
     lines.push(`<span class="bad">OS ${info.osText} isn't supported yet.</span> The installer uses arTIfiCE v2.1, which works up to OS 5.8.4.`);
   } else if (info.os && cmp(info.os, OS_MIN) < 0) {
-    lines.push(`OS ${info.osText} is older than the versions FlowCE was tested on (5.3 to 5.8.4); it may not work.`);
+    lines.push(`OS ${info.osText} is older than the versions DeltaCE was tested on (5.3 to 5.8.4); it may not work.`);
   }
   // only the free archive decides (the RAM figure a real calculator reports is not its free RAM:
   // it read as too little even right after a full reset, and the page erased again and again)
-  console.info('FlowCE: calculator', info);
+  console.info('DeltaCE: calculator', info);
   const needErase = info.freeFlash !== null && info.freeFlash < need;
   if (info.freeFlash !== null)
-    lines.push(`Free memory: ${MB(info.freeFlash)}` + (needErase ? `; FlowCE needs ${MB(need)}, so the calculator's archive will be erased.` : ' (enough for FlowCE).'));
+    lines.push(`Free memory: ${MB(info.freeFlash)}` + (needErase ? `; DeltaCE needs ${MB(need)}, so the calculator's archive will be erased.` : ' (enough for DeltaCE).'));
   state = { blocked, needErase };
   say('st-connect', (blocked ? '' : '<span class="ok">Connected.</span>') + `<ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>`);
   if (!blocked) {
@@ -273,7 +272,7 @@ async function erase(c) {
     await c.ping(180000); // answered once the erase is done (a timer for the slowest calculator)
     return c;
   } catch (e) {
-    console.warn('FlowCE: the calculator left after the erase:', e);
+    console.warn('DeltaCE: the calculator left after the erase:', e);
     await c.close(); // cancels what is still waiting
     if (calc === c) calc = null;
     return null;
@@ -303,7 +302,7 @@ async function sendAll(c) {
   $('progress').hidden = false;
   for (let i = 0; i < vars.length; i++) {
     const v = vars[i];
-    say('st-install', `Sending FlowCE: ${v.name} (${i + 1} of ${vars.length})…`);
+    say('st-install', `Sending DeltaCE: ${v.name} (${i + 1} of ${vars.length})…`);
     await c.sendVar(v, n => {
       $('bar').style.width = (100 * (done + n) / total).toFixed(1) + '%';
     });
@@ -320,7 +319,7 @@ async function proceed(c) {
     await c.pressKey(k);
     await sleep(700);
   }
-  say('st-install', '<span class="ok">FlowCE is on the calculator.</span>');
+  say('st-install', '<span class="ok">DeltaCE is on the calculator.</span>');
   mark('install', 'done');
   mark('finish', 'active');
   waitingReset = true;
@@ -328,7 +327,7 @@ async function proceed(c) {
   // could replace the reset INST leaves for the OS. So nothing more is sent.
   say('st-finish', autoInst
     ? '<strong>Press <kbd>enter</kbd> on the calculator</strong> (the arTIfiCE shell shows INST). That\'s the only key: ' +
-      `it installs FlowCE, counting down from ${countdown()} to 0, and restarts by itself (<em>"RAM Cleared"</em>). Don't touch it meanwhile.`
+      `it installs DeltaCE, counting down from ${countdown()} to 0, and restarts by itself (<em>"RAM Cleared"</em>). Don't touch it meanwhile.`
     : `On the calculator, press <kbd>enter</kbd> to start INST, then <kbd>enter</kbd> again to install. It counts down from ${countdown()} to 0. ` +
       'At <em>"Success! Will now reset"</em>, press <kbd>enter</kbd>, then <kbd>mode</kbd>.');
 }
@@ -419,7 +418,7 @@ function finished() {
   waitingReset = false;
   mark('finish', 'done');
   $('btn-connect').disabled = busy;
-  say('st-finish', '<span class="ok">The calculator restarted.</span> When it shows <em>"RAM Cleared"</em>, FlowCE is installed: press <kbd>apps</kbd> → <strong>FlowCE</strong>.');
+  say('st-finish', '<span class="ok">The calculator restarted.</span> When it shows <em>"RAM Cleared"</em>, DeltaCE is installed: press <kbd>apps</kbd> → <strong>DeltaCE</strong>.');
 }
 
 function init() {

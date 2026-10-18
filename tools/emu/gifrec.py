@@ -5,7 +5,7 @@ animated GIF (2x, lossless: the interface uses fewer than 256 colors).
 usage (WSL): gifrec.py <state> <outdir> [movie ...]     (no names: all of them)
 
 A movie is a list of steps:
-  ('intro', ms)      quit to the OS, start FlowCE again from APPS: the start animation, a frame
+  ('intro', ms)      quit to the OS, start the app again from APPS: the start animation, a frame
                      every 100 ms for ms
   ('night',)         the Night theme (more menu, item 3), not recorded
   ('k', keys, hold[, ms])  type keys one at a time ({name} groups are one key), a frame after
@@ -27,18 +27,22 @@ INTEGRAL = [('k', '{window}', 450), ('k', '2', 350), ('k', 'x{sq}+1', 300), ('k'
             ('k', '{enter}', 1800)]
 SERIES = [('p', 'sum(1/n^2,n,1,inf)', 1800)]
 FORMS = [('p', '(x+1)^3', 1300), ('k', '{trace}', 1700), ('w', 2500)]
-GRAPH = [('k', 'sin(x)*e^(-x/5)', 250), ('k', '{graph}1', 0), ('w', 6000), ('f', 900),
+GRAPH = [('k', 'sin(x)*e^(-x/5)', 250), ('k', '{graph}1', 0), ('w', 6000), ('f', 900), ('k', '{yequ}', 600),
          ('k', '{right}' * 20, 1600, 90)]
+# DeltaCE: the action row under an answer: right arrow to Graph, enter, then the key points (F3, 4:
+# their labels)
+ACTIONS = [('p', 'x^3-3x', 1300), ('k', '{right}{right}{right}', 900, 450), ('k', '{enter}', 0), ('w', 5000),
+           ('f', 1000), ('k', '{zoom}', 900), ('k', '4', 0), ('w', 4000), ('f', 2600)]
 
-# the steps build (en-steps): an antiderivative from the calculus menu, enter, then enter again
-# for its steps, read down to the answer
+# the steps: an antiderivative from the calculus menu, enter, then enter again for its steps, read
+# down to the answer
 STEPS = [('k', '{window}', 450), ('k', '1', 350), ('k', 'x{sin}x', 300), ('k', '{enter}', 1900),
          ('k', '{enter}', 1700), ('k', '{down}' * 3, 2600, 1000)]
 
 MOVIES = {
-    'flowce_light': [('intro', 1400)] + INTEGRAL + SERIES + FORMS + GRAPH,
-    'flowce_dark': [('night',), ('intro', 1400)] + INTEGRAL + SERIES + FORMS + GRAPH,
-    'flowce_steps': STEPS,
+    'deltace_light': [('intro', 1400)] + INTEGRAL + SERIES + ACTIONS,
+    'deltace_dark': [('night',), ('intro', 1400)] + INTEGRAL + SERIES + ACTIONS,
+    'deltace_steps': STEPS,
 }
 
 
@@ -75,6 +79,9 @@ def record(state, outdir, name, steps):
                 e.wait_idle(timeout=20000)
                 e.run(600)
                 frame(700)
+                e.key('enter')  # (DeltaCE's start screen stays until a key)
+                e.wait_idle(timeout=20000)
+                e.run(300)
             elif st[0] == 'k':
                 ks = keys_of(st[1])
                 for i, k in enumerate(ks):

@@ -1,0 +1,13 @@
+plot(x^3-3x)|h:right:1500
+plot(x^3-3x)|h:right:2000|h:up:1500|h:+:2000|h:-:2000
+plot(exp(-x^2))|h:left:2000|h:+:2000
+plot(tan(x))|h:right:2000|h:-:1500
+plot(x*y=4)|h:right:1500|h:+:1500
+plot(ln(x))|h:left:1500|h:up:1500|h:+:1500
+plot(x^2/4+y^2=1)|h:up:1500|h:-:1500
+plot(cos(2x)+x/3)|h:right:2000|h:+:1500
+plot(sqrt(x))|h:-:1500|h:right:1500
+plotparam([cos(3t),sin(2t)],t)|h:right:1500|h:+:1500
+plotpolar(1+cos(theta),theta)|k:yequ|h:right:1500|h:-:1000
+plotfield(x-y)|h:right:1500|h:+:1000
+plotode(sin(x)-y,[0,2])|k:yequ|h:right:1500

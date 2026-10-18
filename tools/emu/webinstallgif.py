@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Step 3 of the web installer, recorded in the emulator as a captioned GIF for the page: the
 arTIfiCE shell the page opens, the one enter, INST (patched as the page sends it) counting down and
-resetting the calculator by itself, then apps -> FlowCE.
+resetting the calculator by itself, then apps -> DeltaCE.
 
-usage (WSL): webinstallgif.py <outdir> <FlowCE.b84>      writes install_web.gif (and the frames)
+usage: webinstallgif.py <outdir> <DeltaCE.b84>      writes install_web.gif (and the frames)
 """
 import os
 import sys
@@ -51,8 +51,8 @@ def main():
         e.cmd('key 2 80'); e.ms += 80
         for _ in range(14):
             e.run(100)
-            r.frame(100, '2: FlowCE')
-        e.run(1500); r.frame(2600, 'FlowCE is ready')
+            r.frame(100, '2: DeltaCE')
+        e.run(1500); r.frame(2600, 'DeltaCE is ready')
         r.save('install_web.gif')
     finally:
         e.close()
