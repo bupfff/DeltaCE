@@ -2481,21 +2481,44 @@ static bool console_analyze(const char * line){
 #ifdef FLOWCE_STEPS
 // (DeltaCE) right arrow on an answer shown large (an expression in a letter): what to do next with
 // it, done at once (Value at: its box to fill). -1: not such an answer (the key does what it did)
-static int console_answer_actions(){
+// the answer shown or selected if the actions apply to it (an expression in its letter, v), else 0
+static const char * console_action_answer(char * v,int cap){
   const int rl=focus_result_line();
-  if (rl<0 || !Line[rl].str) return -1;
+  if (rl<0 || !Line[rl].str) return 0;
   const char * a=(const char *)Line[rl].str;
-  if (strchr(a,'=') || strchr(a,'[') || strchr(a,'"') || strchr(a,'<') || strchr(a,'>')) return -1; // (solutions, lists, text)
-  char v[16];
-  console_action_var("ans()",v,sizeof(v));
+  if (strchr(a,'=') || strchr(a,'[') || strchr(a,'"') || strchr(a,'<') || strchr(a,'>')) return 0; // (solutions, lists, text)
+  console_action_var("ans()",v,cap);
   const int vn=strlen(v);
   bool has=false; // the letter in the answer (2x: x; exp(x): x; not a number)
   for (const char * p=a;(p=strstr(p,v))!=0;p+=vn)
     if ((p==a || (!isalpha((unsigned char)p[-1]) && p[-1]!='_')) && !isalnum((unsigned char)p[vn]) && p[vn]!='(' && p[vn]!='_') has=true;
-  if (!has) return -1;
-  static const char * const labels[]={"Factor","Expand","Simplify","Solve = 0","Derivative","Integral","Value at","Graph","Analyze"};
+  return has?a:0;
+}
+static const char * const answer_labels[]={"Factor","Expand","Simplify","Solve = 0","Derivative","Integral","Value at","Graph","Analyze"};
+// (DeltaCE) the row under an answer shown large (focus.cc): its likeliest actions, their number
+// (0: none). A function (sin, ln, sqrt): Derivative, Integral, Graph; else Factor (Expand for a
+// product or a power of a sum), Solve = 0, Graph.
+int console_answer_row(const char ** lab,signed char * idx){
+  char v[16];
+  const char * a=console_action_answer(v,sizeof(v));
+  if (!a) return 0;
+  bool fn=false;
+  for (const char * p=a;*p && !fn;++p) fn=isalpha((unsigned char)p[0]) && p[1]=='(';
+  static const signed char calc[3]={4,5,7},alg[3]={0,3,7}; // (indexes in answer_labels)
+  for (int i=0;i<3;++i) idx[i]=fn?calc[i]:alg[i];
+  if (!fn && (strstr(a,")*") || strstr(a,"*(") || strstr(a,")^"))) idx[0]=1;
+  for (int i=0;i<3;++i) lab[i]=answer_labels[(int)idx[i]];
+  return 3;
+}
+// the actions on the answer: pick (an index in answer_labels), or the list of all (pick < 0)
+static int console_answer_actions(int pick){
+  char v[16];
+  const char * a=console_action_answer(v,sizeof(v));
+  if (!a) return -1;
+  const int vn=strlen(v);
+  const char * const * labels=answer_labels;
   static const char * const how[]={"factor(ans())","expand(ans())","simplify(ans())","solve(ans()=0,@)","diff(ans(),@)","integrate(ans(),@)","","",""};
-  const int c=focus_list("Use this answer",labels,9,0,0,0);
+  const int c=pick>=0?pick:focus_list("Use this answer",labels,9,0,0,0);
   if (c<0){ Console_Disp(1); return CONSOLE_SUCCEEDED; }
   if (c==6) // Value at: subst(Ans, x=[]) with the caret in the box
     return console_apply_action("subst(,x=)")?CONSOLE_SUCCEEDED:-1;
@@ -2537,6 +2560,26 @@ int Console_GetKey(){
       return -2;
     if (key==KEY_CTRL_SHIFT || key==KEY_CTRL_ALPHA)
       continue;
+#ifdef FLOWCE_STEPS
+    // (DeltaCE) the action row under an answer has the keys once the right arrow selected an
+    // action: left and right move (left of the first: out), enter does it ("more": the list of
+    // all); any other key leaves the row, then does what it does (clear: only that)
+    if (focus_on && focus_act()>=0){
+      const int sel=focus_act();
+      const char * lab[3];
+      signed char idx[3];
+      const int n=Current_Line==Last_Line && Edit_Line && !Edit_Line[0]?console_answer_row(lab,idx):0;
+      if (n && key==KEY_CTRL_RIGHT){ if (sel<n) focus_act_select(sel+1); continue; }
+      if (n && key==KEY_CTRL_LEFT){ focus_act_select(sel-1); continue; }
+      focus_act_select(-1);
+      if (n && key==KEY_CTRL_EXE){
+        const int r=console_answer_actions(sel<n?idx[sel]:-1);
+        if (r!=-1) return r;
+        continue;
+      }
+      if (key==KEY_CTRL_EXIT || key==KEY_CTRL_AC) continue;
+    }
+#endif
     // Focus: F1-F3, F5 and the math key open popovers (focus_menu.cc); F4 cycles the forms of a
     // result (selected, or shown large), else opens the symbols
     if (focus_on && key==KEY_CTRL_F4 && Current_Line==Last_Line && focus_result_line()>=0){
@@ -3095,7 +3138,8 @@ int Console_GetKey(){
     }
 #ifdef FLOWCE_STEPS
     if (focus_on && key==KEY_CTRL_RIGHT && Current_Line==Last_Line && Edit_Line && !Edit_Line[0]){
-      const int r=console_answer_actions(); // (DeltaCE) on an answer: its actions
+      if (focus_act_select(0)) continue; // (DeltaCE) on an answer: its action row (above)
+      const int r=console_answer_actions(-1); // (no row on screen: the list)
       if (r!=-1) return r;
     }
 #endif

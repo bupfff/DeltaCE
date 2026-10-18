@@ -30,6 +30,7 @@ const char * console_form_steps(const char * s); // main.cc: F4's form on line s
 extern const char * console_approx_for; // main.cc: the decimal value of that printed result
 extern bool answer_simplify_on;     // answer.cc: Simplify answers (mode) is on, as last read
 const char * console_approx();
+int console_answer_row(const char ** lab, signed char * idx); // console.cc: the answer's likeliest actions (the row under it)
 
 // what a result line shows: giac prints the lists of solve as list[a,b], shown [a,b]
 static const char * shown(const char * s) { return s && !strncmp(s, "list[", 5) ? s + 4 : s; }
@@ -280,6 +281,12 @@ static int key_hint(int x, int base, const char * k, const char * label) {
 // a banded repaint paints it once per band from these.
 enum { HM_HINT, HM_MATH, HM_TEXT, HM_RESULT };
 static int hm = HM_HINT, hy0, hh, hx, hbase, hcaret;
+// (DeltaCE) the action row under an answer shown large: the action selected (-1: none, act_n:
+// "more"), its actions (their labels and chips' widths, found once a repaint: hero_prepare), its
+// baseline (0: no row on screen)
+static int act_sel = -1, act_n, act_y;
+static const char * act_lab[3];
+static short act_w[3];
 static mi_layout * HL; // HM_MATH: the edit line's layout (heap)
 static int hb_y0, hb_y1; // HM_MATH: the rows it covers (ink overhang included)
 static int help_e = -1;  // HM_MATH: the command the caret is in (catalog entry), for the help lines
@@ -287,6 +294,7 @@ enum { HELP_H = 32 };    // ... at the bottom of the hero
 
 static void hero_prepare(int y0, int h) {
   hy0 = y0; hh = h;
+  act_y = 0;
   const char * s = (const char *)Console_GetEditLine();
   hcaret = console_caret();
   help_e = -1;
@@ -310,7 +318,19 @@ static void hero_prepare(int y0, int h) {
   } else if (s && *s) hm = HM_TEXT; // Python: plain text
   else if (hero_last && NE && E[NE - 1].out >= 0) hm = HM_RESULT;
   else hm = HM_HINT;
+  if (hm != HM_RESULT) act_sel = -1;
+  act_n = 0;
+#ifdef FLOWCE_STEPS
+  if (hm == HM_RESULT && !is_text(shown(Line[E[NE - 1].out].str))) {
+    signed char idx[3];
+    act_n = console_answer_row(act_lab, idx);
+    for (int k = 0; k < act_n; ++k) act_w[k] = (short)(ui_text_width(&ui_tb9, act_lab[k], -1) + 12);
+  }
+#endif
 }
+// rows [y0, y1) meet the band (the clip) being painted: what is outside is not drawn (a full
+// repaint paints the hero once per band)
+static bool in_band(int y0, int y1) { return y1 > ui_cy0 && y0 < ui_cy1; }
 
 // A result too wide for one line even at the smallest size is wrapped at its top-level + and -
 // (between terms) on up to WL lines of one level: each term is measured once, the lines are
@@ -388,9 +408,9 @@ static void help_line(const ui_face * f, const char * t, int base, int fg, const
 }
 
 // DeltaCE's mark, a Delta (the fonts have none): base row y, h px high (h + 1 wide), stroke th
-// (1/16 px), in color c
-static void delta_mark(int x, int y, int h, int th, int c) {
-  const unsigned char * r = ramp(c, UC_BG);
+// (1/16 px), in color c over bg
+static void delta_mark(int x, int y, int h, int th, int c, int bg = UC_BG) {
+  const unsigned char * r = ramp(c, bg);
   const int x0 = x * 16 + 8, x1 = x0 + h * 8, x2 = x0 + h * 16, b = y * 16, t = (y - h) * 16;
   ui_seg16(x0, b, x1, t, th, r);
   ui_seg16(x1, t, x2, b, th, r);
@@ -436,21 +456,30 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     ui_text(&ui_tr12, s, 12, y0 + h / 2 + 4, UC_INK, UC_BG, 0);
   } else if (hm == HM_RESULT) {
     const fent & e = E[NE - 1];
-    int top = y0 + 10;
+    const char * r = shown(Line[e.out].str);
+    // (DeltaCE) the answer on a card: a hairline frame, a teal rule at its left, the input as its
+    // caption; under the answer its decimal value and forms, then what to do with it next
+    const int kx = 8, ky = y0 + 3, kw = UI_W - 16, kh = h - 8, kb = ky + kh;
+    ui_rframe(0, kx, ky, kw, kh, 8, UC_LINE, UC_BG);
+    ui_rrect(0, kx, ky + 8, 3, kh - 16, 1, UC_ACC, UC_BG);
+    int top = ky + 7;
     if (e.in >= 0) {
-      fitc c = fitted(Line[e.in].str, 4, 292, 36, MI_F_TIDY);
-      draw_math(Line[e.in].str, c, (UI_W - c.w) / 2, top + c.a, UC_SUB, UC_BG, MI_F_TIDY);
+      fitc c = fitted(Line[e.in].str, 5, kw - 32, 30, MI_F_TIDY);
+      if (in_band(top - 2, top + c.a + c.d + 3)) draw_math(Line[e.in].str, c, kx + 14, top + c.a, UC_SUB, UC_BG, MI_F_TIDY);
       top += c.a + c.d + 6;
     }
-    const char * r = shown(Line[e.out].str);
-    int bot = y0 + h - (is_text(r) ? 14 : 25); // above the forms chip (tall fractions ran into it)
-    if (is_text(r)) ui_text_wrapped(r, top, bot, 296);
+    const int na = act_n;
+    const int ab = kb - 7, cy = na ? ab - 21 : ab - 1; // the baselines of the action row and of the footer
+    int bot = cy - 12; // above the forms chip (tall fractions ran into it)
+    const int RW = kw - 20;
+    if (!in_band(top - 4, bot + 4)) ;
+    else if (is_text(r)) ui_text_wrapped(r, top, bot, RW);
     else {
       int anti = e.in >= 0 && is_antideriv(Line[e.in].str) && !console_form_check((const char *)Line[e.out].str);
-      fitc c = fitted(r, HERO_LV, anti ? 256 : 292, bot - top > 18 ? bot - top : 18, MI_F_IMPLDOT);
+      fitc c = fitted(r, HERO_LV, anti ? RW - 36 : RW, bot - top > 18 ? bot - top : 18, MI_F_IMPLDOT);
       int cw = anti ? ui_text_width(&ui_mu24, "+ ", -1) + ui_text_width(&ui_mi24, "C", -1) + 6 : 0;
       int x = (UI_W - c.w - cw) / 2, base = top + (bot - top - (c.a + c.d)) / 2 + c.a;
-      if ((c.w > (anti ? 256 : 292) || c.lv >= 5) && wrapped(r, anti ? 256 : 292, bot - top, c.w > (anti ? 256 : 292) ? UI_NSIZES : c.lv)) { // on several lines
+      if ((c.w > (anti ? RW - 36 : RW) || c.lv >= 5) && wrapped(r, anti ? RW - 36 : RW, bot - top, c.w > (anti ? RW - 36 : RW) ? UI_NSIZES : c.lv)) { // on several lines
         int bx = (UI_W - wl_w) / 2, b0 = top + (bot - top - wl_n * wl_h) / 2 + wl_h - 6;
         for (int k = 0; k < wl_n; ++k) {
           const char * t = WB + wl_at[k];
@@ -467,18 +496,19 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     }
     // the footer: the decimal value of an exact result, then the forms chip (the form shown;
     // F4 cycles them, main.cc console_cycle_form), centered together as in the prototype
-    if (!is_text(r)) {
+    if (!in_band(cy - 12, cy + 5)) ;
+    else if (!is_text(r)) {
       const char * fn = console_form_of((const char *)Line[e.out].str) ? console_form_name : "exact";
       if (fn[0] == 'e' && strchr(r, '.') && !r[strspn(r, "0123456789.-+e")]) fn = "decimal"; // 2.00927
       const char * ap = !strcmp((const char *)Line[e.out].str, console_approx_for) ? console_approx() : "";
       char abuf[40] = "";
       if (*ap) { strcpy(abuf, "\xe2\x89\x88 "); strncat(abuf, ap, sizeof(abuf) - 5); } // ≈ value
       int aw = *abuf ? ui_text_width(&ui_tr10, abuf, -1) + 12 : 0;
-      int cw2 = ui_text_width(&ui_tb9, fn, -1) + ui_text_width(&ui_tb9, "F4", -1) + 20, cy = y0 + h - 13;
+      int cw2 = ui_text_width(&ui_tb9, fn, -1) + ui_text_width(&ui_tb9, "F4", -1) + 20;
 #ifdef FLOWCE_STEPS
       // the steps of a derivative or an integral: a filled chip, the action of Enter (console.cc)
       const int sw = steps_input(e) ? ui_text_width(&ui_tb9, "steps", -1) + ui_text_width(&ui_tb9, "enter", -1) + 28 : 0;
-      if (aw + cw2 + sw > UI_W - 8) { aw = 0; *abuf = 0; }
+      if (aw + cw2 + sw > kw - 8) { aw = 0; *abuf = 0; }
 #else
       const int sw = 0;
 #endif
@@ -487,19 +517,46 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
       ui_rrect(0, cx, cy - 10, cw2, 13, 6, UC_ACCSOFT, UC_BG);
       int w1 = ui_text(&ui_tb9, fn, cx + 6, cy, UC_ACC, UC_ACCSOFT, 0);
       ui_text(&ui_tb9, "F4", cx + 12 + w1, cy, UC_SUB, UC_ACCSOFT, 0);
-      if (sw) {
-        const int sx = cx + cw2 + 8;
-        ui_rrect(0, sx, cy - 10, sw - 8, 13, 6, UC_ACC, UC_BG);
-        int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, UC_ONACC, UC_ACC, 0);
-        ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
+      if (sw) { // (soft while the action row has the keys: enter does the action selected)
+        const int sx = cx + cw2 + 8, on = act_sel < 0, bg = on ? UC_ACC : UC_ACCSOFT;
+        ui_rrect(0, sx, cy - 10, sw - 8, 13, 6, bg, UC_BG);
+        int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, on ? UC_ONACC : UC_ACC, bg, 0);
+        ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, on ? UC_ACCSOFT : UC_SUB, bg, 0);
       }
     }
 #ifdef FLOWCE_STEPS
     else if (steps_input(e)) { // a text answer with steps (no solution, does not exist): their chip alone
-      const int sw = ui_text_width(&ui_tb9, "steps", -1) + ui_text_width(&ui_tb9, "enter", -1) + 20, sx = (UI_W - sw) / 2, cy = y0 + h - 13;
+      const int sw = ui_text_width(&ui_tb9, "steps", -1) + ui_text_width(&ui_tb9, "enter", -1) + 20, sx = (UI_W - sw) / 2;
       ui_rrect(0, sx, cy - 10, sw, 13, 6, UC_ACC, UC_BG);
       int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, UC_ONACC, UC_ACC, 0);
       ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
+    }
+    // (DeltaCE) the action row: what the right arrow offers on this answer (console.cc), the
+    // likeliest first, outlined chips after the key; "more": the whole list. The right arrow
+    // selects the first (console.cc Console_GetKey), left and right move, enter does it.
+    act_y = na ? ab : 0;
+    if (na && in_band(cy + 6, ab + 5)) {
+      ui_fill(kx + 12, cy + 7, kw - 24, 1, col(UC_LINE));
+      const short * ws = act_w;
+      const char * const * act = act_lab;
+      int w = 17 + 6 + ui_text_width(&ui_tr9, "more", -1);
+      for (int k = 0; k < na; ++k) w += ws[k] + 5;
+      int x = (UI_W - w) / 2;
+      ui_rframe(0, x, ab - 10, 17, 13, 3, UC_SUB, UC_BG); // the right arrow key
+      for (int k = 0; k < 4; ++k) ui_fill(x + 7 + k, ab - 7 + k, 1, 7 - 2 * k, col(UC_SUB));
+      x += 17 + 6;
+      for (int k = 0; k < na; ++k) {
+        const int on = act_sel == k;
+        if (on) ui_rrect(0, x, ab - 10, ws[k], 13, 6, UC_ACC, UC_BG);
+        else ui_rframe(0, x, ab - 10, ws[k], 13, 6, UC_ACC, UC_BG);
+        ui_text(&ui_tb9, act[k], x + 6, ab, on ? UC_ONACC : UC_ACC, on ? UC_ACC : UC_BG, 0);
+        x += ws[k] + 5;
+      }
+      if (act_sel == na) { // (selected: a chip as the others)
+        const int mw = ui_text_width(&ui_tb9, "more", -1) + 12;
+        ui_rrect(0, x, ab - 10, mw, 13, 6, UC_ACC, UC_BG);
+        ui_text(&ui_tb9, "more", x + 6, ab, UC_ONACC, UC_ACC, 0);
+      } else ui_text(&ui_tr9, "more", x, ab, UC_SUB, UC_BG, 0);
     }
 #endif
   } else {
@@ -595,39 +652,39 @@ static void status_draw(int force) {
   if (dl) {
     strcpy(stat_l, buf);
     ui_clip(0, 0, SZ_L, SB);
-    ui_fill(0, 0, SZ_L, SB, col(UC_BG));
-    spaced_text(&ui_tb9, buf, 8, 12, ramp(UC_SUB, UC_BG), 1);
+    ui_fill(0, 0, SZ_L, SB, col(UC_HEAD));
+    spaced_text(&ui_tb9, buf, 8, 12, ramp(UC_HEADSUB, UC_HEAD), 1);
   }
   if (dm) {
     strcpy(stat_m, mid);
     ui_clip(SZ_L, 0, SZ_R, SB);
-    ui_fill(SZ_L, 0, SZ_R - SZ_L, SB, col(UC_BG));
-    if (mid[0] == 1) spaced_text(&ui_tb9, mid + 1, SZ_L + 4, 12, ramp(UC_SUB, UC_BG), 1);
-    else if (mid[0]) ui_text(&ui_tb9, mid, (SZ_L + SZ_R) / 2, 12, UC_ACC, UC_BG, 1);
+    ui_fill(SZ_L, 0, SZ_R - SZ_L, SB, col(UC_HEAD));
+    if (mid[0] == 1) spaced_text(&ui_tb9, mid + 1, SZ_L + 4, 12, ramp(UC_HEADSUB, UC_HEAD), 1);
+    else if (mid[0]) ui_text(&ui_tb9, mid, (SZ_L + SZ_R) / 2, 12, UC_HEADINK, UC_HEAD, 1);
   }
   if (dr) {
     stat_r = r;
     ui_clip(SZ_R, 0, UI_W, SB);
-    ui_fill(SZ_R, 0, UI_W - SZ_R, SB, col(UC_BG));
+    ui_fill(SZ_R, 0, UI_W - SZ_R, SB, col(UC_HEAD));
     if (fl & 3) { // 2nd / alpha chip
       const char * t = (fl & 1) ? "2nd" : (fl & 4) ? ((fl & 8) ? "a-lock" : "A-LOCK") : ((fl & 8) ? "a" : "A");
       int w = ui_text_width(&ui_tb9, t, -1) + 10, c = (fl & 1) ? UC_BLUE : UC_GREEN, x = UI_W - 34 - w;
-      ui_rrect(0, x, 2, w, 12, 4, c, UC_BG);
+      ui_rrect(0, x, 2, w, 12, 4, c, UC_HEAD);
       ui_text(&ui_tb9, t, x + w / 2, 11, UC_WHITE, c, 1);
     }
     else { // the app's mark and version by the battery (the 2nd/alpha chip takes its place):
       // a Delta in the accent, then CE
       const int vw = ui_text_width(&ui_tr9, "v" DELTACE_VERSION, -1) + 3;
       int x = UI_W - 30 - vw - ui_text_width(&ui_tb9, "CE", -1) - 14;
-      delta_mark(x, 13, 10, 28, UC_ACC);
+      delta_mark(x, 13, 10, 28, UC_HEADINK, UC_HEAD);
       x += 14;
-      x += ui_text(&ui_tb9, "CE", x, 12, UC_SUB, UC_BG, 0);
-      ui_text(&ui_tr9, "v" DELTACE_VERSION, x + 3, 12, UC_SUB, UC_BG, 0);
+      x += ui_text(&ui_tb9, "CE", x, 12, UC_HEADINK, UC_HEAD, 0);
+      ui_text(&ui_tr9, "v" DELTACE_VERSION, x + 3, 12, UC_HEADSUB, UC_HEAD, 0);
     }
     int bx = UI_W - 24; // battery
-    ui_rframe(0, bx, 4, 15, 8, 2, UC_SUB, UC_BG);
-    ui_fill(bx + 15, 6, 1, 4, col(UC_SUB));
-    ui_fill(bx + 2, 6, lv > 0 ? (lv * 11 + 3) / 4 : 1, 4, col(lv <= 1 ? UC_ACC : UC_SUB));
+    ui_rframe(0, bx, 4, 15, 8, 2, UC_HEADINK, UC_HEAD);
+    ui_fill(bx + 15, 6, 1, 4, col(UC_HEADINK));
+    ui_fill(bx + 2, 6, lv > 0 ? (lv * 11 + 3) / 4 : 1, 4, col(lv <= 1 ? UC_ORANGE : UC_HEADINK));
   }
   ui_noclip();
   focus_phase = ph;
@@ -713,7 +770,7 @@ void focus_tab(int i, int on, int bank) {
   else {
     ui_clip(cx - 32, SBOT + 1, cx + 32, UI_H);
     ui_fill(cx - 32, SBOT + 1, 64, MB - 1, ui_col(bank, UC_BAR));
-    if (i) ui_fill(cx - 32, SBOT + 6, 1, MB - 11, ui_col(bank, UC_LINE)); // (a hairline between keys)
+    if (i) ui_fill(cx - 32, SBOT + 6, 1, MB - 11, ui_col(bank, UC_BARLINE)); // (a hairline between keys)
   }
   const ui_face * f = on ? &ui_tb10 : &ui_tr10;
   int bg = on ? UC_CARD : UC_BAR, lw = ui_text_width(f, w, -1), x0 = cx - (16 + lw) / 2;
@@ -750,7 +807,7 @@ static void bar_draw(int keyflag, int force) {
   if (band) ui_band_begin(SBOT, UI_H);
   ui_clip(0, SBOT, UI_W, UI_H);
   ui_fill(0, SBOT, UI_W, MB, col(UC_BAR));
-  ui_fill(0, SBOT, UI_W, 1, col(UC_LINE));
+  ui_fill(0, SBOT, UI_W, 1, col(UC_BARLINE));
   if (!layer) for (int i = 0; i < 5; ++i) focus_tab(i, 0, 0);
   else {
     int fg = layer == 1 ? UC_BLUE : UC_GREEN;
@@ -769,7 +826,7 @@ void focus_bar_tabs(const char * const * labels, int on) {
   if (band) ui_band_begin(SBOT, UI_H);
   ui_clip(0, SBOT, UI_W, UI_H);
   ui_fill(0, SBOT, UI_W, MB, col(UC_BAR));
-  ui_fill(0, SBOT, UI_W, 1, col(UC_LINE));
+  ui_fill(0, SBOT, UI_W, 1, col(UC_BARLINE));
   for (int i = 0; i < 5; ++i) {
     int cx = 32 + 64 * i, bg = i == on ? UC_ACCSOFT : UC_BAR;
     if (i == on) ui_rrect(0, cx - 30, SBOT + 3, 60, MB - 5, 6, UC_ACCSOFT, UC_BAR);
@@ -898,6 +955,7 @@ static __attribute__((noinline)) void compute_model() {
   for (int k = 0; k < M.col_n; ++k) y += E[k].h;
   M.col_h = y;
   M.sel = M.hist ? entry_of_line(cl) : -1; M.selout = 0;
+  if (M.hist) { act_y = 0; act_sel = -1; } // (the answer shown large went into the history)
   if (M.sel >= 0) M.selout = cl != E[M.sel].in;
   hist_sel = M.sel;
   if (M.hist) {
@@ -1070,7 +1128,15 @@ extern "C" void focus_idle(void) { // getkey, after a few idle seconds
   read_battery();
   status_draw(0);
 }
-void focus_evaluated() { hero_last = 1; }
+void focus_evaluated() { hero_last = 1; act_sel = -1; }
+// (DeltaCE) the action row's selection: the action selected (-1: none, the row's count: "more"),
+// -1 without a row; select k (-1: none) and repaint the row and the steps chip; 0: no row shown
+int focus_act() { return act_y ? act_sel : -1; }
+int focus_act_select(int k) {
+  if (!act_y || k < -1 || k > act_n) return 0;
+  if (k != act_sel) { act_sel = k; focus_repaint(act_y - 33, act_y + 4); }
+  return 1;
+}
 int focus_clear_hero() {
   if (!hero_last) return 0;
   hero_last = 0;

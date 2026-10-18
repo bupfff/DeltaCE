@@ -64,21 +64,26 @@ void ui_band_end(void) {
   band_busy = 0;
 }
 
-// Paper: the prototype's light theme, DeltaCE's teal accent (FlowCE's blue: 36, 92, 204)
+// Paper: the prototype's light theme, DeltaCE's teal accent (FlowCE's blue: 36, 92, 204); DeltaCE's
+// status bar is teal, its F-key bar tinted teal (FlowCE's: the background, white)
 const ui_theme ui_theme_paper = {{
   {247, 248, 250}, {17, 20, 25}, {108, 117, 129}, {219, 224, 231}, {0, 122, 122}, {218, 240, 238},
-  {255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {78, 86, 98}, {39, 140, 74}, {208, 214, 222},
-  {255, 255, 255}, {199, 68, 64}, {112, 72, 184}, {226, 118, 24}, {36, 92, 204}, {247, 248, 250}},
+  {255, 255, 255}, {255, 255, 255}, {226, 241, 239}, {40, 84, 86}, {39, 140, 74}, {208, 214, 222},
+  {255, 255, 255}, {199, 68, 64}, {112, 72, 184}, {226, 118, 24}, {36, 92, 204}, {247, 248, 250},
+  {0, 122, 122}, {255, 255, 255}, {178, 222, 218}, {196, 225, 222}},
   {30, 36, 46}, 36};
 // Night: the prototype's dark theme (UC_WHITE, text on a colored chip: dark here), teal accent
-// (FlowCE's blue: 100, 165, 255)
+// (FlowCE's blue: 100, 165, 255); a deep teal status bar
 const ui_theme ui_theme_night = {{
   {12, 15, 20}, {234, 238, 243}, {134, 145, 158}, {38, 46, 58}, {52, 204, 188}, {14, 46, 46},
-  {7, 11, 17}, {22, 28, 36}, {16, 21, 28}, {150, 160, 173}, {86, 200, 130}, {4, 6, 9},
-  {7, 11, 17}, {255, 112, 102}, {182, 146, 255}, {255, 170, 82}, {100, 165, 255}, {12, 15, 20}},
+  {7, 11, 17}, {22, 28, 36}, {13, 31, 33}, {150, 192, 188}, {86, 200, 130}, {4, 6, 9},
+  {7, 11, 17}, {255, 112, 102}, {182, 146, 255}, {255, 170, 82}, {100, 165, 255}, {12, 15, 20},
+  {0, 98, 94}, {234, 250, 247}, {128, 204, 196}, {26, 56, 56}},
   {0, 0, 0}, 50};
 
-enum { BANK = 64, MAXR = (BANK - UC_COUNT) / 2 };
+// bank 0 (the scene) is entries 128 to 128 + BANK0 - 1, bank 1 (popovers) the rest: the scene's
+// screens need more ramps (the graph 23) than popovers (9)
+enum { BANK0 = 82, MAXR = (BANK0 - UC_COUNT) / 2, MAXR1 = (128 - BANK0 - UC_COUNT) / 2 };
 static const ui_theme * TH = &ui_theme_paper;
 static int dimmed;
 static unsigned char rfg[2][MAXR], rbg[2][MAXR], nr[2];
@@ -109,7 +114,7 @@ static void slot_rgb(int bank, int s, int * c) {
 static void write_slot(int bank, int s) {
   int c[3];
   slot_rgb(bank, s, c);
-  PALETTE[128 + bank * BANK + s] = rgb565(c[0], c[1], c[2]);
+  PALETTE[128 + bank * BANK0 + s] = rgb565(c[0], c[1], c[2]);
 }
 static void write_bank(int bank) {
   for (int s = 0; s < UC_COUNT + 2 * nr[bank]; ++s) write_slot(bank, s);
@@ -118,18 +123,19 @@ static void write_bank(int bank) {
 void ui_set_theme(const ui_theme * t) { TH = t; write_bank(0); write_bank(1); }
 void ui_dim(int on) { if (dimmed != on) { dimmed = on; write_bank(0); } }
 void ui_restore_os_palette(void) {}
-unsigned char ui_col(int bank, int c) { return (unsigned char)(128 + bank * BANK + c); }
+unsigned char ui_col(int bank, int c) { return (unsigned char)(128 + bank * BANK0 + c); }
 
 const unsigned char * ui_ramp(int bank, int fg, int bg) {
   int k;
   for (k = 0; k < nr[bank]; ++k)
     if (rfg[bank][k] == fg && rbg[bank][k] == bg) return ridx[bank][k];
-  if (k >= MAXR) k = MAXR - 1; // full: reuse the last ramp (never happens with the screens' needs)
+  const int mr = bank ? MAXR1 : MAXR;
+  if (k >= mr) k = mr - 1; // full: reuse the last ramp (never happens with the screens' needs)
   else ++nr[bank];
   rfg[bank][k] = fg; rbg[bank][k] = bg;
   unsigned char * r = ridx[bank][k];
   r[0] = ui_col(bank, bg); r[3] = ui_col(bank, fg);
-  r[1] = (unsigned char)(128 + bank * BANK + UC_COUNT + 2 * k);
+  r[1] = (unsigned char)(128 + bank * BANK0 + UC_COUNT + 2 * k);
   r[2] = (unsigned char)(r[1] + 1);
   write_slot(bank, UC_COUNT + 2 * k); write_slot(bank, UC_COUNT + 2 * k + 1);
   return r;

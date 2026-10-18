@@ -1815,7 +1815,7 @@ int focus_graph_input(const char * in) {
   NF = NI = NGR = 0;
   F_ = new gen[NMAX]; EQ_ = new gen[NGRP]; IM_ = new gen[NGRP];
   P_ = (prog *)calloc(NMAX, sizeof(prog)); IP_ = (prog *)calloc(NGRP, sizeof(prog));
-  FR = (frame *)malloc(sizeof(frame));
+  FR = (frame *)calloc(1, sizeof(frame)); // (zeroed: a curve's domain ends (ne) are only found for functions; the last graph's were drawn again)
   bool ok = P_ && IP_ && FR, eqs = false;
   float lo = 0, hi = 0;
   if (ok && kind == 3) { Yv_ = ys; ok = field_of(a, lo, hi); }

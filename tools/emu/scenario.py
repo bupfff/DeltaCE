@@ -28,9 +28,10 @@ def bottom_bar(e):
 
 
 def focus_ui(e):
-    """The Focus interface: a light status bar (the classic one is black)."""
+    """The Focus interface: a light status bar, or DeltaCE's teal one (the classic one is black)."""
     top = screen(e)[226 * 320 * 3: 236 * 320 * 3]
-    return sum(top) > len(top) * 200
+    b, g, r = (sum(top[i::3]) * 3 // len(top) for i in range(3))
+    return sum(top) > len(top) * 200 or g - r > 40
 
 
 def focus_busy(e):

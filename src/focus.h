@@ -9,7 +9,7 @@ extern "C" {
 #endif
 #define focus_on 1 // the console is drawn by focus.cc (a constant: the classic screen's paths compile away)
 // DeltaCE, a fork of FlowCE: its own version, in the status bar and on the start screen
-#define DELTACE_VERSION "1.7"
+#define DELTACE_VERSION "1.8"
 #ifdef FLOWCE_STEPS
 #define FLOWCE_VERSION "2.0b1" // the step-by-step build, in beta (the FlowCE release DeltaCE is based on)
 #else
@@ -29,6 +29,8 @@ void focus_evaluated();                 // after an evaluation: the result is sh
 void focus_busy(int on);                // a calculation starts (1; >1: dots at that row at once) / ends (0)
 bool focus_busy_tick();                 // giac's control_c_hook while calculating: "Calculating"
 int focus_clear_hero();                 // CLEAR on an empty edit line: 1 if it hid the result
+int focus_act();                        // (DeltaCE) the action row's action selected (-1: none or no row)
+int focus_act_select(int k);            // selects action k of the row (-1: none); 0 if no row is shown
 const mi_metrics & focus_metrics();     // metrics of the edit line as drawn (caret moves)
 int focus_result_line();                // the output line F4 cycles (selected, or shown large); -1
 void focus_repaint(int y0, int y1);     // repaints stage rows [y0, y1) from the model

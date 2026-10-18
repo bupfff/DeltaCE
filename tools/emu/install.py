@@ -46,7 +46,8 @@ try:
     d = open(bmp, 'rb').read(); off = struct.unpack_from('<I', d, 10)[0]
     bar = d[off: off + 6 * 320 * 3]                                     # BMP rows are bottom-up
     top = d[off + 226 * 320 * 3: off + 236 * 320 * 3]                   # status bar rows 4-13
-    focus_ui = sum(top) > len(top) * 200                                # Focus: a light status bar
+    tb, tg, tr = (sum(top[i::3]) * 3 // len(top) for i in range(3))
+    focus_ui = sum(top) > len(top) * 200 or tg - tr > 40                # Focus: a light status bar (DeltaCE: teal)
     if bar.count(255) > len(bar) * 0.95 and not focus_ui:
         e.shot(f'install_{state}_notstarted')
         sys.exit('KhiCAS did not start (see install_%s_notstarted.png)' % state)
