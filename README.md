@@ -45,6 +45,13 @@ click Install, then press `enter` once on the calculator.
   tangent line, the area under the curve, value at x, solve f(x) = …, max and min on [a, b].
   Equations in x and y (circles, ellipses, hyperbolas, tilted conics), parametric and polar curves,
   slope fields with solutions through points.
+- **Statistics and regression.** *more* → Statistics: your data in two columns (the lists `L1`
+  and `L2`, shared with the console). A column's statistics with its box plot: mean, sum, sample and
+  population standard deviation, min, Q1, median, Q3, max (the quartiles the TI's way). A curve
+  fitted to the points (linear, quadratic, cubic, exponential, power, logarithmic) in exact form
+  when it can be (`y = 33/7 x + 324/7`) with r and r², a predicted y, and the points with the curve
+  on the graph screen, traced point by point. `mean(L1)`, `linear_regression(L1,L2)` and the
+  others work in the console too.
 - **Function analysis.** `analyze(f)` (or F2 → Analyze f(x)): domain, intercepts, symmetry,
   asymptotes and holes, increasing and decreasing, extrema, concavity, inflection points.
 - **Units.** A units menu on `alpha` `F4`: 72 units in 8 categories, Celsius to Fahrenheit, results
@@ -75,6 +82,8 @@ click Install, then press `enter` once on the calculator.
 | `▶`: what to do next | key points, exact | `analyze(f)` |
 | ![An ellipse and a line](docs/screenshots/graph_conic.png) | ![A polar curve](docs/screenshots/graph_polar.png) | ![A slope field and a solution](docs/screenshots/graph_field.png) |
 | equations in x and y | polar curves | slope fields |
+| ![Data in two columns](docs/screenshots/stats_data.png) | ![A column's statistics and its box plot](docs/screenshots/stats_box.png) | ![A line fitted to the points](docs/screenshots/stats_fit.png) |
+| statistics: your data | a column's statistics | a fitted line, exact |
 | ![A parametric curve](docs/screenshots/graph_param.png) | ![Units](docs/screenshots/units.png) | ![The sum of 1/n² is π²/6](docs/screenshots/basel.png) |
 | parametric curves | units | Σ 1/n² = π²/6 |
 | ![Steps for a limit: L'Hôpital's rule](docs/screenshots/steps_limit.png) | ![Steps for a telescoping sum](docs/screenshots/steps_sum.png) | ![Steps for a Taylor polynomial](docs/screenshots/steps_taylor.png) |
@@ -139,6 +148,7 @@ The bundle's INST is patched to run on OS 5.8.4 (the original stops with *"Unkno
 | `sto→` | stores a value: `5 → b` |
 | ON while computing | stops the calculation |
 | *more* → Graph | graphs the line or the answer: F1 pan or trace, F2 zoom, F3 key points and tools, F4 table, F5 more |
+| *more* → Statistics | data in L1 and L2: F1/F2 a column's statistics, F3 fit a curve, F4 plot the points, F5 edit (insert, delete, sort, clear) |
 | `mode` | settings (*Simplify answers* on or off), shortcuts, about |
 | `2nd quit` | quit (your session is kept) |
 

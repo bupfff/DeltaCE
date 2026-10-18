@@ -59,6 +59,9 @@ static const fm_item m_more[] = {
   {0, 0, 0, "All commands", "search", FA_CATALOG},
   {0, 0, 0, "Paper or Night", "theme", FA_THEME},
   {0, 0, 0, "Other plots", "kinds", FA_PLOT},
+#ifdef FLOWCE_STEPS
+  {0, 0, 0, "Statistics", "data, fits", FA_STATS}, // (DeltaCE: focus_stats.cc)
+#endif
   {0, 0, 0, "File", "sessions", FA_FILE},
   {0, 0, 0, "Clear history", 0, FA_CLEAR},
 };
@@ -89,7 +92,11 @@ static void geometry(int id, const fm_menu & m) {
   if (m.grid) {
     cw = m.grid == 2 ? (m.cols == 3 ? 100 : 150) : m.cols == 3 ? 76 : 60;
     pw = m.cols * cw + 10; ph = ((m.n + m.cols - 1) / m.cols) * cellh(m) + 10;
-  } else { pw = LW; ph = (m.n < vis ? m.n : vis) * RH + 10; } // (a long list: vis rows, scrolled)
+  } else { // (a long list: vis rows, scrolled; DeltaCE: rows lower than RH when they would cover the status bar)
+    const int rows = m.n < vis ? m.n : vis;
+    rh = rows * RH + 10 > SBOT - ST - 2 ? (SBOT - ST - 12) / rows : RH;
+    pw = LW; ph = rows * rh + 10;
+  }
   int anchor = id < 5 ? 32 + 64 * id : UI_W / 2, mg = id < 5 ? 1 : 4; // (DeltaCE: a key's card over its whole tab)
   px = anchor - pw / 2;
   if (px < mg) px = mg;

@@ -66,6 +66,11 @@ SCENES = {
     'graph_param':    [('p', 'plotparam([cos(3t),sin(2t)],t)'), ('w', 5000)],
     'graph_polar':    [('p', 'plotpolar(1+2cos(theta),theta)'), ('w', 5000)],
     'graph_field':    [('p', 'plotode(x-y,[0,1])'), ('w', 6000)],
+    # Statistics (more menu, 5): hours studied and test scores in L1 and L2
+    'stats_data':     [('p', 'L1:=[1,2,3,4,5,6,7,8]'), ('p', 'L2:=[52,55,61,64,70,74,79,85]'), ('k', '{graph}5')],
+    'stats_box':      [('p', 'L1:=[1,2,3,4,5,6,7,8]'), ('p', 'L2:=[52,55,61,64,70,74,79,85]'), ('k', '{graph}5{window}')],
+    'stats_fit':      [('p', 'L1:=[1,2,3,4,5,6,7,8]'), ('p', 'L2:=[52,55,61,64,70,74,79,85]'), ('k', '{graph}5{zoom}1')],
+    'stats_graph':    [('p', 'L1:=[1,2,3,4,5,6,7,8]'), ('p', 'L2:=[52,55,61,64,70,74,79,85]'), ('k', '{graph}5{zoom}1{yequ}'), ('w', 3000)],
 }
 
 

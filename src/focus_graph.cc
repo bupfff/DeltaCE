@@ -52,6 +52,9 @@ static prog * IP_;
 static unsigned char IG_[NGRP];
 static int NI, NGR;        // how many such equations; how many typed
 static gen * EQ_;          // each typed one as F(x, y) = 0 (y-f(x) for a function): where two cross
+static float * DAT_;       // (DeltaCE) data points drawn with the curves (focus_stats.cc: the points
+static int DATN_;          // a curve was fitted to): their x, then their y (by x); how many
+static int tpi;            // the point traced (tf == NF: the points)
 static const unsigned char COLS[NGRP] = {UC_ACC, UC_RED, UC_PURPLE, UC_ORANGE};
 static inline unsigned char col(int i) { return COLS[GRP[i] & 3]; }
 
@@ -596,6 +599,7 @@ static NOINL void pfit() {
 // the trace point (false: y not a number there; a function's x is tx all the same)
 static NOINL bool tpt(float & x, float & y) {
   if (KIND_) return pt_at(tf, tx, x, y);
+  if (tf == NF && DATN_) { x = DAT_[tpi]; y = DAT_[DATN_ + tpi]; return true; } // (DeltaCE: a data point)
   x = tx; y = val(tf, tx);
   return fin(y);
 }
@@ -804,7 +808,7 @@ static NOINL int text_at(const char * s, int w, int x, int base, int c, int b, i
   ui_draw_text(&ui_tr9, s, -1, x, base, ui_ramp(0, c, UC_BG), 0);
   return w;
 }
-static bool tang_on() { return tang && mode; }
+static bool tang_on() { return tang && mode && (KIND_ || tf < NF); } // (DeltaCE: not on data points)
 static bool shown_note() { return tang_on() || (note[0] && (note_x < 0 || (KIND_ ? note_t == tx : note_x == px_of(tx)))); }
 static char * tang_note();
 static float slope(int i, float x);
@@ -942,7 +946,7 @@ static NOINL void paint(bool fast) {
   int tl[4]; // the tangent, cut to the plot (1/16 px)
   float tpxf, tpyf;
   const bool tok = mode && tpt(tpxf, tpyf);
-  bool tg = tang && tok;
+  bool tg = tang && tok && (KIND_ || tf < NF); // (not on data points)
   if (tg) { // (its equation in the readout, for the trace point)
     const float x = tpxf, y = tpyf, m = tslope();
     if (!fin(m)) { // (vertical: x = c)
@@ -1052,6 +1056,10 @@ static NOINL void paint(bool fast) {
       const dt & d = F.d[k];
       if (d.y + 3 >= b && d.y - 3 < e) disc(d.x, d.y, 2, col(d.f), true);
       if (d.t[0] && d.y - 5 > GT + 9 && d.y - 5 < GB - 4) text_at(d.t, d.w, d.x + 4, d.y - 5, col(d.f), b, e);
+    }
+    for (int k = 0; k < DATN_; ++k) { // (DeltaCE) the data points, rings
+      const int X = px_of(DAT_[k]), Y = py_of(DAT_[DATN_ + k]);
+      if (Y + 4 >= b && Y - 4 < e) disc(X, Y, 3, UC_INK, false);
     }
     for (int k = 0; k < NK && k < NKP; ++k) { // the key points, their coordinates
       if (F.ky[k] == NONE) continue;
@@ -1543,6 +1551,31 @@ static NOINL void more_menu(int & nfun) {
   if (c == 5) grid = !grid;
 }
 
+// (DeltaCE) data points drawn with the curves (DAT_, DATN_ above): a copy; the y range is theirs
+void focus_graph_points(const float * x, const float * y, int n) {
+  free(DAT_); DAT_ = 0; DATN_ = 0;
+  if (n <= 0 || !(DAT_ = (float *)malloc(2 * n * sizeof(float)))) return;
+  memcpy(DAT_, x, n * sizeof(float)); memcpy(DAT_ + n, y, n * sizeof(float)); DATN_ = n;
+  for (int i = 1; i < n; ++i) // by x (the trace steps from one to the next)
+    for (int j = i; j > 0 && DAT_[j - 1] > DAT_[j]; --j) {
+      float t = DAT_[j]; DAT_[j] = DAT_[j - 1]; DAT_[j - 1] = t;
+      t = DAT_[n + j]; DAT_[n + j] = DAT_[n + j - 1]; DAT_[n + j - 1] = t;
+    }
+}
+static NOINL int point_near(float x) { // the point nearest to x
+  int k = 0;
+  for (int i = 1; i < DATN_; ++i) if (fabsf(DAT_[i] - x) < fabsf(DAT_[k] - x)) k = i;
+  return k;
+}
+static NOINL void fit_points() { // the view's y range: the points' (an eighth more above and below)
+  float lo = 1e30f, hi = -1e30f;
+  for (int k = 0; k < DATN_; ++k) { const float y = DAT_[DATN_ + k]; if (fin(y)) { if (y < lo) lo = y; if (y > hi) hi = y; } }
+  if (lo > hi) return;
+  if (hi - lo < 1e-6f) { lo -= 1; hi += 1; }
+  const float m = (hi - lo) / 8;
+  vy0 = lo - m; vy1 = hi + m;
+}
+
 // ---------------------------------------------------------------- the screen
 static NOINL void run(float a, float b, bool eqs) {
   vx0 = a; vx1 = b; vy0 = -10; vy1 = 10;
@@ -1572,6 +1605,7 @@ static NOINL void run(float a, float b, bool eqs) {
     }
   if (4 * in < all) fit_y();
   if (vy1 - vy0 > 1e4f && !KIND_) { vy0 = -10; vy1 = 10; } // (1/x: not its 1e8 near 0)
+  if (DATN_ && !KIND_) fit_points();
   mode = 0; tf = 0; tx = 0; tang = false; area_a = area_b = fan_a = fan_b = 0; note[0] = 0;
   while (tf < NF - 1 && fin(VX[tf])) ++tf; // (trace: a curve y = f(x))
   focus_view = 1;
@@ -1585,12 +1619,18 @@ static NOINL void run(float a, float b, bool eqs) {
     focus_status_msg(0);
     if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_QUIT) break;
     if (key == KEY_CTRL_LEFT || key == KEY_CTRL_RIGHT || key == KEY_CTRL_UP || key == KEY_CTRL_DOWN || key == KEY_CHAR_PLUS || key == KEY_CHAR_MINUS) {
-      if (mode && (key == KEY_CTRL_UP || key == KEY_CTRL_DOWN)) { // trace: the next curve (not a vertical line)
-        const int n = KIND_ ? NC_ : NF;
-        for (int k = 0; k < n; ++k) { tf = (tf + (key == KEY_CTRL_DOWN ? 1 : n - 1)) % n; if (KIND_ || !fin(VX[tf])) break; }
+      if (mode && (key == KEY_CTRL_UP || key == KEY_CTRL_DOWN)) { // trace: the next curve (not a vertical line; DeltaCE: the points after the curves)
+        const int n = KIND_ ? NC_ : NF + (DATN_ ? 1 : 0);
+        for (int k = 0; k < n; ++k) { tf = (tf + (key == KEY_CTRL_DOWN ? 1 : n - 1)) % n; if (KIND_ || tf == NF || !fin(VX[tf])) break; }
+        if (!KIND_ && tf == NF) { tpi = point_near(tx); tx = DAT_[tpi]; }
         if (KIND_) tx = tx < PT0[tf] ? PT0[tf] : tx > PT1[tf] ? PT1[tf] : tx;
         follow(); paint(false);
         continue;
+      }
+      if (mode && !KIND_ && tf == NF) { // (DeltaCE) trace on the points: the next one
+        if (key == KEY_CTRL_LEFT && tpi > 0) --tpi;
+        if (key == KEY_CTRL_RIGHT && tpi < DATN_ - 1) ++tpi;
+        if (key == KEY_CTRL_LEFT || key == KEY_CTRL_RIGHT) { tx = DAT_[tpi]; follow(); paint(false); continue; }
       }
       hold();
       continue;
@@ -1601,12 +1641,16 @@ static NOINL void run(float a, float b, bool eqs) {
       continue;
     }
     if (key == KEY_CTRL_F1) { // pan <-> trace
-      if (!mode && (!NF || fin(VX[tf]))) { focus_status_msg("Trace follows curves y = f(x)"); continue; }
+      if (!mode && !DATN_ && (!NF || fin(VX[tf]))) { focus_status_msg("Trace follows curves y = f(x)"); continue; }
       if (!mode && KIND_ == 3 && !NC_) { focus_status_msg("Points: a solution through a point first"); continue; }
       mode = !mode;
-      if (mode) { tx = KIND_ ? tnear(tf) : (vx0 + vx1) / 2; follow(); }
+      if (mode) { tx = KIND_ ? tnear(tf) : (vx0 + vx1) / 2; if (!KIND_ && tf == NF) { tpi = point_near(tx); tx = DAT_[tpi]; } follow(); }
       bar(); paint(false);
       if (mode) focus_status_msg("2nd left right: key points");
+      continue;
+    }
+    if (!KIND_ && (!NF || (mode && tf == NF)) && (key == KEY_CTRL_EXE || key == KEY_CTRL_F3 || key == KEY_CTRL_F5 || (!NF && key == KEY_CTRL_F4))) {
+      focus_status_msg(NF ? "Up or down: the curve" : "Fit a curve first"); // (DeltaCE: the points alone; Statistics fits one)
       continue;
     }
     if (key == KEY_CTRL_EXE && mode) { // trace: an x to go to, its point exact
@@ -1825,7 +1869,7 @@ int focus_graph_input(const char * in) {
     lo = -10; hi = 10;
     plot_args(a, fs, x, lo, hi);
     vecteur v = fs.type == _VECT ? *fs._VECTptr : vecteur(1, fs);
-    ok = !v.empty() && v.size() <= NGRP;
+    ok = (!v.empty() || DATN_) && v.size() <= NGRP; // (DeltaCE: plot([]) with data points: the points alone)
     for (unsigned i = 0; i < v.size() && ok; ++i) { // a function of one letter (the same), or an equation in x and y
       v[i] = eval(v[i], 1, contextptr);
       eqs = eqs || v[i].is_symb_of_sommet(at_equal);
@@ -1841,7 +1885,7 @@ int focus_graph_input(const char * in) {
       else { EQ_[i] = *ys - v[i]; ok = add_curve(v[i], i, NAN); }
     }
     if (eqs) working(false);
-    if (!NF && !NI) ok = false; // (x^2 = -1: nothing to draw)
+    if (!NF && !NI && !DATN_) ok = false; // (x^2 = -1: nothing to draw)
   }
   if (ok) {
     NK = -1; lev = 0;
@@ -1857,6 +1901,7 @@ int focus_graph_input(const char * in) {
   free(PS_); PS_ = 0; free(PM_); PM_ = 0; free(FS_); FS_ = 0;
   if (Yv_) *ys = gen(identificateur("y")); // (a field's other letter)
   Yv_ = 0; KIND_ = 0;
+  giac::ctrl_c = giac::interrupted = false; // (DeltaCE: clear, the key that left, read as a stop: what evaluates next would fail)
   return ok ? 1 : -1;
 }
 #endif

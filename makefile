@@ -31,8 +31,11 @@ endif
 # DeltaCE (the steps build) draws its graphs on its own screen (src/focus_graph.cc: functions,
 # equations, parametric, polar, slope fields): KhiCAS's plot commands and graph viewer (WITH_PLOT,
 # 146 KB: cobweb, histograms, bar charts, point lists, geometry figures) are out (2026-10-17)
+# DeltaCE has giac's statistics (mean, median, quartiles, standard deviation, correlation,
+# regressions: WITH_STATS, kmisc.cc) without the spreadsheet they came with (WITH_SHEET); its graph
+# screen draws the data (2026-10-18)
 ifeq ($(STEPS),1)
-    FEATURE_DEFS += -DFLOWCE_STEPS
+    FEATURE_DEFS += -DFLOWCE_STEPS -DWITH_STATS
 else
     FEATURE_DEFS += -DWITH_EDITOR -DWITH_PLOT # (DeltaCE, the steps build: no script editor, 17 KB, 2026-10-17)
 endif
@@ -85,7 +88,7 @@ endif
 # giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB
 # less; FlowCE's own files keep the default inlining
 INLFILE = -mllvm -inline-threshold=-10
-%/answer.cc.bc %/console.cc.bc %/fake.cc.bc %/file.cc.bc %/focus.cc.bc %/focus_catalog.cc.bc %/focus_edit.cc.bc %/focus_graph.cc.bc %/focus_menu.cc.bc %/focus_steps.cc.bc %/main.cc.bc %/mathedit.cc.bc %/mathinput.cc.bc %/mathinput_glue.cc.bc %/menufr.cc.bc %/steps.cc.bc %/textGUI.cc.bc %/tiinput.cc.bc %/tiinput_glue.cc.bc %/ui_math.cc.bc: INLFILE :=
+%/answer.cc.bc %/console.cc.bc %/fake.cc.bc %/file.cc.bc %/focus.cc.bc %/focus_catalog.cc.bc %/focus_edit.cc.bc %/focus_graph.cc.bc %/focus_menu.cc.bc %/focus_stats.cc.bc %/focus_steps.cc.bc %/main.cc.bc %/mathedit.cc.bc %/mathinput.cc.bc %/mathinput_glue.cc.bc %/menufr.cc.bc %/steps.cc.bc %/textGUI.cc.bc %/tiinput.cc.bc %/tiinput_glue.cc.bc %/ui_math.cc.bc: INLFILE :=
 
 # The Focus drawing code works per pixel: compiled for speed (with -Oz, shifts and multiplies
 # become helper calls). Small files: a few KB of flash.

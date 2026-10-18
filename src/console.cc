@@ -2607,6 +2607,13 @@ int Console_GetKey(){
       }
       if (a==FA_PLOT)
         return Console_FMenu(KEY_CTRL_F3);
+#ifdef FLOWCE_STEPS
+      if (a==FA_STATS){ // (DeltaCE) the statistics screen (focus_stats.cc)
+        focus_stats();
+        Console_Disp(1);
+        continue;
+      }
+#endif
       if (a==FA_THEME){
         focus_toggle_theme();
         continue;
