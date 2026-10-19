@@ -125,13 +125,40 @@ void ui_dim(int on) { if (dimmed != on) { dimmed = on; write_bank(0); } }
 void ui_restore_os_palette(void) {}
 unsigned char ui_col(int bank, int c) { return (unsigned char)(128 + bank * BANK0 + c); }
 
+// (DeltaCE) Ramps are not freed: a session's screens used 28 of the 30. A full table reuses a ramp
+// whose two mids show nowhere (the screen, the band being drawn) and that was not handed out
+// among the last four (callers draw with the ramps they just got); none: the last one, as before.
+// The screen scan (76,800 bytes, about 20 ms) happens only then. UI_MAXR_TEST: a smaller table.
+#ifdef UI_MAXR_TEST
+#define RMAX(b) ((b) ? (MAXR1 < UI_MAXR_TEST ? MAXR1 : UI_MAXR_TEST) : UI_MAXR_TEST)
+#else
+#define RMAX(b) ((b) ? MAXR1 : MAXR)
+#endif
+static unsigned char rrec[2][4], rrpos[2]; // the ramps handed out last
+static void rtouch(int bank, int k) { rrec[bank][rrpos[bank]++ & 3] = (unsigned char)(k + 1); }
+static int revict(int bank) {
+  unsigned char seen[256];
+  memset(seen, 0, sizeof seen);
+  for (const unsigned char * p = FB, * e = FB + UI_W * UI_H; p < e; ++p) seen[*p] = 1;
+  if (band_busy && strip)
+    for (const unsigned char * p = strip, * e = strip + UI_W * (band_y1 - band_y0); p < e; ++p) seen[*p] = 1;
+  const int mr = RMAX(bank);
+  for (int k = mr - 1; k >= 0; --k) {
+    const int m = 128 + bank * BANK0 + UC_COUNT + 2 * k;
+    if (seen[m] || seen[m + 1]) continue;
+    int r = 0;
+    for (int j = 0; j < 4; ++j) r |= rrec[bank][j] == k + 1;
+    if (!r) return k;
+  }
+  return mr - 1;
+}
 const unsigned char * ui_ramp(int bank, int fg, int bg) {
   int k;
   for (k = 0; k < nr[bank]; ++k)
-    if (rfg[bank][k] == fg && rbg[bank][k] == bg) return ridx[bank][k];
-  const int mr = bank ? MAXR1 : MAXR;
-  if (k >= mr) k = mr - 1; // full: reuse the last ramp (never happens with the screens' needs)
+    if (rfg[bank][k] == fg && rbg[bank][k] == bg) { rtouch(bank, k); return ridx[bank][k]; }
+  if (k >= RMAX(bank)) k = revict(bank); // full: one no pixel uses
   else ++nr[bank];
+  rtouch(bank, k);
   rfg[bank][k] = fg; rbg[bank][k] = bg;
   unsigned char * r = ridx[bank][k];
   r[0] = ui_col(bank, bg); r[3] = ui_col(bank, fg);

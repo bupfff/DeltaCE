@@ -3232,6 +3232,8 @@ int Console_GetKey(){
       if (Last_Line==Current_Line){
         if (strlen(Edit_Line))
           Console_Clear_EditLine();
+        else if (focus_on && focus_clear_hero()) // (DeltaCE) an answer shown large: first it goes up into the history
+          ;
         else if (focus_on?focus_choose("Clear the history?",console_yesno,2)==0:do_confirm(lang?"F1: Effacer historique, F5: annuler":"F1: Clear history, F5: Cancel")){
           Console_Init();
           Console_Clear_EditLine();

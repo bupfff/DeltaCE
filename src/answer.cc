@@ -1148,6 +1148,66 @@ static __attribute__((noinline)) bool at(const giac::gen & f,const giac::gen & x
   y=e._DOUBLE_val;
   return e.type==giac::_DOUBLE_ && y==y;
 }
+// (DeltaCE) N/(c(x^4+px^2+q)), deg N < 4, the quartic without real roots (q > 0, p^2 < 4q) and not a
+// product of two quadratics over Q: giac factors it with proot at 1e-12, beyond the calculator's
+// 32-bit floats (integrate(2/(x^4+5),x): rootof after 85 s, 2/(x^4+5) from 0 to 1 past 90 s). Over the
+// reals it is (x^2+tx+s)(x^2-tx+s), s = sqrt(q), t = sqrt(2s-p); with u = sqrt(2s+p) and N's even part
+// k2 x^2 + k0 the partial fractions integrate to
+//   (k0/s-k2)/(4t) (ln(x^2+tx+s) - ln(x^2-tx+s)) + (k0/s+k2)/(2u) (atan((2x+t)/u) + atan((2x-t)/u)),
+// N's odd part (v = x^2) to k3/4 ln(x^4+px^2+q) + (2k1-k3 p)/(2m) atan((2x^2+p)/m), m = sqrt(4q-p^2).
+// Only single radicals: x^4+q (t = u = (4q)^(1/4)) or q a square (t, u square roots); giac's normal
+// of a radical of radicals took 17 s on the calculator (sqrt(2*sqrt(5))), so nothing is normalized.
+// 0: not such a fraction
+static __attribute__((noinline)) giac::gen biquad(const giac::gen & f,const giac::gen & x){
+  using namespace giac;
+  if (x.type!=_IDNT) return 0;
+  const gen n=_numer(f,contextptr),d=_denom(f,contextptr);
+  const vecteur ld=lidnt(d),ln_=lidnt(n);
+  if (ld.size()!=1 || ld[0]!=x || ln_.size()>1 || (ln_.size() && ln_[0]!=x)) return 0;
+  const gen cd=_coeff(makesequence(d,x),contextptr),cn=_coeff(makesequence(n,x),contextptr);
+  if (cd.type!=_VECT || cd._VECTptr->size()!=5 || cn.type!=_VECT || cn._VECTptr->size()>4) return 0;
+  const vecteur & D=*cd._VECTptr,& Nv=*cn._VECTptr;
+  if (!is_zero(D[1]) || !is_zero(D[3])) return 0;
+  const gen c=D[0],p=ratnormal(D[2]/c,contextptr),q=ratnormal(D[4]/c,contextptr);
+  const bool rat=(p.type==_INT_ || p.type==_FRAC) && (q.type==_INT_ || q.type==_FRAC);
+  if (!rat || !is_strictly_positive(q,contextptr) || !is_strictly_positive(4*q-p*p,contextptr)) return 0;
+  const gen sq=eval(symbolic(at_sqrt,q),1,contextptr);
+  const bool rs=sq.type==_INT_ || sq.type==_FRAC;
+  if (!rs && !is_zero(p)) return 0; // (x^4+2x^2+5: radicals of radicals, as unreadable as giac's)
+  const gen t=rs?eval(symbolic(at_sqrt,2*sq-p),1,contextptr):eval(pow(4*q,fraction(1,4),contextptr),1,contextptr),
+    u=rs?eval(symbolic(at_sqrt,2*sq+p),1,contextptr):t;
+  if (rs && (t.type==_INT_ || t.type==_FRAC)) return 0; // (x^4+4: rational factors, giac's own)
+  gen k[4]={0,0,0,0}; // N/c: k3 x^3 + k2 x^2 + k1 x + k0
+  for (unsigned i=0;i<Nv.size();++i) k[Nv.size()-1-i]=ratnormal(Nv[i]/c,contextptr);
+  // written rationalized, as textbooks do (each coefficient a rational times one radical): with
+  // r = (4q)^(1/4) (x^4+q: t = u = r, 1/r^3 = r/(4q)) L = (k0-k2 sqrt(q)) r/(8q), W = (k0+k2 sqrt(q)) r/(4q);
+  // with s rational L = (k0-k2 s) t/(4s(2s-p)), W = (k0+k2 s) u/(2s(2s+p)); atan's (2x+t)/u as 2x/u + t/u
+  gen r=0;
+  if (!is_zero(k[1]) || !is_zero(k[3])) { // the odd part
+    const gen m2=4*q-p*p,m=eval(symbolic(at_sqrt,m2),1,contextptr);
+    if (!is_zero(k[3])) r=r+(k[3]/4)*ln(x*x*x*x+p*x*x+q,contextptr);
+    const gen w=ratnormal((2*k[1]-k[3]*p)/(2*m2),contextptr);
+    if (!is_zero(w)) r=r+w*m*symbolic(at_atan,eval(2*m/m2,1,contextptr)*x*x+eval(p*m/m2,1,contextptr));
+  }
+  gen L,W;
+  if (rs){
+    L=ratnormal((k[0]-k[2]*sq)/(4*sq*(2*sq-p)),contextptr)*t;
+    W=ratnormal((k[0]+k[2]*sq)/(2*sq*(2*sq+p)),contextptr)*u;
+  } else {
+    const gen ce=ratnormal(1/(8*q),contextptr);
+    L=eval((k[0]-k[2]*sq)*ce,1,contextptr)*t;
+    W=eval((k[0]+k[2]*sq)*2*ce,1,contextptr)*t;
+  }
+  // 2/u and t/u rationalized when u^2 = 2s+p is rational (2/sqrt(2): sqrt(2); sqrt(5)/sqrt(7): sqrt(35)/7)
+  // (t u = sqrt(4q-p^2): one radical; t = u: 1)
+  const gen au=rs?eval(2*u/(2*sq+p),1,contextptr):eval(2/u,1,contextptr),
+    tu=t==u?gen(1):eval(symbolic(at_sqrt,4*q-p*p)/(2*sq+p),1,contextptr);
+  if (is_zero(k[0]) && is_zero(k[2])) return r; // (an odd N: v = x^2 alone)
+  if (!is_zero(L)) r=r+L*ln(x*x+t*x+sq,contextptr)-L*ln(x*x-t*x+sq,contextptr);
+  if (!is_zero(W)) r=r+W*symbolic(at_atan,au*x+tu)+W*symbolic(at_atan,au*x-tu);
+  return r;
+}
+
 // the table, then trig_powers, then usub: integrate(h,x) at once, 0 if none (tan(u): -ln|cos(u)|/a)
 static giac::gen table_integral(const giac::gen & g){
   using namespace giac;
@@ -1157,6 +1217,9 @@ static giac::gen table_integral(const giac::gen & g){
     return r;
   // evaluated ((cos(x)^3+sin(x))/cos(x)^2 is a product)
   const gen f=eval(g._SYMBptr->feuille._VECTptr->front(),1,contextptr),& x=g._SYMBptr->feuille._VECTptr->back();
+  r=biquad(f,x);
+  if (!is_zero(r))
+    return r;
   r=trig_powers(f,x);
   if (is_zero(r))
     r=linsub(f,x);
@@ -3801,7 +3864,9 @@ std::string answer_print(const giac::gen & g,const giac::gen & graw,const answer
     strip_equation_parens(printed);              // x=(-sqrt(2)),x=(sqrt(2))
     chain_inequalities(printed);
   }
-  if (printed.size()>70 && graw.type==_SYMB && !contains(graw,at_order_size)){ // (a long polynomial)/182: term by term (not a series: its O() spread)
+  bool poly=true; // (DeltaCE: a polynomial's letters only; expanding ln, atan and radicals took 20 s on the calculator, integrate(2/(x^4+5),x))
+  if (printed.size()>70 && graw.type==_SYMB){ const vecteur lv=lvar(graw); for (unsigned i=0;i<lv.size() && poly;++i) poly=lv[i].type==_IDNT; }
+  if (printed.size()>70 && poly && graw.type==_SYMB && !contains(graw,at_order_size)){ // (a long polynomial)/182: term by term (not a series: its O() spread)
     const gen d=_denom(graw,contextptr);       // (x^14/14+...), which wraps
     if ((d.type==_INT_ || d.type==_ZINT) && !is_one(d) && _numer(graw,contextptr).is_symb_of_sommet(at_plus)){
       gen x=expand(graw,contextptr);
