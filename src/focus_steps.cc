@@ -91,7 +91,73 @@ static int one_name(const char * s) {
   }
   return v != 0;
 }
+// (DeltaCE) the steps' systems, exponential, log and trig equations, told from the text too. v: the
+// one name besides the calls, pi and e (e^x); its every place inside the argument of a call of fs
+// (log(x-3), sin(2x)) or in an exponent (2^(x+1), e^x): x+e^x and x*sin(x) are not theirs
+static bool has(const char * s, const char * const * w, unsigned n) {
+  for (unsigned k = 0; k < n; ++k) if (strstr(s, w[k])) return true;
+  return false;
+}
+static int inside(const char * s, const char * const * fs, unsigned nf, bool expo) {
+  const char * v = 0;
+  int vn = 0, allow = 0, d = 0;
+  unsigned char st[24];
+  const char * end = s + strlen(s); // (solve(...,x): up to its x)
+  for (const char * p = s; *p; ++p) {
+    if (*p == '(') ++d; else if (*p == ')') --d; else if (*p == ',' && d == 1) end = p;
+  }
+  d = 0;
+  for (const char * p = s; p < end; ++p) {
+    if (*p == '(') {
+      if (d == 24) return 0;
+      bool a = expo && p > s && p[-1] == '^';
+      for (unsigned k = 0; k < nf && !a; ++k) { const int n = strlen(fs[k]); a = p - s >= n && !strncmp(p - n, fs[k], n) && (p - n == s || !(isalpha((unsigned char)p[-n - 1]) || p[-n - 1] == '_')); } // (2sin(x))
+      st[d++] = a; allow += a;
+      continue;
+    }
+    if (*p == ')') { if (d) allow -= st[--d]; continue; }
+    if (!isalpha((unsigned char)*p) || (p > s && (isalpha((unsigned char)p[-1]) || p[-1] == '_'))) continue; // (2x: x)
+    const char * q = p;
+    while (isalnum((unsigned char)*q) || *q == '_') ++q;
+    const int n = q - p;
+    if (*q != '(' && !(n == 2 && !strncmp(p, "pi", 2)) && !(n == 1 && *p == 'e' && *q == '^')) {
+      if (!v) { v = p; vn = n; }
+      else if (n != vn || strncmp(v, p, n)) return 0; // (two names)
+      if (!allow && !(expo && p > s && p[-1] == '^')) return 0; // (x outside: x+e^x)
+    }
+    p = q - 1;
+  }
+  return v != 0;
+}
+// -1: none of these (alg_able's then)
+static int more_able(const char * s) {
+  static const char * const bad[] = {"<", ">", "!", "%", "|", "abs(", "sqrt(", "surd(", "asin(", "acos(", "atan(", "sec(", "csc(", "cot("};
+  static const char * const trig[] = {"sin(", "cos(", "tan("};
+  static const char * const logs[] = {"log", "ln(", "exp(", "e^"};
+  const unsigned nb = sizeof(bad) / sizeof(bad[0]);
+  if (starts(s, "solve([")) { // a linear system: no powers, no calls, no x in a denominator, whole numbers and fractions
+    if (strchr(s, '^') || strchr(s, '.') || has(s, bad, nb)) return 0;
+    for (const char * p = s + 6; (p = strchr(p, '(')); ++p) if (isalpha((unsigned char)p[-1])) return 0; // (2(x+1): yes; a call: no)
+    for (const char * p = s; (p = strchr(p, '/')); ++p) if (isalpha((unsigned char)p[1])) return 0;
+    return 1;
+  }
+  // (sqrt(3) tan(x) = 1: a number; x in sqrt( or abs(: outside the calls, no)
+  if (has(s, trig, 3)) {
+    if (has(s, bad, 5) || has(s, bad + 7, nb - 7) || has(s, logs, 4) || strstr(s, "^(") || strchr(s, '[')) return 0;
+    if (!giac::angle_radian(contextptr)) return 0; // (the steps' angles: radians)
+    static const char * const tn[] = {"sin", "cos", "tan"};
+    return inside(s, tn, 3, false);
+  }
+  bool e = has(s, logs, 4);
+  for (const char * p = s; !e && (p = strchr(p, '^')); ++p) e = isalpha((unsigned char)p[1]) || p[1] == '(';
+  if (!e) return -1;
+  static const char * const fs[] = {"log", "log10", "logb", "ln", "exp"};
+  if (has(s, bad, 5) || has(s, bad + 7, nb - 7) || strchr(s, '[')) return 0;
+  return inside(s, fs, 5, true) ? 1 : -1;
+}
 int focus_steps_able(const char * s) {
+  if (starts(s, "implicitdiff(")) return 1;
+  if (starts(s, "solve(")) { const int k = more_able(s); if (k >= 0) return k; }
   if (starts(s, "canonical_form(") || starts(s, "propfrac(") || starts(s, "partfrac(")) return one_name(s);
   static const char * const ops[] = {"diff(", "integrate(", "int(", "derive(", "limit(", "series(", "taylor(", "sum("};
   for (const char * p = s; *p; ++p)

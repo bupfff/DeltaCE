@@ -615,6 +615,7 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"iegcd(a,b)", nullptr, "Determine les entiers u,v,d tels que a*u+b*v=d=gcd(a,b)","23,13", nullptr, CAT_CATEGORY_ARIT},
   {"ifactor(n)", nullptr, "Factorisation d'un entier (pas trop grand!). Raccourci n=>*", "1234", nullptr, CAT_CATEGORY_ARIT},
   {"im(z)", nullptr, "Partie imaginaire.", "1+i", nullptr, CAT_CATEGORY_COMPLEXNUM},
+  {"implicitdiff(eq,x,y)", nullptr, "dy/dx pour y fonction de x definie par une equation (derivation implicite).", "x^2+y^2=25,x,y", nullptr, CAT_CATEGORY_CALCULUS}, // (DeltaCE)
   {"inf", "inf", "Plus l'infini. Utiliser -inf pour moins l'infini ou infinity pour l'infini complexe.", "-inf", "infinity", CAT_CATEGORY_CALCULUS},
   {"input()", "input()", "Lire une chaine au clavier", "\"Valeur ?\"", nullptr, CAT_CATEGORY_PROG},
   {"integrate(f,x,[,a,b])", nullptr, "Primitive de f par rapport a la variable x, par ex. integrate(x*sin(x),x). Pour calculer une integrale definie, entrer les arguments optionnels a et b, par ex. integrate(x*sin(x),x,0,pi).", "x*sin(x),x", "cos(x)/(1+x^4),x,0,inf", CAT_CATEGORY_CALCULUS},
@@ -960,6 +961,7 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"ifactor(n)", nullptr, "Factorization of an integer (not too large!). Shortcut n=>*", nullptr, nullptr, CAT_CATEGORY_ARIT},
   {"ilaplace(f,s,x)", nullptr, "Inverse Laplace transform of f", "s/(s^2+1),s,x", nullptr, CAT_CATEGORY_CALCULUS},
   {"im(z)", nullptr, "Imaginary part.", "1+i", nullptr, CAT_CATEGORY_COMPLEXNUM},
+  {"implicitdiff(eq,x,y)", nullptr, "dy/dx for y a function of x given by an equation (implicit differentiation). Its steps on the steps screen.", "x^2+y^2=25,x,y", "x^3+y^3=6*x*y,x,y", CAT_CATEGORY_CALCULUS}, // (DeltaCE)
   {"inf", "inf", "Plus infinity. -inf for minus infinity and infinity for unsigned/complex infinity.", "oo", nullptr, CAT_CATEGORY_CALCULUS},
   {"input()", "input()", "Read a string from keyboard", nullptr, nullptr, CAT_CATEGORY_PROG},
   {"integrate(f,x,[a,b])", nullptr, "Antiderivative of f with respect to x, like integrate(x*sin(x),x). For definite integral enter optional arguments a and b, like integrate(x*sin(x),x,0,pi). For line integral, integrate([field_x,field_y],[x,y],courbe,tmin,tmax), e.g.. ellipse area G:=plotparam([2*cos(t),sin(t)],t):; integrate([0,x],[x,y],G,0,2*pi).", "x*sin(x),x", "cos(x)/(1+x^4),x,0,inf", CAT_CATEGORY_CALCULUS},

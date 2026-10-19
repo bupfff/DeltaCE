@@ -25,6 +25,7 @@ struct fm_menu { char grid, cols, n; const fm_item * items; };
 
 static const fm_item m_alg[] = {
   {"solve(,x)", 3, 0, "Solve for x", 0, 0},
+  {"solve([,],[x,y])", 9, 0, "Solve a system", 0, 0}, // (DeltaCE: its steps, elimination)
   {"factor()", 1, 0, "Factor", 0, 0},
   {"expand()", 1, 0, "Expand", 0, 0},
   {"simplify()", 1, 0, "Simplify", 0, 0},
@@ -38,6 +39,7 @@ static const fm_item m_calc[] = {
   {"limit(,x,)", 4, 0, "Limit", 0, 0},
   {"sum(,k,,)", 5, 0, "Sum", 0, 0},
   {"series(,x,0,5)", 7, 0, "Taylor series", 0, 0},
+  {"implicitdiff(,x,y)", 5, 0, "Implicit dy/dx", 0, 0}, // (DeltaCE: kmisc.cc, steps.cc)
 #ifdef FLOWCE_STEPS
   {"analyze()", 1, 0, "Analyze f(x)", 0, 0}, // (DeltaCE: analyze.cc, the report on the steps' page)
 #endif

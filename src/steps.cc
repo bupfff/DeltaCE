@@ -31,7 +31,9 @@ enum {
   R_DLEAD, R_DSUB, R_DREM, R_DCHECK,
   R_PFDIV, R_PFFACT, R_PFSET, R_PFMULT, R_PFROOT, R_PFCOEF, R_PFSOLVE, R_PFRES,
   R_YSTD, R_YFRAC, R_YMUL, R_YADD, R_YSUBT, R_YBACK, R_YSOL, R_YNONE, R_YINF, R_YPAIR, R_YTWO, R_YNONE3, R_YINF3,
-  R_GSAME, R_GEXPEQ, R_GLN, R_GPOW, R_GEXPF, R_GPRODR, R_GQUOTR, R_GPOWR, R_GARG, R_GOK, R_GBAD, R_GNONE, R_GSUBU, R_GBACK, R_GXSIDE, R_GFACX, R_GMOVE, R_NRULES
+  R_GSAME, R_GEXPEQ, R_GLN, R_GPOW, R_GEXPF, R_GPRODR, R_GQUOTR, R_GPOWR, R_GARG, R_GOK, R_GBAD, R_GNONE, R_GSUBU, R_GBACK, R_GXSIDE, R_GFACX, R_GMOVE,
+  R_TREF, R_TQS1, R_TQS2, R_TQC1, R_TQC2, R_TQT1, R_TQT2, R_TAXIS, R_TGEN, R_TSOLVX, R_TINT, R_TRANGE, R_TDIVC, R_TPYTH, R_TEACH,
+  R_IDIFF, R_ICHAIN, R_ISIDE, R_IFACT, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -213,9 +215,28 @@ static const char * const RULES[]={
   "A power of a positive base is never <= 0: no solution",0,"A",
   "A quadratic in the power: substitute",0,"A",
   "Back to x",0,"A",
-  "The x terms to one side, the rest to the other",0,"A=B",
+  "The unknown's terms to one side, the rest to the other",0,"A=B",
   "Factor out x",0,"A=B",
   "Move the logs to one side",0,"A=B",
+  "The reference angle",0,"A=B",
+  "sin > 0: quadrants I and II",0,"A",
+  "sin < 0: quadrants III and IV",0,"A",
+  "cos > 0: quadrants I and IV",0,"A",
+  "cos < 0: quadrants II and III",0,"A",
+  "tan > 0: quadrants I and III",0,"A",
+  "tan < 0: quadrants II and IV",0,"A",
+  "On an axis of the unit circle",0,"A",
+  "Every solution: add multiples of the period (n an integer)",0,"A",
+  "Solve for x",0,"A",
+  "The solutions in [0, 2pi)",0,"A",
+  "sin and cos are between -1 and 1: no solution",0,"A=B",
+  "Divide both sides by cos: sin/cos is tan",0,"A=B",
+  "Pythagorean identity","sin(x)^2+cos(x)^2=1","A=B",
+  "The angles where",0,"A=B",
+  "Differentiate both sides: y is a function of x",0,"diff(A,V)=diff(B,V)",
+  "Chain rule: each y term's derivative times dy/dx",0,"A=B",
+  "The dy/dx terms to one side, the rest to the other",0,"A=B",
+  "Factor out dy/dx",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -2066,11 +2087,18 @@ gen steps_derivative(const gen & f,const gen & x,GIAC_CONTEXT){
   return !is_undef(r) && !interrupted && same_num(ev(r),D(f,x),x)?mergek(unexp(r)):gen(undef);
 }
 // the problem as typed (mergek without its rewrites: one denominator, 1/(n(n+2)), not 1/n/(n+2))
+static NOINL gen el_norm(const gen & g);
 gen steps_problem(const gen & input,GIAC_CONTEXT){
+  if (input.is_symb_of_sommet(at_implicitdiff) && arg(input).type==_VECT){ // (DeltaCE) the equation
+    ctx_=contextptr;
+    const gen e=arg(input,0);
+    return e.is_symb_of_sommet(at_equal)?symbolic(at_equal,makesequence(ev(arg(e,0)),ev(arg(e,1)))):ev(e);
+  }
   if (input.is_symb_of_sommet(at_factor) || input.is_symb_of_sommet(at_canonical_form) || input.is_symb_of_sommet(at_propfrac) || input.is_symb_of_sommet(at_partfrac)){ ctx_=contextptr; return ev(arg(input).type==_VECT?arg(input,0):arg(input)); } // (the polynomial; F4's forms: the expression)
   if (input.is_symb_of_sommet(at_solve) && lop(input,at_derive).empty() && lop(input,at_integrate).empty() && lop(input,at_limit).empty() && lop(input,at_sum).empty()){ // the equation, its sides as giac writes them
     ctx_=contextptr;
     gen e=arg(input).type==_VECT?arg(input,0):arg(input);
+    if (!lop(e,at_log10).empty() || !lop(e,at_logb).empty()) return el_norm(e); // (DeltaCE: log(x) as typed, not ln(x)/ln(10))
     return e.is_symb_of_sommet(at_equal)?symbolic(at_equal,makesequence(ev(arg(e,0)),ev(arg(e,1)))):ev(e);
   }
   ctx_=contextptr; raw_=true; gen r=mergek(nest(norm(serfix(input)))); raw_=false; return r; }
@@ -3104,6 +3132,158 @@ static NOINL bool eq_el(gen L,gen R){
   return el_check(a,ar,us);
 }
 
+// ---------------------------------------------------------------- trig equations (DeltaCE)
+// One trig function of one angle u = m x + c: the equation solved for it as for a variable (2 sin(x)
+// = 1, 2 sin(x)^2 - sin(x) - 1 = 0: an identifier named sin(x)), then each value's angles: the
+// reference angle in the quadrants of its sign (or an axis), every solution (a multiple of the
+// period added, n an integer), solved for x, the solutions in [0, 2pi) (the console's answer too,
+// answer.cc). sin(u) = cos(u): tan(u) = 1; sin(x)^2 with cos(x): the Pythagorean identity. Radians.
+static NOINL bool tr_fn(const gen & g){ return is(g,at_sin) || is(g,at_cos) || is(g,at_tan); }
+static NOINL void tr_find(const gen & g,vecteur & v){ // the trig functions of x in g
+  if (g.type!=_SYMB) return;
+  if (tr_fn(g) && dep(arg(g))){ if (!equalposcomp(v,g)) v.push_back(g); return; }
+  const gen & a=arg(g);
+  if (a.type!=_VECT){ tr_find(a,v); return; }
+  EACH(it,*a._VECTptr) tr_find(*it,v);
+}
+static NOINL gen tr_eqs(const gen & v,const vecteur & w){ // v=w0, v=w1, ...
+  vecteur e;
+  EACH(it,w) e.push_back(SYM2(at_equal,v,*it));
+  return e.size()==1?e.front():gen(e,_SEQ__VECT);
+}
+static NOINL gen tr_n(){ return gen(identificateur(X==gen(identificateur("n"))?"k":"n")); }
+static NOINL gen tr_plus(const gen & b,const gen & s){ const gen t=ev(s*tr_n()); return is_zero(b)?t:SYM2(at_plus,b,t); } // b + s n
+// b + s n in [0, 2pi), added to out in order (no copies)
+static NOINL void tr_in(const gen & b,const gen & s,vecteur & out){
+  double bd,sd;
+  if (!el_num(b,bd) || !el_num(s,sd) || sd<=0) return;
+  const double tp=6.283185307179586,e=1e-4; // (the calculator's double is a float)
+  int k=(int)ceil(-bd/sd-e);
+  for (int i=0;i<64;++i,++k){
+    const double v=bd+k*sd;
+    if (v>=tp-e) break;
+    unsigned j=0;
+    double w=0;
+    for (;j<out.size();++j){ el_num(out[j],w); if (fabs(w-v)<e || w>v) break; }
+    if (j<out.size() && fabs(w-v)<e) continue;
+    out.insert(out.begin()+j,ratnormal(b+k*s,CTX));
+  }
+}
+// T(u) = k: the angles, every solution, the ones in [0, 2pi) (added to sols)
+static NOINL bool tr_basic(const gen & T,const gen & k,vecteur & sols){
+  const bool sn=is(T,at_sin),cs=is(T,at_cos);
+  const gen u=arg(T),m=D(u,X),c=ev(sub(u,X,0)),pi=cst_pi;
+  double d;
+  if (!el_num(k,d) || dep(m) || is_zero(m) || !is_zero(ratnormal(u-m*X-c,CTX))) return false; // (u = m x + c)
+  if ((sn || cs) && (d>1+1e-12 || d<-1-1e-12)){ S(R_TRANGE,T,k); return true; }
+  gen P=sn || cs?ev(2*pi):pi; // the period
+  vecteur th,shown; // the angles of one period from 0 (tan: from 0 to pi)
+  const bool zero=fabs(d)<1e-12,one=fabs(fabs(d)-1)<1e-12;
+  if (zero || ((sn || cs) && one)){ // on an axis
+    if (sn){ if (zero){ th.push_back(0); th.push_back(pi); } else th.push_back(ev(d>0?pi/2:3*pi/2)); }
+    else if (cs){ if (zero){ th.push_back(ev(pi/2)); th.push_back(ev(3*pi/2)); } else th.push_back(d>0?gen(0):pi); }
+    else th.push_back(0);
+    S(R_TAXIS,tr_eqs(u,th),0);
+    shown=th;
+  }
+  else {
+    const unary_function_ptr * f=sn?at_asin:cs?at_acos:at_atan;
+    const gen ak=d<0?ev(-k):k,a=ratnormal(ev(SYM(f,ak)),CTX); // (pi/3, not 1/3*pi)
+    S(R_TREF,SYM(f,ak),a);
+    gen t1,t2;
+    int r;
+    if (sn){ r=d>0?R_TQS1:R_TQS2; t1=d>0?a:SYM2(at_plus,pi,a); t2=SYM2(at_plus,d>0?pi:ev(2*pi),SYM(at_neg,a)); }
+    else if (cs){ r=d>0?R_TQC1:R_TQC2; t1=d>0?a:SYM2(at_plus,pi,SYM(at_neg,a)); t2=d>0?SYM2(at_plus,ev(2*pi),SYM(at_neg,a)):SYM2(at_plus,pi,a); }
+    else { r=d>0?R_TQT1:R_TQT2; t1=d>0?a:SYM2(at_plus,pi,SYM(at_neg,a)); t2=d>0?SYM2(at_plus,pi,a):SYM2(at_plus,ev(2*pi),SYM(at_neg,a)); }
+    vecteur raw; raw.push_back(t1); raw.push_back(t2);
+    shown.push_back(ratnormal(t1,CTX)); shown.push_back(ratnormal(t2,CTX));
+    S(r,tr_eqs(u,raw),0);
+    if (pr(tr_eqs(u,raw))!=pr(tr_eqs(u,shown))) S(R_ALINE,tr_eqs(u,shown),0);
+    th.push_back(shown[0]);
+    if (sn || cs) th.push_back(shown[1]);
+  }
+  if (th.size()==2 && is_zero(ratnormal(th[1]-th[0]-pi,CTX))){ th.pop_back(); P=pi; } // (0 and pi: pi n)
+  vecteur g,in;
+  EACH(it,th) g.push_back(tr_plus(*it,P));
+  S(R_TGEN,tr_eqs(u,g),0);
+  gen s=ratnormal(P/m,CTX);
+  if (!el_num(s,d)) return false;
+  if (d<0) s=ev(-s);
+  vecteur xs;
+  EACH(it,th){
+    const gen b=ratnormal((*it-c)/m,CTX);
+    xs.push_back(tr_plus(b,s));
+    tr_in(b,s,in);
+  }
+  if (!(u==X)) S(R_TSOLVX,tr_eqs(X,xs),0);
+  if (in.empty()) S(R_TINT,txt("none"),0);
+  else if (!(u==X) || pr(tr_eqs(X,in))!=pr(tr_eqs(X,shown))) S(R_TINT,tr_eqs(X,in),0);
+  EACH(it,in) tr_in(*it,ev(4*pi),sols); // (one each, in order: a step over 2pi)
+  return true;
+}
+// P = 0 in one trig function T: solved for T (an identifier named T), each value's angles
+static NOINL bool tr_one(const gen & T,const gen & L,const gen & R){
+  const gen Y(identificateur(pr(T)));
+  const gen Ls=ev(subst(L,T,Y,false,CTX)),Rs=ev(subst(R,T,Y,false,CTX));
+  if (dep(Ls) || dep(Rs)) return false; // (x outside it: x+sin(x))
+  const gen x0=X;
+  vecteur ks;
+  X=Y;
+  bool ok=true;
+  if (Ls==Y && !dep(Rs)) ks.push_back(Rs);
+  else {
+    const size_t m=mark();
+    ok=eq_poly(Ls,Rs);
+    if (!ok){ cut(m); ok=el_lin(Ls,Rs); } // (sqrt(3) tan(x) - 1 = 0)
+    if (ok) ks=roots_of(Ls,Rs);
+  }
+  X=x0;
+  if (!ok) return false;
+  vecteur sols;
+  EACH(it,ks){
+    if (ks.size()>1){ S(R_TEACH,T,*it); ++depth_; }
+    const bool o=tr_basic(T,*it,sols);
+    if (ks.size()>1) --depth_;
+    if (!o) return false;
+  }
+  if (ks.size()>1 && !sols.empty()) S(R_TINT,tr_eqs(X,sols),0);
+  return true;
+}
+static NOINL bool eq_trig(const gen & L0,const gen & R0){
+  if (!angle_radian(CTX)) return false;
+  const gen L=ev(L0),R=ev(R0);
+  vecteur fs;
+  tr_find(L,fs); tr_find(R,fs);
+  if (fs.size()==1) return tr_one(fs[0],L,R);
+  if (fs.size()!=2 || !(arg(fs[0])==arg(fs[1]))) return false;
+  const gen u=arg(fs[0]),s=SYM(at_sin,u),c=SYM(at_cos,u);
+  if (!equalposcomp(fs,s) || !equalposcomp(fs,c)) return false;
+  const gen Ys(identificateur("s_")),Yc(identificateur("c_"));
+  const gen Q=ev(expand(subst(subst(ev(L-R),s,Ys,false,CTX),c,Yc,false,CTX),CTX));
+  if (dep(Q)) return false;
+  const gen a=D(Q,Ys),b=D(Q,Yc);
+  if (!dep(a,Ys) && !dep(a,Yc) && !dep(b,Ys) && !dep(b,Yc) && is_zero(ratnormal(Q-a*Ys-b*Yc,CTX))){ // a sin(u) + b cos(u) = 0
+    const gen t=SYM(at_tan,u),k=ratnormal(-b/a,CTX);
+    S(R_TDIVC,t,k);
+    vecteur sols;
+    return tr_basic(t,k,sols);
+  }
+  for (int i=0;i<2;++i){ // sin(u)^2 with cos(u): 1 - cos(u)^2 (or the other way)
+    const gen Ya=i?Yc:Ys,Yb=i?Ys:Yc,A=i?c:s,B=i?s:c;
+    const gen q2=ev(D(D(Q,Ya),Ya)/2);
+    if (dep(q2,Ya) || dep(q2,Yb) || is_zero(q2) || dep(ratnormal(Q-q2*Ya*Ya,CTX),Ya)) continue;
+    const gen one_b=SYM2(at_plus,1,SYM(at_neg,SYM2(at_pow,B,2)));
+    S(R_TPYTH,SYM2(at_pow,A,2),one_b);
+    const gen Lb=subst(L,SYM2(at_pow,A,2),one_b,false,CTX),Rb=subst(R,SYM2(at_pow,A,2),one_b,false,CTX);
+    vecteur f2;
+    tr_find(Lb,f2); tr_find(Rb,f2);
+    if (equalposcomp(f2,A)) return false; // (sin(x) left: sin(x)^3)
+    S(R_ACONT,Lb,Rb);
+    return tr_one(B,ev(expand(Lb,CTX)),ev(expand(Rb,CTX)));
+  }
+  return false;
+}
+
 static NOINL bool eq_steps(const gen & input){
   const gen & g=arg(input);
   if (g.type==_VECT && g._VECTptr->size()==2 && g[0].type==_VECT && g[1].type==_VECT) // (DeltaCE) a system
@@ -3111,6 +3291,7 @@ static NOINL bool eq_steps(const gen & input){
   const gen eq=g.type==_VECT?g[0]:g;
   if (g.type==_VECT && g._VECTptr->size()>1){ if (g[1].type!=_IDNT) return false; X=g[1]; }
   if (el_has(eq)) return eq_el(el_norm(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq),el_norm(eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0))); // (DeltaCE) 2^x = 8, log(x) = 2
+  { vecteur fs; tr_find(eq,fs); if (!fs.empty()) return eq_trig(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq,eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0)); } // (DeltaCE) 2 sin(x) = 1
   gen L=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq),R=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0));
   if (!dep(L) && !dep(R)) return false;
   if (nroots(L)+nroots(R)) return eq_radical(L,R,L,R,0); // (sqrt(x+3) = x-3)
@@ -3378,6 +3559,37 @@ static NOINL bool pf_steps(const gen & input){
   return true;
 }
 
+// ---------------------------------------------------------------- implicit differentiation (DeltaCE)
+// implicitdiff(eq,x,y): both sides differentiated in x, y a function of x (the chain rule: y^2 is
+// 2y dy/dx), the dy/dx terms to one side, dy/dx factored out, both sides divided (giac's implicitdiff,
+// kmisc.cc, gives -F_x/F_y, normal: the same)
+static NOINL bool impl_steps(const gen & input){
+  const gen & a=arg(input);
+  if (a.type!=_VECT || a._VECTptr->size()<2) return false;
+  const gen x=a[1],y=a._VECTptr->size()>2?a[2]:gen(identificateur("y"));
+  if (x.type!=_IDNT || y.type!=_IDNT || x==y) return false;
+  std::string nm="d"; nm+=pr(y); nm+="/d"; nm+=pr(x);
+  const gen Yp=gen(identificateur(nm)),e=a[0];
+  const gen L=ev(is(e,at_equal)?arg(e,0):e),R=ev(is(e,at_equal)?arg(e,1):gen(0));
+  if (!dep(L,y) && !dep(R,y)) return false;
+  X=x;
+  S(R_IDIFF,L,R);
+  const gen Ld=ev(D(L,x)+D(L,y)*Yp),Rd=ev(D(R,x)+D(R,y)*Yp);
+  S(R_ICHAIN,Ld,Rd);
+  const gen P=ev(expand(Ld-Rd,CTX)),A=ratnormal(D(P,Yp),CTX),B=ev(sub(P,Yp,0)),mB=ratnormal(-B,CTX);
+  if (is_zero(A) || dep(A,Yp)) return false;
+  vecteur t;
+  flat(at_plus,ev(expand(A,CTX)),t);
+  EACHW(it,t) *it=is_one(*it)?Yp:is_minus_one(*it)?SYM(at_neg,Yp):SYM2(at_prod,*it,Yp); // (2*y*dy/dx: dy/dx last)
+  const gen side=t.size()==1?t[0]:symbolic(at_plus,gen(t,_SEQ__VECT));
+  S(R_ISIDE,side,mB);
+  gen l=side;
+  if (t.size()>1){ l=SYM2(at_prod,A,Yp); S(R_IFACT,l,mB); }
+  const gen r=normal(mB/A,CTX);
+  if (!is_one(A)){ S(R_ADIV,l,mB,A); S(R_ACONT,Yp,r); }
+  return true;
+}
+
 bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){
   static gen * in0; // the input as the steps take it (in_ points to it; no static constructor in the app)
   if (!in0) in0=new gen;
@@ -3386,6 +3598,7 @@ bool steps_of(const gen & input,std::vector<step_t> & out,GIAC_CONTEXT){
   if (input.is_symb_of_sommet(at_solve) && lop(input,at_derive).empty() && lop(input,at_integrate).empty() && lop(input,at_limit).empty() && lop(input,at_sum).empty())
     return eq_steps(input) && !out.empty(); // (an equation; solve(diff(f,x)=0,x): its derivative's steps first, below)
   if (input.is_symb_of_sommet(at_factor)) return factor_steps(input);
+  if (input.is_symb_of_sommet(at_implicitdiff)) return impl_steps(input) && !out.empty();
   if (input.is_symb_of_sommet(at_canonical_form)) return cs_steps(input) && !out.empty();
   if (input.is_symb_of_sommet(at_propfrac)) return div_steps(input) && !out.empty();
   if (input.is_symb_of_sommet(at_partfrac)) return pf_steps(input) && !out.empty();

@@ -3534,6 +3534,59 @@ __attribute__((noinline)) giac::gen limit_simp(const giac::gen & g){ // (one cop
   v[0]=ab?sym1(at_abs,s):s;
   return symbolic(at_limit,gen(v,_SEQ__VECT));
 }
+// (DeltaCE) solve(eq,x) with sin, cos or tan of x, in radians: the solutions in [0, 2pi), as
+// textbooks ask (giac gives one period around 0: -2pi/3, 2pi/3; tan(x) = 1 only pi/4), from its
+// general solutions (all_trig_solutions: x = pi/4 + n pi), each n giving one in [0, 2pi)
+static __attribute__((noinline)) bool trig_of(const giac::gen & g,const giac::gen & x){
+  using namespace giac;
+  if (g.type!=_SYMB) return false;
+  const gen & f=g._SYMBptr->feuille;
+  if ((g.is_symb_of_sommet(at_sin) || g.is_symb_of_sommet(at_cos) || g.is_symb_of_sommet(at_tan)) && !free_of(f,x)) return true;
+  if (f.type!=_VECT) return trig_of(f,x);
+  for (const_iterateur it=f._VECTptr->begin();it!=f._VECTptr->end();++it) if (trig_of(*it,x)) return true;
+  return false;
+}
+static __attribute__((noinline)) giac::gen trig_interval(const giac::gen & g){
+  using namespace giac;
+  if (!g.is_symb_of_sommet(at_solve) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()!=2) return g;
+  const gen eq0=g._SYMBptr->feuille._VECTptr->front(),x=g._SYMBptr->feuille._VECTptr->back();
+  if (x.type!=_IDNT || !angle_radian(contextptr) || !trig_of(eq0,x)) return g;
+  const bool num=has_num_coeff(eq0);
+  const gen eq=eval(num?exact(eq0,contextptr):eq0,1,contextptr);
+  const bool old=all_trig_sol(contextptr);
+  all_trig_sol(true,contextptr);
+  const gen s=_solve(makesequence(eq,x),contextptr);
+  all_trig_sol(old,contextptr);
+  if (s.type!=_VECT || s._VECTptr->empty()) return g;
+  vecteur out;
+  std::vector<double> vals;
+  const double tp=6.283185307179586,e=1e-4; // (the calculator's double is a float)
+  for (const_iterateur it=s._VECTptr->begin();it!=s._VECTptr->end();++it){
+    if (has_i(*it)) return g;
+    const vecteur ids=lidnt(*it);
+    gen n=0;
+    for (const_iterateur j=ids.begin();j!=ids.end();++j)
+      if (evalf(*j,1,contextptr).type!=_DOUBLE_){ if (!is_zero(n) || *j==x) return g; n=*j; } // (pi is a number)
+    if (is_zero(n)) return g; // (not periodic)
+    const gen b=ratnormal(subst(*it,n,0,false,contextptr),contextptr),st=ratnormal(subst(*it,n,1,false,contextptr)-b,contextptr);
+    if (!is_zero(ratnormal(subst(*it,n,2,false,contextptr)-b-2*st,contextptr))) return g; // (b + st n)
+    const gen bf=evalf(b,1,contextptr),sf=evalf(st,1,contextptr);
+    if (bf.type!=_DOUBLE_ || sf.type!=_DOUBLE_ || sf._DOUBLE_val==0) return g;
+    const double bd=bf._DOUBLE_val,sd=fabs(sf._DOUBLE_val);
+    const gen sg=sf._DOUBLE_val<0?-st:st;
+    int k=(int)ceil(-bd/sd-e);
+    for (int i=0;i<64 && bd+k*sd<tp-e;++i,++k){
+      const double v=bd+k*sd;
+      unsigned j=0;
+      while (j<vals.size() && vals[j]<v-e) ++j;
+      if (j<vals.size() && fabs(vals[j]-v)<e) continue;
+      gen r=ratnormal(b+k*sg,contextptr);
+      if (num) r=evalf(r,1,contextptr);
+      vals.insert(vals.begin()+j,v); out.insert(out.begin()+j,r);
+    }
+  }
+  return out.empty()?g:gen(out,0); // (none in [0, 2pi): sin(x/4) = 1, giac's)
+}
 void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus){
   using namespace giac;
   if (strstr(buf,"perm(") || strstr(buf,"nPr("))
@@ -3571,6 +3624,7 @@ void answer_before(giac::gen & g,answer_ctx & a,const char * buf,bool focus){
     else if (g._SYMBptr->feuille.type!=_VECT) // solve(expr): giac solves for x
       a.var=gen("x",contextptr);
   }
+  g=trig_interval(g); // (DeltaCE) sin(x) = 1/2: pi/6, 5pi/6
   // decimals: giac's solve fails (solve(x^2=0.5,x): "Bad Argument Value"): solved exactly, the
   // solutions in decimals
   if (g.is_symb_of_sommet(at_solve) && g._SYMBptr->feuille.type==_VECT && g._SYMBptr->feuille._VECTptr->size()==2 && has_num_coeff(g._SYMBptr->feuille._VECTptr->front()))
