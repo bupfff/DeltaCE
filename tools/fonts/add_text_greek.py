@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add μ, σ, λ, ≤, ≥ and ≠ to the interface text faces (ui_tr*, ui_tb*) of src/ui_fontdata.c, in place, and
+"""Add μ, σ, λ, ≤, ≥, ≠ and π to the interface text faces (ui_tr*, ui_tb*) of src/ui_fontdata.c, in place, and
 lengthen every face's index for the three new codes (the math faces: 255, none).
 
 The probability screen (focus_stats.cc) labels its fields μ, σ, λ; Atkinson Hyperlegible has no
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mkfonts as M
 
 P = os.path.join(M.ROOT, 'src', 'ui_fontdata.c')
-NEW = ['μ', 'σ', 'λ', '≤', '≥', '≠']
+NEW = ['μ', 'σ', 'λ', '≤', '≥', '≠', 'π']
 N = 0x80 + len(M.EXTRA)
 s = open(P).read()
 newindex = None
@@ -28,7 +28,7 @@ for size in M.UI_SIZES:
             code = 0x80 + M.EXTRA.index(ch)
             if any(g[0] == code for g in glyphs): continue
             # (STIX Two Text has no ≤ ≥ ≠: its .notdef box would come out; they come from STIX Two Math)
-            f = M.font('STIXTwoText-VF.ttf', size, wght) if ch in 'μσλ' else M.font('STIXTwoMath.ttf', size)
+            f = M.font('STIXTwoText-VF.ttf', size, wght) if ch in 'μσλπ' else M.font('STIXTwoMath.ttf', size)
             adv, ox, oy, w, h, pix = M.raster(f, ch)
             glyphs.append((code, len(bits), adv, w, h, ox, oy))
             bits += M.encode(pix)
