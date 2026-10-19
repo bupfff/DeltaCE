@@ -3585,7 +3585,8 @@ static NOINL bool impl_steps(const gen & input){
   S(R_ISIDE,side,mB);
   gen l=side;
   if (t.size()>1){ l=SYM2(at_prod,A,Yp); S(R_IFACT,l,mB); }
-  const gen r=normal(mB/A,CTX);
+  const gen r0=normal(mB/A,CTX),n=_numer(r0,CTX),d=_denom(r0,CTX);
+  const gen r=pr(d)[0]=='-'?SYM2(at_prod,normal(-n,CTX),SYM(at_inv,normal(-d,CTX))):r0; // (as implicitdiff: no -(...) below)
   if (!is_one(A)){ S(R_ADIV,l,mB,A); S(R_ACONT,Yp,r); }
   return true;
 }

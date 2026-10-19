@@ -3535,32 +3535,77 @@ __attribute__((noinline)) giac::gen limit_simp(const giac::gen & g){ // (one cop
   return symbolic(at_limit,gen(v,_SEQ__VECT));
 }
 // (DeltaCE) solve(eq,x) with sin, cos or tan of x, in radians: the solutions in [0, 2pi), as
-// textbooks ask (giac gives one period around 0: -2pi/3, 2pi/3; tan(x) = 1 only pi/4), from its
-// general solutions (all_trig_solutions: x = pi/4 + n pi), each n giving one in [0, 2pi)
-static __attribute__((noinline)) bool trig_of(const giac::gen & g,const giac::gen & x){
+// textbooks ask (giac gives one period around 0: -2pi/3, 2pi/3; tan(x) = 1 only pi/4). One angle u =
+// m x + c in all of them: giac's solutions (one of each class, the period of u's functions) and
+// those plus periods (2pi/m, pi/m for tan alone); other angles: its general solutions
+// (all_trig_solutions, x = pi/4 + n pi: 3 times slower on the calculator), each n giving one
+static __attribute__((noinline)) void trig_of(const giac::gen & g,const giac::gen & x,giac::vecteur & v){
   using namespace giac;
-  if (g.type!=_SYMB) return false;
+  if (g.type!=_SYMB) return;
   const gen & f=g._SYMBptr->feuille;
-  if ((g.is_symb_of_sommet(at_sin) || g.is_symb_of_sommet(at_cos) || g.is_symb_of_sommet(at_tan)) && !free_of(f,x)) return true;
-  if (f.type!=_VECT) return trig_of(f,x);
-  for (const_iterateur it=f._VECTptr->begin();it!=f._VECTptr->end();++it) if (trig_of(*it,x)) return true;
-  return false;
+  if ((g.is_symb_of_sommet(at_sin) || g.is_symb_of_sommet(at_cos) || g.is_symb_of_sommet(at_tan)) && !free_of(f,x)){ v.push_back(g); return; }
+  if (f.type!=_VECT){ trig_of(f,x,v); return; }
+  for (const_iterateur it=f._VECTptr->begin();it!=f._VECTptr->end();++it) trig_of(*it,x,v);
+}
+// b + k s in [0, 2pi) for every whole k, in order in out (vals: their values), no copies
+static __attribute__((noinline)) void trig_put(const giac::gen & b,const giac::gen & s,double bd,double sd,bool num,giac::vecteur & out,std::vector<double> & vals){
+  using namespace giac;
+  const double tp=6.283185307179586,e=1e-4; // (the calculator's double is a float)
+  int k=(int)ceil(-bd/sd-e);
+  for (int i=0;i<64 && bd+k*sd<tp-e;++i,++k){
+    const double v=bd+k*sd;
+    unsigned j=0;
+    while (j<vals.size() && vals[j]<v-e) ++j;
+    if (j<vals.size() && fabs(vals[j]-v)<e) continue;
+    gen r=k?eval(b+k*s,1,contextptr):b; // (-pi/6+2pi: 11pi/6)
+    if (num) r=evalf(r,1,contextptr);
+    vals.insert(vals.begin()+j,v); out.insert(out.begin()+j,r);
+  }
+}
+static __attribute__((noinline)) bool real_of(const giac::gen & g,double & d){
+  const giac::gen f=giac::evalf(g,1,contextptr);
+  if (f.type!=giac::_DOUBLE_) return false;
+  d=f._DOUBLE_val;
+  return true;
 }
 static __attribute__((noinline)) giac::gen trig_interval(const giac::gen & g){
   using namespace giac;
   if (!g.is_symb_of_sommet(at_solve) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()!=2) return g;
   const gen eq0=g._SYMBptr->feuille._VECTptr->front(),x=g._SYMBptr->feuille._VECTptr->back();
-  if (x.type!=_IDNT || !angle_radian(contextptr) || !trig_of(eq0,x)) return g;
+  vecteur fs;
+  trig_of(eq0,x,fs);
+  if (x.type!=_IDNT || fs.empty() || !angle_radian(contextptr)) return g;
+  gen t=eq0; // (x only inside them: sin(x) = x/2 is not periodic)
+  for (const_iterateur it=fs.begin();it!=fs.end();++it) t=subst(t,*it,0,false,contextptr);
+  if (!free_of(t,x)) return g;
   const bool num=has_num_coeff(eq0);
   const gen eq=eval(num?exact(eq0,contextptr):eq0,1,contextptr);
+  // one angle u = m x + c (m a fraction): its period
+  gen u=eval(fs[0]._SYMBptr->feuille,1,contextptr),P=0;
+  bool sc=false,one=true;
+  for (const_iterateur it=fs.begin();it!=fs.end();++it){
+    one=one && eval(it->_SYMBptr->feuille,1,contextptr)==u;
+    sc=sc || !it->is_symb_of_sommet(at_tan);
+  }
+  const gen m=derive(u,x,contextptr);
+  if (one && (m.type==_INT_ || m.type==_FRAC) && !is_zero(m) && free_of(ratnormal(u-m*x,contextptr),x))
+    P=eval((sc?2*cst_pi:cst_pi)/abs(m,contextptr),1,contextptr);
   const bool old=all_trig_sol(contextptr);
-  all_trig_sol(true,contextptr);
+  if (is_zero(P)) all_trig_sol(true,contextptr);
   const gen s=_solve(makesequence(eq,x),contextptr);
   all_trig_sol(old,contextptr);
-  if (s.type!=_VECT || s._VECTptr->empty()) return g;
+  if (s.type!=_VECT) return g;
+  if (s._VECTptr->empty()) return s; // (no solution: not solved again)
   vecteur out;
   std::vector<double> vals;
-  const double tp=6.283185307179586,e=1e-4; // (the calculator's double is a float)
+  double bd,sd;
+  if (!is_zero(P) && real_of(P,sd)){
+    for (const_iterateur it=s._VECTptr->begin();it!=s._VECTptr->end();++it){
+      if (!real_of(*it,bd)) return g;
+      trig_put(*it,P,bd,sd,num,out,vals);
+    }
+    return out.empty()?g:gen(out,0);
+  }
   for (const_iterateur it=s._VECTptr->begin();it!=s._VECTptr->end();++it){
     if (has_i(*it)) return g;
     const vecteur ids=lidnt(*it);
@@ -3569,21 +3614,8 @@ static __attribute__((noinline)) giac::gen trig_interval(const giac::gen & g){
       if (evalf(*j,1,contextptr).type!=_DOUBLE_){ if (!is_zero(n) || *j==x) return g; n=*j; } // (pi is a number)
     if (is_zero(n)) return g; // (not periodic)
     const gen b=ratnormal(subst(*it,n,0,false,contextptr),contextptr),st=ratnormal(subst(*it,n,1,false,contextptr)-b,contextptr);
-    if (!is_zero(ratnormal(subst(*it,n,2,false,contextptr)-b-2*st,contextptr))) return g; // (b + st n)
-    const gen bf=evalf(b,1,contextptr),sf=evalf(st,1,contextptr);
-    if (bf.type!=_DOUBLE_ || sf.type!=_DOUBLE_ || sf._DOUBLE_val==0) return g;
-    const double bd=bf._DOUBLE_val,sd=fabs(sf._DOUBLE_val);
-    const gen sg=sf._DOUBLE_val<0?-st:st;
-    int k=(int)ceil(-bd/sd-e);
-    for (int i=0;i<64 && bd+k*sd<tp-e;++i,++k){
-      const double v=bd+k*sd;
-      unsigned j=0;
-      while (j<vals.size() && vals[j]<v-e) ++j;
-      if (j<vals.size() && fabs(vals[j]-v)<e) continue;
-      gen r=ratnormal(b+k*sg,contextptr);
-      if (num) r=evalf(r,1,contextptr);
-      vals.insert(vals.begin()+j,v); out.insert(out.begin()+j,r);
-    }
+    if (!real_of(b,bd) || !real_of(st,sd) || sd==0) return g;
+    trig_put(b,sd<0?-st:st,bd,fabs(sd),num,out,vals);
   }
   return out.empty()?g:gen(out,0); // (none in [0, 2pi): sin(x/4) = 1, giac's)
 }
