@@ -29,7 +29,9 @@ enum {
   R_REXCL, R_RLCD, R_RKEEP, R_RDROP, R_RSQ, R_ROK, R_RBAD, R_RNONE,
   R_CSGROUP, R_CSFACT, R_CSHALF, R_CSADD, R_CSSQ, R_CSDIST, R_CSCOMB, R_CSVERT, R_CSIN, R_CSBACK,
   R_DLEAD, R_DSUB, R_DREM, R_DCHECK,
-  R_PFDIV, R_PFFACT, R_PFSET, R_PFMULT, R_PFROOT, R_PFCOEF, R_PFSOLVE, R_PFRES, R_NRULES
+  R_PFDIV, R_PFFACT, R_PFSET, R_PFMULT, R_PFROOT, R_PFCOEF, R_PFSOLVE, R_PFRES,
+  R_YSTD, R_YFRAC, R_YMUL, R_YADD, R_YSUBT, R_YBACK, R_YSOL, R_YNONE, R_YINF, R_YPAIR, R_YTWO, R_YNONE3, R_YINF3,
+  R_GSAME, R_GEXPEQ, R_GLN, R_GPOW, R_GEXPF, R_GPRODR, R_GQUOTR, R_GPOWR, R_GARG, R_GOK, R_GBAD, R_GNONE, R_GSUBU, R_GBACK, R_GXSIDE, R_GFACX, R_GMOVE, R_NRULES
 };
 static const char * const RULES[]={
   "",0,"diff(A,V)=B",
@@ -183,6 +185,37 @@ static const char * const RULES[]={
   "Match the coefficients of each power of x",0,"A",
   "Solve for the unknowns",0,"A",
   "Put the values in",0,"A",
+  // systems of linear equations (DeltaCE): elimination
+  "Write each equation in standard form",0,"A",
+  "Clear the fractions: multiply by the LCD",0,"A",
+  "Multiply so that a variable drops out",0,"A",
+  "Add the equations",0,"A",
+  "Subtract the equations",0,"A",
+  "Put it into an equation",0,"A",
+  "The solution",0,"A",
+  "Never true: no solution (the lines are parallel)",0,"A",
+  "Always true: infinitely many solutions (the same line)",0,"A",
+  "Take a pair of equations",0,"A",
+  "Two equations in two unknowns",0,"A",
+  "Never true: no solution",0,"A",
+  "Always true: infinitely many solutions",0,"A",
+  "Write both sides as powers of the same base",0,"A",
+  "Same base: the exponents are equal",0,"A",
+  "Take ln of both sides",0,"A",
+  "Power rule of logs","ln(a^u)=u*ln(a)","A",
+  "Exponential form: log_b(u) = c means u = b^c",0,"A",
+  "Product rule of logs","log(a)+log(b)=log(a*b)","A=B",
+  "Quotient rule of logs","log(a)-log(b)=log(a/b)","A=B",
+  "Power rule of logs","k*log(a)=log(a^k)","A=B",
+  "Same base: the arguments are equal",0,"A",
+  "Check: every log's argument is positive",0,"A",
+  "A log of a number <= 0: not a solution",0,"A",
+  "A power of a positive base is never <= 0: no solution",0,"A",
+  "A quadratic in the power: substitute",0,"A",
+  "Back to x",0,"A",
+  "The x terms to one side, the rest to the other",0,"A=B",
+  "Factor out x",0,"A=B",
+  "Move the logs to one side",0,"A=B",
 };
 
 const char * steps_title(const step_t & s){ return RULES[3*s.rule]; }
@@ -2546,10 +2579,538 @@ static NOINL bool eq_radical(const gen & L0,const gen & R0,const gen & Lc,const 
   if (!good && !cand.empty()) S(R_RNONE,eqseq(cand,at_different),0); // (x != 9: none left)
   return true;
 }
+// ---------------------------------------------------------------- systems (DeltaCE)
+// Linear systems of 2 or 3 equations in as many unknowns, by elimination, as textbooks do: each
+// equation as a row (coefficients, then the right side), fractions cleared, a variable eliminated
+// from a pair by multiplying them so that its coefficients are opposite (the smallest multiple),
+// the equations added or subtracted, the one left solved, the values put back.
+typedef vecteur row; // a_0 .. a_{n-1}, c: a_0 v_0 + ... = c
+static const vecteur * yv_; // the unknowns
+static NOINL gen yeq(const row & r){ // the row as an equation (2x+3y=12)
+  gen l=0;
+  const int n=r.size()-1;
+  for (int i=0;i<n;++i) if (!is_zero(r[i])) l=l+r[i]*(*yv_)[i];
+  return symbolic(at_equal,makesequence(ev(l),r[n]));
+}
+static NOINL void yshow(int rule,const row & r){ // (a line going on: its sides, the template A=B)
+  const gen e=yeq(r);
+  if (rule==R_ACONT) S(rule,arg(e,0),arg(e,1)); else S(rule,e,0);
+}
+static NOINL gen yneg(const gen & g){ return pr(g)[0]=='-'?txt(par(g)):g; } // (3*(-1))
+static NOINL void ycont(int rule,const gen & e){ if (rule==R_ACONT) S(rule,arg(e,0),arg(e,1)); else S(rule,e,0); }
+static NOINL row yscale(const row & r,const gen & m){ row o(r); EACHW(it,o) *it=ev(*it*m); return o; }
+static NOINL row ycomb(const row & a,const row & b,int sg){ row o(a); for (unsigned i=0;i<o.size();++i) o[i]=ev(a[i]+sg*b[i]); return o; }
+// eliminates unknown k from rows a and b (both have it): the row without it, steps shown
+static NOINL row yelim(const row & a,const row & b,int k){
+  const gen p=a[k],q=b[k];
+  const gen ap=abs(p,CTX),aq=abs(q,CTX),L=lcm(ap,aq);
+  gen m1=ev(L/ap),m2=ev(L/aq);
+  const bool same=is_positive(p,CTX)==is_positive(q,CTX);
+  if (!is_one(m1) || !is_one(m2)){
+    if (!is_one(m1)){ ycont(R_YMUL,symbolic(at_equal,makesequence(symbolic(at_prod,makesequence(m1,arg(yeq(a),0))),symbolic(at_prod,makesequence(m1,yneg(a.back())))))); yshow(R_ACONT,yscale(a,m1)); }
+    if (!is_one(m2)){ ycont(is_one(m1)?R_YMUL:R_ACONT,symbolic(at_equal,makesequence(symbolic(at_prod,makesequence(m2,arg(yeq(b),0))),symbolic(at_prod,makesequence(m2,yneg(b.back())))))); yshow(R_ACONT,yscale(b,m2)); }
+  }
+  const row o=ycomb(yscale(a,m1),yscale(b,m2),same?-1:1);
+  yshow(same?R_YSUBT:R_YADD,o);
+  return o;
+}
+static NOINL int ynz(const row & r){ int n=0; for (unsigned i=0;i+1<r.size();++i) if (!is_zero(r[i])) ++n; return n; }
+// the value of the unknown left in r (one coefficient): shown divided; false: 0 = c
+static NOINL bool ysolve1(const row & r,gen & val,int & k){
+  const int n=r.size()-1;
+  k=-1;
+  for (int i=0;i<n;++i) if (!is_zero(r[i])) k=i;
+  if (k<0) return false;
+  val=ev(r[n]/r[k]);
+  if (is_one(r[k])) return true; // (shown already: x=2)
+  if (!is_minus_one(r[k])) S(R_ADIV,arg(yeq(r),0),r[n],r[k]); // (-y=2: y=-2 at once)
+  S(R_ACONT,(*yv_)[k],val);
+  return true;
+}
+// row r with the values known (vals[i] not undef) put in, then solved for its one other unknown
+static NOINL bool yback(const row & r,vecteur & vals){
+  const int n=r.size()-1;
+  gen l=0,shown_=0,rest=r[n];
+  int k=-1;
+  for (int i=0;i<n;++i){
+    if (is_zero(r[i])) continue;
+    if (!is_undef(vals[i])){ // (its value as is, negative in parentheses: x-2, 3*(-2), -(-1))
+      const gen w=pr(vals[i])[0]=='-' && !(is_zero(shown_) && is_one(r[i]))?txt(par(vals[i])):vals[i];
+      shown_=shown_+(is_one(r[i])?w:is_minus_one(r[i])?symbolic(at_neg,w):symbolic(at_prod,makesequence(r[i],w)));
+      rest=rest-r[i]*vals[i];
+    }
+    else { if (k>=0) return false; k=i; shown_=shown_+r[i]*(*yv_)[i]; }
+  }
+  if (k<0) return false;
+  S(R_YBACK,symbolic(at_equal,makesequence(shown_,r[n])),0);
+  const gen v=ev(rest/r[k]);
+  if (!is_one(r[k])) S(R_ACONT,ev(r[k]*(*yv_)[k]),ev(rest));
+  S(R_ACONT,(*yv_)[k],v);
+  vals[k]=v;
+  return true;
+}
+// the unknown to eliminate between a and b: the smallest common multiple of its coefficients (the
+// last one if equal: y before x, as textbooks do); -1: none in both
+static NOINL int ypick(const row & a,const row & b){
+  int k=-1; gen best=0;
+  for (int i=0;i+1<(int)a.size();++i){
+    if (is_zero(a[i]) || is_zero(b[i])) continue;
+    const gen L=lcm(abs(a[i],CTX),abs(b[i],CTX));
+    if (k<0 || !is_greater(L,best,CTX)){ k=i; best=L; }
+  }
+  return k;
+}
+// 2 or 3 rows: steps to the values (vals, undef: unknown); 0 solved, 1 no solution, 2 infinitely many
+static NOINL int ysys(std::vector<row> & R,vecteur & vals){
+  if (R.size()==2){
+    const int k=ypick(R[0],R[1]);
+    if (k<0) return -1;
+    const row o=yelim(R[0],R[1],k);
+    if (!ynz(o)){ // 0 = c: never true (0 != -2), or always (the equations one line: x+2y=4)
+      const bool inf=is_zero(o.back()),three=yv_->size()>2;
+      if (!inf) S(three?R_YNONE3:R_YNONE,symbolic(at_different,makesequence(0,o.back())),0);
+      else { gen g=0; EACH(it,R[0]) g=gcd(g,*it); S(three?R_YINF3:R_YINF,yeq(yscale(R[0],ev(inv(g,CTX)))),0); }
+      return inf?2:1;
+    }
+    gen v; int j;
+    if (ynz(o)>1) return -1;
+    ysolve1(o,v,j);
+    vals[j]=v;
+    int o_=-1; // the other unknown
+    for (int i=0;i+1<(int)R[0].size();++i) if (i!=j && is_undef(vals[i]) && (!is_zero(R[0][i]) || !is_zero(R[1][i]))) o_=i;
+    if (o_<0) return -1;
+    // back into the equation where it has the smaller coefficient (1 rather than 3)
+    const int q=is_zero(R[0][o_]) || (!is_zero(R[1][o_]) && is_greater(abs(R[0][o_],CTX),abs(R[1][o_],CTX),CTX))?1:0;
+    if (!yback(R[q],vals) && !yback(R[1-q],vals)) return -1;
+    return 0;
+  }
+  // three: eliminate one unknown from the pairs (1,2) and (1,3), then the two left; an equation
+  // without an unknown already (x-y=0) is kept, the unknown eliminated from the other two
+  int k=-1,i0=0,i1=1,i2=2;
+  for (int j=0;j<3 && k<0;++j) for (int v=0;v<3;++v){
+    if (!is_zero(R[j][v])) continue;
+    const int a_=(j+1)%3,b_=(j+2)%3;
+    if (is_zero(R[a_][v]) || is_zero(R[b_][v])) continue;
+    k=v; i0=a_; i1=b_; i2=j; break;
+  }
+  std::vector<row> two;
+  if (k>=0){
+    yshow(R_YPAIR,R[i0]); yshow(R_ACONT,R[i1]);
+    two.push_back(yelim(R[i0],R[i1],k)); two.push_back(R[i2]);
+  }
+  else {
+    k=ypick(R[0],R[1]);
+    if (k<0 || is_zero(R[2][k])) return -1;
+    yshow(R_YPAIR,R[0]); yshow(R_ACONT,R[1]);
+    two.push_back(yelim(R[0],R[1],k));
+    yshow(R_YPAIR,R[0]); yshow(R_ACONT,R[2]);
+    two.push_back(yelim(R[0],R[2],k));
+  }
+  for (int j=0;j<2;++j) if (!ynz(two[j])){ // (0 = c already)
+    const bool inf=is_zero(two[j].back());
+    if (!inf){ S(R_YNONE3,symbolic(at_different,makesequence(0,two[j].back())),0); return 1; }
+    yshow(R_YINF3,R[i0]); yshow(R_ACONT,two[1-j]); // (an equation fewer: these two left)
+    return 2;
+  }
+  const row & a=two[0], & b=two[1];
+  // the pair without unknown k: two unknowns left (rows of the same length, k's coefficient 0)
+  yshow(R_YTWO,a); yshow(R_ACONT,b);
+  ++depth_;
+  const int r=ysys(two,vals);
+  --depth_;
+  if (r) return r;
+  for (int i=0;i<3;++i) if (yback(R[i],vals)) return 0;
+  return -1;
+}
+static NOINL bool sys_steps(const vecteur & eqs,const vecteur & vars){
+  const int n=vars.size();
+  if (n<2 || n>3 || (int)eqs.size()!=n) return false;
+  EACH(it,vars) if (it->type!=_IDNT) return false;
+  yv_=&vars;
+  std::vector<row> R;
+  bool std_=true,frac=false;
+  EACH(it,eqs){ // each equation's row: its coefficients (constants: linear) and its constant
+    const gen e=*it;
+    const gen d=ev(is(e,at_equal)?arg(e,0)-arg(e,1):e);
+    row r(n+1);
+    gen c=d;
+    for (int i=0;i<n;++i){
+      r[i]=ev(derive(d,vars[i],CTX));
+      EACH(v,vars) if (dep(r[i],*v)) return false;
+      c=sub(c,vars[i],0);
+    }
+    r[n]=ev(-c);
+    EACH(v,r) if (v->type!=_INT_ && v->type!=_ZINT && v->type!=_FRAC) return false; // (numbers: 2/3, not decimals)
+    EACH(v,r) frac=frac || v->type==_FRAC;
+    if (!is(e,at_equal) || !written(ev(e),yeq(r))) std_=false;
+    R.push_back(r);
+  }
+  if (!std_){ yshow(R_YSTD,R[0]); for (int i=1;i<n;++i) yshow(R_ACONT,R[i]); }
+  if (frac){ // each row times the LCD of its coefficients
+    bool any=false;
+    for (int i=0;i<n;++i){
+      gen k=1;
+      EACH(v,R[i]) if (v->type==_FRAC) k=lcm(k,v->_FRACptr->den);
+      if (!is_one(k)){ R[i]=yscale(R[i],k); yshow(any?R_ACONT:R_YFRAC,R[i]); any=true; }
+    }
+  }
+  vecteur vals(n,undef);
+  const int r=ysys(R,vals);
+  if (r<0) return false;
+  if (r==0){
+    vecteur sol;
+    for (int i=0;i<n;++i){ if (is_undef(vals[i])) return false; sol.push_back(symbolic(at_equal,makesequence(vars[i],vals[i]))); }
+    S(R_YSOL,gen(sol,_SEQ__VECT),0);
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------- exponential and log equations (DeltaCE)
+// x in exponents (2^(x+1) = 8, 3^x = 7, e^(2x)-3e^x+2 = 0) or in logs (log(x)+log(x-3) = 1): the
+// power alone, then both sides as powers of one base (the exponents equal) or ln of both sides; the
+// logs made one with the log rules, written as a power, the equation left solved, each solution
+// checked in the logs (their arguments positive). The sides as typed: log(x) is log10(x) there,
+// ln(x)/ln(10) once evaluated.
+static NOINL bool el_num(const gen & g,double & d){
+  const gen z=evalf(g,1,CTX);
+  if (z.type==_DOUBLE_){ d=z._DOUBLE_val; return true; }
+  if (z.type==_INT_){ d=z.val; return true; }
+  return false;
+}
+static NOINL bool el_e(const gen & b){ return is(b,at_exp); } // (the base e is exp(1), not evaluated)
+static NOINL gen el_pow(const gen & b,const gen & u){ return el_e(b)?SYM(at_exp,u):SYM2(at_pow,b,u); }
+static NOINL gen el_log(const gen & b,const gen & u){ return el_e(b)?SYM(at_ln,u):b==10?SYM(at_log10,u):SYM2(at_logb,u,b); }
+static NOINL gen el_mul(const gen & m,const gen & u){ return is_one(m)?u:is_minus_one(m)?SYM(at_neg,u):SYM2(at_prod,m,u); }
+static NOINL gen el_sum(const vecteur & v){ return v.empty()?gen(0):v.size()==1?v.front():symbolic(at_plus,gen(v,_SEQ__VECT)); }
+// F's kind: 1 a power b^u (b a positive number, not 1), 2 a log of u (base b), 0 neither
+static NOINL int el_kind(const gen & F,gen & b,gen & u){
+  double d;
+  if (is(F,at_exp)){ b=SYM(at_exp,1); u=arg(F); return 1; }
+  if (is(F,at_pow) && !dep(arg(F,0)) && dep(arg(F,1)) && el_num(arg(F,0),d) && d>0 && d!=1){ b=arg(F,0); u=arg(F,1); return 1; }
+  if (is(F,at_ln)){ b=SYM(at_exp,1); u=arg(F); return 2; }
+  if (is(F,at_log10)){ b=10; u=arg(F); return 2; }
+  if (is(F,at_logb) && arg(F).type==_VECT && arg(F)._VECTptr->size()==2 && !dep(arg(F,1)) && el_num(arg(F,1),d) && d>0 && d!=1){ b=arg(F,1); u=arg(F,0); return 2; }
+  return 0;
+}
+static NOINL bool el_has(const gen & g){ // a power or a log with x inside
+  if (g.type!=_SYMB) return false;
+  gen b,u;
+  if (el_kind(g,b,u) && dep(u)) return true;
+  const gen & a=arg(g);
+  if (a.type!=_VECT) return el_has(a);
+  EACH(it,*a._VECTptr) if (el_has(*it)) return true;
+  return false;
+}
+// a side's terms: k*F (F a power or log with x, or a log of a number), c the numbers; false: other
+// x terms (x+e^x)
+static NOINL bool el_terms(const gen & s,vecteur & K,vecteur & Fs,gen & c){
+  vecteur t;
+  flat(at_plus,s,t);
+  c=0;
+  EACH(it,t){
+    gen g=*it,k=1,F=0,b,u;
+    const bool x=dep(g);
+    if (is(g,at_neg)){ k=-1; g=arg(g); }
+    vecteur f;
+    if (is(g,at_prod)) flat(at_prod,g,f); else f.push_back(g);
+    bool two=false;
+    EACH(j,f){
+      if (dep(*j) || (!x && el_kind(*j,b,u)==2)){ two=two || !is_zero(F); F=*j; }
+      else k=k*(*j);
+    }
+    double d;
+    if (two || is_zero(F) || !el_num(k,d)){ if (x) return false; c=c+*it; continue; }
+    if (!el_kind(F,b,u)) return false;
+    K.push_back(ev(k)); Fs.push_back(F);
+  }
+  c=ev(c);
+  return true;
+}
+static NOINL gen el_term(const gen & k,const gen & F){ // k*F as written: -ln(x), 2*ln(x)
+  if (is_one(k)) return F;
+  if (is_minus_one(k)) return SYM(at_neg,F);
+  double d;
+  if (el_num(k,d) && d<0) return SYM(at_neg,SYM2(at_prod,ev(-k),F));
+  return SYM2(at_prod,k,F);
+}
+static NOINL gen el_side(const vecteur & K,const vecteur & Fs){
+  vecteur t;
+  for (unsigned i=0;i<K.size();++i) t.push_back(el_term(K[i],Fs[i]));
+  return el_sum(t);
+}
+// k*F + c = R: F alone (c taken away, both sides divided by k); the right side's value
+static NOINL gen el_iso(const gen & L,const gen & k,const gen & F,const gen & c,const gen & R){
+  gen l=L,r=ev(R);
+  double d;
+  if (!is_zero(c)){
+    if (el_num(c,d) && d>0) both(R_ASUB,L,R,c,-1); else both(R_AADD,L,R,ev(-c),1);
+    l=el_term(k,F); r=ev(r-c);
+    S(R_ACONT,l,r);
+  }
+  if (!is_one(k)){
+    if (!is_minus_one(k)) S(R_ADIV,l,r,k); // (-2^x = -8: 2^x = 8 at once)
+    r=ev(r/k);
+    S(R_ACONT,F,r);
+  }
+  return r;
+}
+// g = c^n, c the smallest whole number (g whole or 1/whole)
+static NOINL bool el_root(const gen & g,gen & c,gen & n){
+  gen a=g;
+  int s=1;
+  if (a.type==_FRAC && is_one(a._FRACptr->num)){ a=a._FRACptr->den; s=-1; }
+  if (a.type!=_INT_ || a.val<2) return false;
+  const long long v=a.val;
+  for (int e=24;e>=1;--e){
+    const long long r=(long long)(pow((double)v,1.0/e)+0.5);
+    if (r<2) continue;
+    long long p=1;
+    int i=0;
+    for (;i<e && p<=v;++i) p*=r;
+    if (i==e && p==v){ c=int(r); n=s*e; return true; }
+  }
+  return false;
+}
+static NOINL bool el_lin(const gen & l,const gen & r);
+static NOINL bool el_eq(const gen & l,const gen & r){ // (numbers with logs in it: 2x-1 = ln(5), x by hand)
+  if (l==X && !dep(r)) return true;
+  const size_t m=mark();
+  if (eq_poly(l,r)) return true;
+  cut(m);
+  return el_lin(l,r);
+}
+// a side as typed with a-b as a+(-b) and a/b as a*b^-1, nothing evaluated (ln(9) stays)
+static NOINL gen el_norm(const gen & g){
+  if (g.type!=_SYMB) return g;
+  const unary_function_ptr & u=g._SYMBptr->sommet;
+  const gen a=arg(map_of(g,el_norm));
+  vecteur v;
+  if (u==at_binary_minus && a.type==_VECT && a._VECTptr->size()==2){
+    flat(at_plus,a[0],v); flat(at_plus,a[1].type<_IDNT?-a[1]:symb_neg(a[1]),v); return symb_plus(v);
+  }
+  if (u==at_division && a.type==_VECT && a._VECTptr->size()==2) return is_one(a[0])?SYM(at_inv,a[1]):SYM2(at_prod,a[0],SYM(at_inv,a[1]));
+  return SYM(&u,a);
+}
+// x terms on one side: a x + b = c x + d, the coefficients numbers with logs (x ln 3 = (x+1) ln 2)
+static NOINL bool el_lin(const gen & l,const gen & r){
+  if (dep(D(D(ev(l-r),X),X))) return false;
+  gen Lx=ev(expand(l,CTX)),Rx=ev(expand(r,CTX));
+  gen aL=D(Lx,X),aR=D(Rx,X),bL=ev(sub(Lx,X,0)),bR=ev(sub(Rx,X,0));
+  const gen k=lcd(aL,bL,aR,bR);
+  if (!is_one(k)){ // fractions first (x/2 = e: x = 2e)
+    S(R_ALCD,l,r,k);
+    Lx=ev(expand(k*Lx,CTX)); Rx=ev(expand(k*Rx,CTX));
+    S(R_ACONT,Lx,Rx);
+    if (Lx==X && !dep(Rx)) return true;
+    aL=D(Lx,X); aR=D(Rx,X); bL=ev(sub(Lx,X,0)); bR=ev(sub(Rx,X,0));
+  }
+  else if (!written(Lx,l) || !written(Rx,r)) S(R_ADIST,Lx,Rx);
+  const gen a=ev(aL-aR);
+  if (is_zero(a)){ S(is_zero(ev(bR-bL))?R_ATRUE:R_AFALSE,bL,bR); return true; }
+  gen lx=Lx,rx=Rx;
+  if (!is_zero(aR) || !is_zero(bL)){
+    vecteur lt,rt;
+    lt.push_back(ev(aL*X));
+    if (!is_zero(aR)) lt.push_back(ev(-aR*X));
+    if (!is_zero(bR)) rt.push_back(bR);
+    if (!is_zero(bL)) rt.push_back(ev(-bL));
+    lx=el_sum(lt); rx=el_sum(rt);
+    S(R_GXSIDE,lx,rx);
+  }
+  if (!is_zero(aR)){ lx=SYM2(at_prod,X,a); S(R_GFACX,lx,rx); }
+  if (!is_one(a)) S(R_ADIV,lx,rx,a);
+  S(R_ACONT,X,ev(rx/a));
+  return true;
+}
+// b^u = r, r a number
+static NOINL bool el_one(const gen & F,const gen & r){
+  gen b,u,c,m,n,c2;
+  el_kind(F,b,u);
+  double d;
+  if (!el_num(r,d)) return false;
+  if (d<=0){ S(R_GNONE,SYM2(at_equal,F,r),0); return true; }
+  if (!el_e(b) && el_root(b,c,m) && (is_one(r)?(n=0,true):el_root(r,c2,n) && c2==c)){ // 4^x = 8: 2^(2x) = 2^3
+    const gen mu=el_mul(m,u);
+    S(R_GSAME,SYM2(at_equal,el_pow(c,mu),el_pow(c,n)),0);
+    S(R_GEXPEQ,SYM2(at_equal,mu,n),0);
+    return el_eq(mu,n);
+  }
+  const gen lr=SYM(at_ln,r);
+  S(R_GLN,SYM2(at_equal,SYM(at_ln,F),lr),0);
+  if (el_e(b)){ // (ln(e^u) is u)
+    const gen v=ev(lr);
+    S(R_ACONT,u,lr);
+    if (u==X && pr(v)!=pr(lr)) S(R_ACONT,X,v); // (ln(1) = 0)
+    return el_eq(u,v);
+  }
+  const gen lb=SYM(at_ln,b),ul=SYM2(at_prod,u,lb);
+  S(R_GPOW,SYM2(at_equal,ul,lr),0);
+  S(R_ADIV,ul,lr,lb);
+  const gen v=ev(SYM2(at_prod,lr,SYM(at_inv,lb)));
+  S(R_ACONT,u,v);
+  return el_eq(u,v);
+}
+// b1^u1 = b2^u2
+static NOINL bool el_two(const gen & F1,const gen & F2){
+  gen b1,u1,b2,u2,c1,m1,c2,m2;
+  el_kind(F1,b1,u1); el_kind(F2,b2,u2);
+  if (!el_e(b1) && !el_e(b2) && el_root(b1,c1,m1) && el_root(b2,c2,m2) && c1==c2){ // 4^x = 8^(x-1)
+    const gen l=el_mul(m1,u1),r=el_mul(m2,u2);
+    if (!is_one(m1) || !is_one(m2)) S(R_GSAME,SYM2(at_equal,el_pow(c1,l),el_pow(c1,r)),0);
+    S(R_GEXPEQ,SYM2(at_equal,l,r),0);
+    return el_eq(l,r);
+  }
+  S(R_GLN,SYM2(at_equal,SYM(at_ln,F1),SYM(at_ln,F2)),0);
+  const gen l=el_e(b1)?u1:SYM2(at_prod,u1,SYM(at_ln,b1)),r=el_e(b2)?u2:SYM2(at_prod,u2,SYM(at_ln,b2));
+  S(R_GPOW,SYM2(at_equal,l,r),0);
+  return el_lin(l,r);
+}
+// every term on the left, k*b^(m x) with m 1 or 2, one base: u = b^x, a quadratic in u
+static NOINL bool el_quad(const vecteur & K,const vecteur & Fs,const gen & c){
+  const gen t(identificateur(X==gen(identificateur("u"))?"t":"u"));
+  gen b0,Q=c;
+  bool one=false,two=false;
+  for (unsigned i=0;i<K.size();++i){
+    gen b,u;
+    el_kind(Fs[i],b,u);
+    if (i && !(b==b0)) return false;
+    b0=b;
+    const gen m=D(u,X);
+    if (!is_zero(ev(u-m*X))) return false;
+    if (m==1){ one=true; Q=Q+K[i]*t; }
+    else if (m==2){ two=true; Q=Q+K[i]*symb_pow(t,2); }
+    else return false;
+  }
+  if (!one || !two) return false;
+  Q=ev(expand(Q,CTX));
+  const gen F=el_pow(b0,X);
+  S(R_GSUBU,SYM2(at_equal,t,F),0);
+  S(R_ACONT,Q,0);
+  const gen x0=X;
+  X=t;
+  ++depth_;
+  const bool ok=eq_poly(Q,0);
+  const vecteur r=ok?roots_of(Q,0):vecteur();
+  --depth_;
+  X=x0;
+  if (!ok) return false;
+  EACH(it,r){
+    S(R_GBACK,SYM2(at_equal,F,*it),0);
+    ++depth_; const bool o=el_one(F,*it); --depth_;
+    if (!o) return false;
+  }
+  return true;
+}
+// the logs k_i log(u_i) of a side: with the power rule (s1), as one log (s2) of a; q: a quotient
+static NOINL bool el_comb(const vecteur & K,const vecteur & Fs,const gen & B,gen & s1,gen & s2,gen & a,bool & q){
+  vecteur t,num,den;
+  for (unsigned i=0;i<K.size();++i){
+    gen b,u;
+    el_kind(Fs[i],b,u);
+    const gen k=K[i];
+    if (k.type!=_INT_ && k.type!=_FRAC) return false;
+    const bool neg=!is_positive(k,CTX);
+    const gen ak=neg?ev(-k):k,w=is_one(ak)?u:SYM2(at_pow,u,ak),l=el_log(B,w);
+    t.push_back(neg?SYM(at_neg,l):l);
+    (neg?den:num).push_back(w);
+  }
+  q=!den.empty();
+  const gen N=num.empty()?gen(1):num.size()==1?num[0]:symbolic(at_prod,gen(num,_SEQ__VECT));
+  const gen M=den.size()==1?den[0]:symbolic(at_prod,gen(den,_SEQ__VECT));
+  s1=el_sum(t);
+  a=q?SYM2(at_prod,N,SYM(at_inv,M)):N;
+  s2=el_log(B,a);
+  return true;
+}
+// a = v (a the logs' argument): solved, each solution checked in the logs (us: their arguments)
+static NOINL bool el_check(const gen & a,const gen & v,const vecteur & us){
+  if (dep(_denom(ratnormal(a,CTX),CTX))?!eq_rational(a,v):!el_eq(a,v)) return false;
+  const vecteur cand=roots_of(a,v);
+  int good=0;
+  EACH(it,cand){
+    bool ok=true;
+    double d;
+    EACH(u,us) if (!el_num(sub(*u,X,*it),d) || d<=0) ok=false;
+    good+=ok;
+    S(ok?R_GOK:R_GBAD,SYM2(at_equal,X,*it),0);
+  }
+  if (!good && !cand.empty()) S(R_RNONE,eqseq(cand,at_different),0);
+  return true;
+}
+// log_B(a) = c: a = B^c
+static NOINL bool el_form(const gen & B,const gen & a,const gen & c,const vecteur & us){
+  const gen p=el_pow(B,c),v=ev(p);
+  S(R_GEXPF,SYM2(at_equal,a,p),0);
+  if (pr(v)!=pr(p)) S(R_ACONT,a,v);
+  return el_check(a,v,us);
+}
+static NOINL bool eq_el(gen L,gen R){
+  vecteur KL,FL,KR,FR;
+  gen cL,cR;
+  if (!el_terms(L,KL,FL,cL) || !el_terms(R,KR,FR,cR)) return false;
+  bool xl=false,xr=false;
+  EACH(it,FL) xl=xl || dep(*it);
+  EACH(it,FR) xr=xr || dep(*it);
+  if (!xl && !xr) return false;
+  if (!xl){ S(R_ASWAP,R,L); std::swap(L,R); std::swap(KL,KR); std::swap(FL,FR); std::swap(cL,cR); }
+  int kind=0;
+  gen B;
+  vecteur us; // the logs' arguments with x
+  for (int s=0;s<2;++s) EACH(it,s?FR:FL){
+    gen b,u;
+    const int k=el_kind(*it,b,u);
+    if (kind && (k!=kind || (k==2 && !(b==B)))) return false; // (logs: one base)
+    kind=k; B=b;
+    if (k==2 && dep(u)) us.push_back(u);
+  }
+  if (kind==1){
+    if (FL.size()==1 && FR.empty()) return el_one(FL[0],el_iso(L,KL[0],FL[0],cL,R));
+    if (FL.size()==1 && FR.size()==1 && is_zero(cL) && is_zero(cR) && is_one(KL[0]) && is_one(KR[0])) return el_two(FL[0],FR[0]);
+    vecteur t;
+    flat(at_plus,L,t);
+    if (!is_zero(R)){ // every term to the left
+      vecteur r;
+      flat(at_plus,R,r);
+      EACH(it,r) t.push_back(SYM(at_neg,*it));
+      S(R_QSTD,el_sum(t),0);
+    }
+    for (unsigned i=0;i<FR.size();++i){ KL.push_back(ev(-KR[i])); FL.push_back(FR[i]); }
+    return el_quad(KL,FL,ev(cL-cR));
+  }
+  gen s1,s2,a,r1,r2,ar;
+  bool q,qr;
+  if (FR.empty() || !is_zero(cL) || !is_zero(cR)){ // log(x)+log(x-3) = 1: the logs one, then a power
+    if (FR.empty() && FL.size()==1){ gen b,u; el_kind(FL[0],b,u); return el_form(B,u,el_iso(L,KL[0],FL[0],cL,R),us); }
+    gen v=ev(cR-cL);
+    if (!FR.empty()){ // the logs to the left, the numbers to the right
+      for (unsigned i=0;i<FR.size();++i){ KL.push_back(ev(-KR[i])); FL.push_back(FR[i]); }
+      S(R_GMOVE,el_side(KL,FL),v);
+    }
+    else if (!is_zero(cL)){
+      double d;
+      if (el_num(cL,d) && d>0) both(R_ASUB,L,R,cL,-1); else both(R_AADD,L,R,ev(-cL),1);
+      S(R_ACONT,el_side(KL,FL),v);
+    }
+    if (!el_comb(KL,FL,B,s1,s2,a,q)) return false;
+    if (pr(s1)!=pr(el_side(KL,FL))) S(R_GPOWR,s1,v);
+    S(q?R_GQUOTR:R_GPRODR,s2,v);
+    return el_form(B,a,v,us);
+  }
+  // logs on both sides: log(a) = log(b), a = b
+  if (!el_comb(KL,FL,B,s1,s2,a,q) || !el_comb(KR,FR,B,r1,r2,ar,qr)) return false;
+  if (pr(s1)!=pr(el_side(KL,FL)) || pr(r1)!=pr(el_side(KR,FR))) S(R_GPOWR,s1,r1);
+  if (pr(s2)!=pr(s1) || pr(r2)!=pr(r1)) S(q || qr?R_GQUOTR:R_GPRODR,s2,r2);
+  S(R_GARG,SYM2(at_equal,a,ar),0);
+  return el_check(a,ar,us);
+}
+
 static NOINL bool eq_steps(const gen & input){
   const gen & g=arg(input);
+  if (g.type==_VECT && g._VECTptr->size()==2 && g[0].type==_VECT && g[1].type==_VECT) // (DeltaCE) a system
+    return sys_steps(*g[0]._VECTptr,*g[1]._VECTptr);
   const gen eq=g.type==_VECT?g[0]:g;
   if (g.type==_VECT && g._VECTptr->size()>1){ if (g[1].type!=_IDNT) return false; X=g[1]; }
+  if (el_has(eq)) return eq_el(el_norm(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq),el_norm(eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0))); // (DeltaCE) 2^x = 8, log(x) = 2
   gen L=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,0):eq),R=ev(eq.is_symb_of_sommet(at_equal)?arg(eq,1):gen(0));
   if (!dep(L) && !dep(R)) return false;
   if (nroots(L)+nroots(R)) return eq_radical(L,R,L,R,0); // (sqrt(x+3) = x-3)
