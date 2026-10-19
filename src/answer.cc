@@ -1158,6 +1158,17 @@ static __attribute__((noinline)) bool at(const giac::gen & f,const giac::gen & x
 // Only single radicals: x^4+q (t = u = (4q)^(1/4)) or q a square (t, u square roots); giac's normal
 // of a radical of radicals took 17 s on the calculator (sqrt(2*sqrt(5))), so nothing is normalized.
 // 0: not such a fraction
+// biquad's formulas: f with bp bq bs bt bu (p, q, sqrt(q), t, u), b0..b3 (k0..k3), bm bw bL bW ba bb (the
+// coefficients below) and bx (x) given the values v; then 1 evaluated, 2 ratnormal. Strings, not gen
+// arithmetic: each temporary of that cost about 40 bytes on the eZ80 (biquad was 12 KB)
+static __attribute__((noinline)) giac::gen bqf(const char * f,const giac::gen * v,int how){
+  using namespace giac;
+  static const char * const nm[16]={"bp","bq","bs","bt","bu","b0","b1","b2","b3","bm","bw","bL","bW","ba","bb","bx"}; // (literals: an identificateur keeps the pointer)
+  vecteur ids,vals;
+  for (int i=0;i<16;++i){ ids.push_back(gen(identificateur(nm[i]))); vals.push_back(v[i]); }
+  const gen g=subst(gen(f,contextptr),ids,vals,true,contextptr);
+  return how==2?ratnormal(g,contextptr):eval(g,1,contextptr);
+}
 static __attribute__((noinline)) giac::gen biquad(const giac::gen & f,const giac::gen & x){
   using namespace giac;
   if (x.type!=_IDNT) return 0;
@@ -1168,44 +1179,36 @@ static __attribute__((noinline)) giac::gen biquad(const giac::gen & f,const giac
   if (cd.type!=_VECT || cd._VECTptr->size()!=5 || cn.type!=_VECT || cn._VECTptr->size()>4) return 0;
   const vecteur & D=*cd._VECTptr,& Nv=*cn._VECTptr;
   if (!is_zero(D[1]) || !is_zero(D[3])) return 0;
-  const gen c=D[0],p=ratnormal(D[2]/c,contextptr),q=ratnormal(D[4]/c,contextptr);
+  gen V[16]; // bp bq bs bt bu b0 b1 b2 b3 bm bw bL bW ba bb bx
+  const gen & c=D[0],& p=V[0]=ratnormal(D[2]/c,contextptr),& q=V[1]=ratnormal(D[4]/c,contextptr);
+  V[15]=x;
   const bool rat=(p.type==_INT_ || p.type==_FRAC) && (q.type==_INT_ || q.type==_FRAC);
-  if (!rat || !is_strictly_positive(q,contextptr) || !is_strictly_positive(4*q-p*p,contextptr)) return 0;
-  const gen sq=eval(symbolic(at_sqrt,q),1,contextptr);
+  if (!rat || !is_strictly_positive(q,contextptr) || !is_strictly_positive(bqf("4*bq-bp^2",V,1),contextptr)) return 0;
+  const gen & sq=V[2]=bqf("sqrt(bq)",V,1);
   const bool rs=sq.type==_INT_ || sq.type==_FRAC;
   if (!rs && !is_zero(p)) return 0; // (x^4+2x^2+5: radicals of radicals, as unreadable as giac's)
-  const gen t=rs?eval(symbolic(at_sqrt,2*sq-p),1,contextptr):eval(pow(4*q,fraction(1,4),contextptr),1,contextptr),
-    u=rs?eval(symbolic(at_sqrt,2*sq+p),1,contextptr):t;
+  const gen & t=V[3]=bqf(rs?"sqrt(2*bs-bp)":"(4*bq)^(1/4)",V,1),& u=V[4]=rs?bqf("sqrt(2*bs+bp)",V,1):t;
   if (rs && (t.type==_INT_ || t.type==_FRAC)) return 0; // (x^4+4: rational factors, giac's own)
-  gen k[4]={0,0,0,0}; // N/c: k3 x^3 + k2 x^2 + k1 x + k0
-  for (unsigned i=0;i<Nv.size();++i) k[Nv.size()-1-i]=ratnormal(Nv[i]/c,contextptr);
+  for (unsigned i=0;i<Nv.size();++i) V[5+Nv.size()-1-i]=ratnormal(Nv[i]/c,contextptr); // N/c: k3 x^3 + k2 x^2 + k1 x + k0
   // written rationalized, as textbooks do (each coefficient a rational times one radical): with
   // r = (4q)^(1/4) (x^4+q: t = u = r, 1/r^3 = r/(4q)) L = (k0-k2 sqrt(q)) r/(8q), W = (k0+k2 sqrt(q)) r/(4q);
   // with s rational L = (k0-k2 s) t/(4s(2s-p)), W = (k0+k2 s) u/(2s(2s+p)); atan's (2x+t)/u as 2x/u + t/u
   gen r=0;
-  if (!is_zero(k[1]) || !is_zero(k[3])) { // the odd part
-    const gen m2=4*q-p*p,m=eval(symbolic(at_sqrt,m2),1,contextptr);
-    if (!is_zero(k[3])) r=r+(k[3]/4)*ln(x*x*x*x+p*x*x+q,contextptr);
-    const gen w=ratnormal((2*k[1]-k[3]*p)/(2*m2),contextptr);
-    if (!is_zero(w)) r=r+w*m*symbolic(at_atan,eval(2*m/m2,1,contextptr)*x*x+eval(p*m/m2,1,contextptr));
+  if (!is_zero(V[6]) || !is_zero(V[8])) { // the odd part: k3/4 ln(x^4+px^2+q) + w m atan(2m/m2 x^2 + p m/m2)
+    V[9]=bqf("sqrt(4*bq-bp^2)",V,1);
+    V[10]=bqf("(2*b1-b3*bp)/(2*(4*bq-bp^2))",V,2);
+    V[13]=bqf("2*bm/(4*bq-bp^2)",V,1); V[14]=bqf("bp*bm/(4*bq-bp^2)",V,1);
+    r=bqf("b3/4*ln(bx^4+bp*bx^2+bq)+bw*bm*atan(ba*bx^2+bb)",V,1);
   }
-  gen L,W;
-  if (rs){
-    L=ratnormal((k[0]-k[2]*sq)/(4*sq*(2*sq-p)),contextptr)*t;
-    W=ratnormal((k[0]+k[2]*sq)/(2*sq*(2*sq+p)),contextptr)*u;
-  } else {
-    const gen ce=ratnormal(1/(8*q),contextptr);
-    L=eval((k[0]-k[2]*sq)*ce,1,contextptr)*t;
-    W=eval((k[0]+k[2]*sq)*2*ce,1,contextptr)*t;
-  }
+  if (is_zero(V[5]) && is_zero(V[7])) return r; // (an odd N: v = x^2 alone)
+  V[11]=bqf(rs?"(b0-b2*bs)/(4*bs*(2*bs-bp))":"(b0-b2*bs)*ratnormal(1/(8*bq))",V,rs?2:1)*t;
+  V[12]=bqf(rs?"(b0+b2*bs)/(2*bs*(2*bs+bp))":"(b0+b2*bs)*ratnormal(1/(4*bq))",V,rs?2:1)*u;
   // 2/u and t/u rationalized when u^2 = 2s+p is rational (2/sqrt(2): sqrt(2); sqrt(5)/sqrt(7): sqrt(35)/7)
   // (t u = sqrt(4q-p^2): one radical; t = u: 1)
-  const gen au=rs?eval(2*u/(2*sq+p),1,contextptr):eval(2/u,1,contextptr),
-    tu=t==u?gen(1):eval(symbolic(at_sqrt,4*q-p*p)/(2*sq+p),1,contextptr);
-  if (is_zero(k[0]) && is_zero(k[2])) return r; // (an odd N: v = x^2 alone)
-  if (!is_zero(L)) r=r+L*ln(x*x+t*x+sq,contextptr)-L*ln(x*x-t*x+sq,contextptr);
-  if (!is_zero(W)) r=r+W*symbolic(at_atan,au*x+tu)+W*symbolic(at_atan,au*x-tu);
-  return r;
+  V[13]=bqf(rs?"2*bu/(2*bs+bp)":"2/bu",V,1);
+  V[14]=t==u?gen(1):bqf("sqrt(4*bq-bp^2)/(2*bs+bp)",V,1);
+  V[9]=r; // (the odd part first, as written)
+  return bqf("bm+bL*ln(bx^2+bt*bx+bs)-bL*ln(bx^2-bt*bx+bs)+bW*atan(ba*bx+bb)+bW*atan(ba*bx-bb)",V,1);
 }
 
 // the table, then trig_powers, then usub: integrate(h,x) at once, 0 if none (tan(u): -ln|cos(u)|/a)
