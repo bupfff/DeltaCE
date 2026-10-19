@@ -19,8 +19,8 @@
 
 DeltaCE is a computer algebra system for the TI-84 Plus CE, built for algebra and Calc 1 to 3. It
 is a fork of [FlowCE](https://github.com/tommyb3ll/FlowCE) (itself a fork of KhiCAS): everything
-FlowCE Steps does, plus steps for algebra, a new graph screen, function analysis, units, and a look
-of its own. Answers are exact: `π²/6`, not `1.64493`; `ln|sec x + tan x| + C`. The decimal value
+FlowCE Steps does, plus steps for algebra, a new graph screen, function analysis, statistics,
+probability, a practice mode, units, and a look of its own. Answers are exact: `π²/6`, not `1.64493`; `ln|sec x + tan x| + C`. The decimal value
 sits right under the exact one.
 
 **[Install it from the DeltaCE page](https://bupfff.github.io/DeltaCE/)**: plug in the calculator,
@@ -32,8 +32,12 @@ click Install, then press `enter` once on the calculator.
   textbook does: derivatives, integrals, limits, sums and Taylor series (FlowCE Steps), and in
   algebra, linear and quadratic equations (always by the formula: a, b and c, the discriminant,
   the roots simplified), rational and radical equations (excluded values, the LCD, every candidate
-  checked), and factoring (GCF, differences of squares and cubes, two numbers or the ac method,
-  grouping, rational roots). Each step names its rule; `▲` `▼` move between them.
+  checked), factoring (GCF, differences of squares and cubes, two numbers or the ac method,
+  grouping, rational roots), systems of 2 or 3 equations by elimination, exponential and log
+  equations (the same base, ln of both sides, the log rules, every solution checked), trig
+  equations (the reference angle, its quadrants, every solution, those in [0, 2π)), and implicit
+  differentiation (`implicitdiff(x^2+y^2=25,x,y)`). Each step names its rule; `▲` `▼` move between
+  them.
 - **Answers like your textbook, and their other forms.** `F4` cycles an answer's forms: simplified,
   one fraction, factored, expanded, the completed square, long division, partial fractions,
   decimal; `enter` on one shows its work. On an antiderivative, `F4` checks it by differentiating.
@@ -52,6 +56,14 @@ click Install, then press `enter` once on the calculator.
   when it can be (`y = 33/7 x + 324/7`) with r and r², a predicted y, and the points with the curve
   on the graph screen, traced point by point. `mean(L1)`, `linear_regression(L1,L2)` and the
   others work in the console too.
+- **Probability and inference.** *more* → Probability: the normal, t, chi-square, binomial and
+  Poisson distributions drawn with the area you ask for shaded, P(a ≤ X ≤ b), a tail or P(X = k),
+  and the inverse (the x for an area, left, right or in the middle). Intervals and tests for a
+  proportion (z) and a mean (t, its data from `L1` if you like), on their curve, with the p-value.
+- **Practice.** *more* → Practice: problems made up for you in 8 topics (linear and quadratic
+  equations, systems, exponents and logs, derivatives, integrals, factoring, trig equations). Type
+  your answer: any equivalent form counts. When it is not right, you see the answer and, with `F2`,
+  its steps.
 - **Function analysis.** `analyze(f)` (or F2 → Analyze f(x)): domain, intercepts, symmetry,
   asymptotes and holes, increasing and decreasing, extrema, concavity, inflection points.
 - **Units.** A units menu on `alpha` `F4`: 72 units in 8 categories, Celsius to Fahrenheit, results
@@ -82,6 +94,10 @@ click Install, then press `enter` once on the calculator.
 | `▶`: what to do next | key points, exact | `analyze(f)` |
 | ![An ellipse and a line](docs/screenshots/graph_conic.png) | ![A polar curve](docs/screenshots/graph_polar.png) | ![A slope field and a solution](docs/screenshots/graph_field.png) |
 | equations in x and y | polar curves | slope fields |
+| ![P(X ≥ 130) for IQ scores, N(100, 15), the right tail shaded](docs/screenshots/prob_normal.png) | ![A one-sample t test on its curve, both tails shaded, t = 1.667, p = 0.1086](docs/screenshots/prob_ttest.png) | ![Practice: a derivative, answered right](docs/screenshots/practice.png) |
+| probability: a tail, shaded | a t test on its curve | practice, checked |
+| ![Steps for a system of two equations: elimination](docs/screenshots/steps_system.png) | ![Steps for log(x) + log(x − 3) = 1: the product rule](docs/screenshots/steps_log.png) | ![Steps for 2cos(x) + √3 = 0: the quadrants](docs/screenshots/steps_trig.png) |
+| steps: a system | steps: a log equation | steps: a trig equation |
 | ![Data in two columns](docs/screenshots/stats_data.png) | ![A column's statistics and its box plot](docs/screenshots/stats_box.png) | ![A line fitted to the points](docs/screenshots/stats_fit.png) |
 | statistics: your data | a column's statistics | a fitted line, exact |
 | ![A parametric curve](docs/screenshots/graph_param.png) | ![Units](docs/screenshots/units.png) | ![The sum of 1/n² is π²/6](docs/screenshots/basel.png) |
@@ -149,6 +165,8 @@ The bundle's INST is patched to run on OS 5.8.4 (the original stops with *"Unkno
 | ON while computing | stops the calculation |
 | *more* → Graph | graphs the line or the answer: F1 pan or trace, F2 zoom, F3 key points and tools, F4 table, F5 more |
 | *more* → Statistics | data in L1 and L2: F1/F2 a column's statistics, F3 fit a curve, F4 plot the points, F5 edit (insert, delete, sort, clear) |
+| *more* → Probability | a distribution: F1 which one, F2 the region, F3 inverse, F4 intervals and tests; type the values, ◀ ▶ move |
+| *more* → Practice | `enter` answers, F2 the steps, F3 another problem, F4 the topic |
 | `mode` | settings (*Simplify answers* on or off), shortcuts, about |
 | `2nd quit` | quit (your session is kept) |
 
