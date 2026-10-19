@@ -1159,7 +1159,7 @@ static __attribute__((noinline)) bool at(const giac::gen & f,const giac::gen & x
 // of a radical of radicals took 17 s on the calculator (sqrt(2*sqrt(5))), so nothing is normalized.
 // 0: not such a fraction
 // biquad's formulas: f with bp bq bs bt bu (p, q, sqrt(q), t, u), b0..b3 (k0..k3), bm bw bL bW ba bb (the
-// coefficients below) and bx (x) given the values v; then 1 evaluated, 2 ratnormal. Strings, not gen
+// coefficients below) and bx (x) given the values v; then 1 evaluated, 2 ratnormal (0: as is). Strings, not gen
 // arithmetic: each temporary of that cost about 40 bytes on the eZ80 (biquad was 12 KB)
 static __attribute__((noinline)) giac::gen bqf(const char * f,const giac::gen * v,int how){
   using namespace giac;
@@ -1167,7 +1167,7 @@ static __attribute__((noinline)) giac::gen bqf(const char * f,const giac::gen * 
   vecteur ids,vals;
   for (int i=0;i<16;++i){ ids.push_back(gen(identificateur(nm[i]))); vals.push_back(v[i]); }
   const gen g=subst(gen(f,contextptr),ids,vals,true,contextptr);
-  return how==2?ratnormal(g,contextptr):eval(g,1,contextptr);
+  return how==2?ratnormal(g,contextptr):how?eval(g,1,contextptr):g;
 }
 static __attribute__((noinline)) giac::gen biquad(const giac::gen & f,const giac::gen & x){
   using namespace giac;
