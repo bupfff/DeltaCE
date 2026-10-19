@@ -2608,8 +2608,8 @@ int Console_GetKey(){
       if (a==FA_PLOT)
         return Console_FMenu(KEY_CTRL_F3);
 #ifdef FLOWCE_STEPS
-      if (a==FA_STATS){ // (DeltaCE) the statistics screen (focus_stats.cc)
-        focus_stats();
+      if (a==FA_STATS || a==FA_PROB){ // (DeltaCE) the statistics and probability screens (focus_stats.cc)
+        if (a==FA_STATS) focus_stats(); else focus_prob();
         Console_Disp(1);
         continue;
       }

@@ -1,4 +1,5 @@
-// focus_stats.cc - DeltaCE's statistics (more > Statistics): data in two columns, x and y (giac's
+// focus_stats.cc - DeltaCE's statistics (more > Statistics) and probability (more > Probability,
+// below): data in two columns, x and y (giac's
 // lists L1 and L2, shared with the console: mean(L1) there), a column's statistics with its box
 // plot, a curve fitted to the points (linear, quadratic, cubic, exponential, power, logarithmic)
 // with r², and the points with the curve on the graph screen. The numbers are giac's (kmisc.cc
@@ -16,6 +17,8 @@
 #include "ui_font.h"
 #include "ui_fontdata.h"
 #include "ui_math.h"
+#define PNOINL __attribute__((noinline))
+#include "prob_math.h"
 namespace giac { gen _logarithmic_regression(const gen & g, GIAC_CONTEXT); } // (kmisc.cc: not in misc.h)
 using namespace giac;
 extern giac::context * contextptr;
@@ -546,6 +549,365 @@ void focus_stats() {
     if (key == KEY_CTRL_LEFT) sc = 0;
     if (key == KEY_CTRL_RIGHT) sc = 1;
   }
+  focus_view = view0;
+  focus_status_label(0);
+  focus_invalidate();
+}
+
+// ---------------------------------------------------------------- probability (DeltaCE 2.0)
+// more > Probability: a distribution (normal, t, chi-square, binomial, Poisson) drawn with the area
+// asked for shaded and its value: P(a <= X <= b), a left or right tail, P(X = k); the inverse (the
+// x for an area: left, right, centered); and the one-sample intervals and tests (a proportion's z,
+// a mean's t, the mean from L1 too) on their curve. The numbers are prob_math.h's floats (giac's
+// distributions are compiled out of the calculator, XLIGHT); 4 significant digits shown.
+enum { PT_ = Y0 + 30, PB_ = Y0 + 120, PL_ = 12, PR_ = UI_W - 12, PCOLS = (PR_ - PL_) / 2 };
+struct pfield { const char * lab; float * v; char kind; }; // kind: 0 any, 1 > 0, 2 whole >= 1, 3 in [0, 1], 4 whole, 5 in (0, 1)
+static pfield PF[6];
+static int pn, psel;
+static float pq[PD_N][2], pa, pb, par, tv[4][4]; // the parameters, bounds, area; the tests' values
+static int pd, pinv, ptail, pinit, ptest = -1, talt; // the distribution, inverse, region (below), a test (-1: none), its Ha
+// the region: area 0 a <= X <= b, 1 X <= x, 2 X >= x, 3 X = k; inverse 0 left, 1 right, 2 centered
+static const char * const PNAME[PD_N] = {"Normal", "t", "Chi-square", "Binomial", "Poisson"};
+static float SL[2], SR[2], MK[2], px0, px1; // the shaded intervals, the marks, the x range
+static int NS, NM;
+static short PH[PCOLS + 1];                 // the curve's heights (static: no big locals)
+static char pres[64], pnote[80];            // the result (math), a line of text above it
+
+static NOINL char * fixd(char * p, float v, int d) { // v >= 0 with d decimals, trailing zeros dropped
+  long m = 1;
+  for (int i = 0; i < d; ++i) m *= 10;
+  const long n = (long)(v * m + 0.5f), w = n / m;
+  long f = n % m;
+  char t[12];
+  itos((int)w, t); strcpy(p, t); p += strlen(p);
+  if (f) {
+    *p++ = '.';
+    for (long k = m / 10; k && f; k /= 10) { *p++ = (char)('0' + f / k); f %= k; }
+  }
+  *p = 0;
+  return p;
+}
+static NOINL void sig4(char * b, float v) { // 4 significant digits: 0.6827, 2.064, 100, 1.35e-7
+  if (!fin_(v)) { strcpy(b, "-"); return; }
+  if (v < 0) { *b++ = '-'; v = -v; }
+  int e = 0, d = 3;
+  if (v != 0 && (v < 1e-4f || v >= 1e6f)) { // 1.35e-7
+    while (v >= 10) { v /= 10; ++e; }
+    while (v < 1) { v *= 10; --e; }
+    if (v >= 9.9995f) { v /= 10; ++e; }
+    char * p = fixd(b, v, 3);
+    *p++ = 'e';
+    if (e < 0) { *p++ = '-'; e = -e; }
+    itos(e, p);
+    return;
+  }
+  for (float t = v; t >= 10 && d > 0; t /= 10) --d; // (the decimals for 4 digits)
+  if (v > 0) for (float t = v; t < 1 && d < 8; t *= 10) ++d;
+  fixd(b, v, d);
+}
+static NOINL void padd(const char * l, float * v, char k) { PF[pn].lab = l; PF[pn].v = v; PF[pn++].kind = k; }
+static NOINL void pfields() {
+  pn = 0;
+  if (ptest >= 0) { // x n C | p0 x n | xbar s n C | mu0 xbar s n ("\x01x": x with a bar)
+    static const char * const L[4][4] = {{"x", "n", "C", 0}, {"p0", "x", "n", 0}, {"\x01x", "s", "n", "C"}, {("\xce\xbc" "0"), "\x01x", "s", "n"}};
+    static const char K[4][4] = {{4, 2, 5, 0}, {5, 4, 2, 0}, {0, 1, 2, 5}, {0, 0, 1, 2}};
+    for (int i = 0; i < 4 && L[ptest][i]; ++i) padd(L[ptest][i], tv[ptest] + i, K[ptest][i]);
+    return;
+  }
+  float * q = pq[pd];
+  if (pd == PD_NORM) { padd("\xce\xbc", q, 0); padd("\xcf\x83", q + 1, 1); }
+  else if (pd == PD_BIN) { padd("n", q, 2); padd("p", q + 1, 3); }
+  else padd(pd == PD_POIS ? "\xce\xbb" : "df", q, 1);
+  if (pinv) padd("area", &par, 5);
+  else if (ptail == 0) { padd("lower", &pa, 0); padd("upper", &pb, 0); }
+  else if (ptail == 3) padd("k", &pa, 4);
+  else padd("x", ptail == 1 ? &pb : &pa, 0);
+}
+static NOINL bool pvalid(float v, int k) {
+  if (!fin_(v)) return false;
+  if (k == 1) return v > 0;
+  if (k == 2 || k == 4) return v == floorf(v) && v >= (k == 2);
+  if (k == 3) return v >= 0 && v <= 1;
+  if (k == 5) return v > 0 && v < 1;
+  return true;
+}
+// the curve (continuous: its shape, highest = 1) or the bars over [px0, px1]
+static NOINL float pshape(int d, const float * q, float x) {
+  if (d == PD_NORM) { const float z = (x - q[0]) / q[1]; return expf(-z * z / 2); }
+  if (d == PD_T) return expf(-(q[0] + 1) / 2 * logf(1 + x * x / q[0]));
+  if (d == PD_CHI) return x <= 0 ? 0 : expf((q[0] / 2 - 1) * logf(x) - x / 2);
+  return p_pdf(d, q, floorf(x + 0.5f));
+}
+static NOINL void pcurve(int d, const float * q) {
+  float h[PCOLS + 1], m = 0; // (floats: 4 bytes each, 600 on the stack)
+  for (int c = 0; c <= PCOLS; ++c) { h[c] = pshape(d, q, px0 + (px1 - px0) * c / PCOLS); if (c > 1 && fin_(h[c]) && h[c] > m) m = h[c]; }
+  for (int c = 0; c <= PCOLS; ++c) { const float y = fin_(h[c]) && m > 0 ? h[c] / m : 0; PH[c] = (short)((y > 1.05f ? 1.05f : y) * (PB_ - PT_ - 4)); }
+}
+static NOINL int pxof(float x) { return PL_ + (int)((x - px0) * (PR_ - PL_) / (px1 - px0)); }
+static NOINL bool pshaded(float x) { for (int i = 0; i < NS; ++i) if (x >= SL[i] - 1e-6f && x <= SR[i] + 1e-6f) return true; return false; }
+// a nice step for about 6 labels over the range
+static NOINL float pstep(float r) {
+  float s = 1;
+  while (s * 6 < r) s *= 10;
+  while (s * 6 > r * 10) s /= 10; // (s about r/6 .. r/0.6)
+  return s * 5 < r ? s * 2 < r / 3 ? s * 5 : s * 2 : s;
+}
+static NOINL void paint_plot(int b, int e) {
+  const bool disc = p_discrete(ptest >= 0 ? (ptest < 2 ? PD_NORM : PD_T) : pd);
+  if (disc) { // bars: one per whole number in the range
+    const int k0 = (int)ceilf(px0), k1 = (int)floorf(px1);
+    const int bw = (PR_ - PL_) / (k1 - k0 + 1);
+    float m = 0;
+    for (int k = k0; k <= k1; ++k) { const float v = p_pdf(pd, pq[pd], k); if (v > m) m = v; }
+    for (int k = k0; k <= k1; ++k) {
+      const int h = m > 0 ? (int)(p_pdf(pd, pq[pd], k) / m * (PB_ - PT_ - 4)) : 0, x = pxof(k) - bw / 2;
+      if (x + bw < 0 || h <= 0) continue;
+      ui_fill(x, PB_ - h, bw > 2 ? bw - 1 : 1, h, col(pshaded(k) ? UC_ACC : UC_LINE));
+    }
+  } else {
+    for (int c = 0; c < PCOLS; ++c) // the area under the curve where shaded
+      if (pshaded(px0 + (px1 - px0) * (c + 0.5f) / PCOLS) && PH[c] > 0) ui_fill(PL_ + 2 * c, PB_ - PH[c], 2, PH[c], col(UC_ACCSOFT));
+    for (int c = 0; c < PCOLS; ++c)
+      ui_seg16((PL_ + 2 * c) * 16, (PB_ - PH[c]) * 16, (PL_ + 2 * c + 2) * 16, (PB_ - PH[c + 1]) * 16, 24, ramp(UC_ACC, UC_BG));
+  }
+  ui_fill(PL_ - 4, PB_, PR_ - PL_ + 8, 1, col(UC_INK));
+  int mx[2];
+  for (int i = 0; i < NM; ++i) { // the marks: a line up to the curve, the value under the axis
+    mx[i] = pxof(MK[i]);
+    if (mx[i] < PL_ - 2 || mx[i] > PR_ + 2) continue;
+    const int c = (mx[i] - PL_) / 2, h = disc ? 0 : PH[c < 0 ? 0 : c > PCOLS ? PCOLS : c];
+    ui_fill(mx[i], PB_ - h - 4, 1, h + 8, col(UC_ACC));
+    char v[16]; sig4(v, MK[i]);
+    text(&ui_tb10, v, mx[i], PB_ + 14, UC_ACC, UC_BG, 1);
+  }
+  const float st = pstep(px1 - px0); // the labels between them
+  for (float t = ceilf(px0 / st) * st; t <= px1 + st * 1e-3f; t += st) {
+    const int x = pxof(t);
+    bool near = false;
+    for (int i = 0; i < NM; ++i) near = near || (x > mx[i] - 34 && x < mx[i] + 34);
+    ui_fill(x, PB_ + 1, 1, 3, col(UC_SUB));
+    if (near) continue;
+    char v[16]; sig4(v, fabsf(t) < st * 1e-3f ? 0 : t);
+    text(&ui_tr10, v, x, PB_ + 14, UC_SUB, UC_BG, 1);
+  }
+  (void)b; (void)e;
+}
+static NOINL int pchip(int i, int x, int y) { // field i, its box's top at y: its width
+  const bool on = i == psel;
+  const char * l = PF[i].lab;
+  int w = text(&ui_tr10, l + (*l == 1), x, y + 13, UC_SUB, UC_BG);
+  if (*l == 1) ui_fill(x, y + 2, w, 1, col(UC_SUB)); // (x with a bar)
+  w += 4;
+  char v[24];
+  if (on && editing) strcpy(v, edb); else sig4(v, *PF[i].v);
+  const int tw = ui_text_width(&ui_tb12, v, -1), bw = tw + 14 > 30 ? tw + 14 : 30;
+  ui_rrect(0, x + w, y, bw, 19, 5, on ? UC_ACCSOFT : UC_BG, UC_BG);
+  ui_rframe(0, x + w, y, bw, 19, 5, on ? UC_ACC : UC_LINE, UC_BG);
+  text(&ui_tb12, v, x + w + bw / 2, y + 14, on ? UC_ACC : UC_INK, on ? UC_ACCSOFT : UC_BG, 1);
+  if (on && editing) ui_fill(x + w + bw / 2 + tw / 2 + 1, y + 4, 2, 11, col(UC_ACC));
+  return w + bw + 10;
+}
+static NOINL void paint_prob() {
+  pfields();
+  const int rows = ui_band_open(48);
+  for (int b = Y0; b < SBOT; b += rows ? rows : SBOT - Y0) {
+    const int e = rows && b + rows < SBOT ? b + rows : SBOT;
+    if (rows) ui_band_begin(b, e); else ui_clip(0, b, UI_W, e);
+    ui_fill(0, Y0, UI_W, SBOT - Y0, col(UC_BG));
+    int x = 12, i = 0;
+    if (ptest < 0) x += text(&ui_tb12, PNAME[pd], x, Y0 + 18, UC_ACC, UC_BG) + 12;
+    const int np = ptest >= 0 || pd == PD_NORM || pd == PD_BIN ? 2 : 1; // (the parameters on top, the region below)
+    for (; i < (ptest >= 0 ? pn : np); ++i) x += pchip(i, x, Y0 + 4);
+    paint_plot(b, e);
+    ui_fill(12, Y0 + 148, UI_W - 24, 1, col(UC_LINE));
+    x = 12;
+    for (; i < pn; ++i) x += pchip(i, x, Y0 + 154);
+    if (*pnote) { // (\x01x, \x02p: x-bar, p-hat)
+      const int nx = ptest >= 0 ? 12 : x + 4, m = *pnote < 3, w = text(&ui_tr10, pnote + m, nx, Y0 + 167, UC_SUB, UC_BG);
+      if (m) { const int lw = ui_text_width(&ui_tr10, pnote + 1, 1); ui_fill(nx + (*pnote == 2 ? lw / 2 - 1 : 0), Y0 + 156 - (*pnote == 2), *pnote == 2 ? 3 : lw, 1, col(UC_SUB)); if (*pnote == 2) { ui_fill(nx + lw / 2 - 2, Y0 + 156, 1, 1, col(UC_SUB)); ui_fill(nx + lw / 2 + 2, Y0 + 156, 1, 1, col(UC_SUB)); } }
+      (void)w;
+    }
+    if (emsg) text(&ui_tb10, emsg, UI_W - 12, Y0 + 167, UC_RED, UC_BG, 2);
+    math(pres, UI_W / 2, SBOT - 8, 4, UI_W - 24, UC_INK, UC_BG, 1);
+    if (rows) ui_band_end();
+  }
+  ui_band_close();
+  ui_noclip();
+}
+static NOINL void pcat(char * d, const char * a, float v) { char b[16]; sig4(b, v); strcat(d, a); strcat(d, b); }
+// a test's p-value for the statistic s (normal or t with df), its tails shaded
+static NOINL float ptail_p(int d, const float * q, float s) {
+  const float l = p_cdf(d, q, -fabsf(s)); // (the small tail, without 1 - its complement)
+  NS = talt ? 1 : 2; NM = talt ? 1 : 2; MK[0] = s; MK[1] = -s; // (two-sided: -s marked too)
+  SL[0] = -1e30f; SR[0] = talt == 2 ? 1e30f : talt == 1 ? s : -fabsf(s);
+  if (talt == 2) SL[0] = s;
+  SL[1] = fabsf(s); SR[1] = 1e30f;
+  return talt == 0 ? 2 * l : (talt == 1) == (s < 0) ? l : 1 - l;
+}
+static NOINL void pcompute() {
+  *pres = *pnote = 0;
+  NS = 1; NM = 0;
+  for (int i = 0; i < pn; ++i) if (!pvalid(*PF[i].v, PF[i].kind)) { strcpy(pres, "?"); emsg = "Check the values"; px0 = -4; px1 = 4; NS = 0; pcurve(PD_NORM, pq[PD_NORM]); return; }
+  if (ptest >= 0) { // the standard normal or t(n-1), the statistic's tails or the critical values' middle
+    const float * v = tv[ptest];
+    static float q[2];
+    const bool t = ptest >= 2;
+    const int d = t ? PD_T : PD_NORM;
+    const float n = ptest == 0 ? v[1] : ptest == 1 ? v[2] : t && ptest == 2 ? v[2] : v[3];
+    q[0] = t ? n - 1 : 0; q[1] = 1;
+    if (t && n < 2) { strcpy(pres, "?"); emsg = "n must be 2 or more"; NS = 0; return; }
+    if (ptest == 0 && v[0] > n) { strcpy(pres, "?"); emsg = "x is at most n"; NS = 0; return; }
+    if (ptest == 1 && v[1] > n) { strcpy(pres, "?"); emsg = "x is at most n"; NS = 0; return; }
+    px0 = -4; px1 = 4;
+    if (ptest == 0 || ptest == 2) { // an interval: estimate +- critical value * SE
+      const float C = v[ptest == 0 ? 2 : 3], c = p_inv(d, q, (1 + C) / 2, -1000, 1000);
+      const float est = ptest == 0 ? v[0] / n : v[0], se = ptest == 0 ? sqrtf(est * (1 - est) / n) : v[1] / sqrtf(n);
+      SL[0] = -c; SR[0] = c; NM = 2; MK[0] = -c; MK[1] = c;
+      strcpy(pres, "("); pcat(pres, "", est - c * se); pcat(pres, ",", est + c * se); strcat(pres, ")");
+      pcat(pnote, ptest == 0 ? "\x02p = " : "\x01x = ", est); // (p-hat, x-bar: the mark drawn over the letter)
+      pcat(pnote, "   ME = ", c * se); pcat(pnote, t ? "   t* = " : "   z* = ", c);
+      if (t) pcat(pnote, "   df = ", n - 1);
+    } else { // a test: the statistic, its p-value
+      const float s = ptest == 1 ? (v[1] / n - v[0]) / sqrtf(v[0] * (1 - v[0]) / n) : (v[1] - v[0]) / (v[2] / sqrtf(n));
+      const float p = ptail_p(d, q, s);
+      if (fabsf(s) > 3.6f) { px0 = -fabsf(s) - 0.6f; px1 = -px0; }
+      strcpy(pres, t ? "t=" : "z="); pcat(pres, "", s); pcat(pres, ",  p=", p);
+      static const char * const ha[3] = {" \xe2\x89\xa0 ", " < ", " > "};
+      strcpy(pnote, t ? "H0: \xce\xbc = " : "H0: p = "); pcat(pnote, "", v[0]);
+      strcat(pnote, t ? "    Ha: \xce\xbc" : "    Ha: p"); pcat(pnote, ha[talt], v[0]);
+      strcat(pnote, p < 0.05f ? "    p < 0.05: significant" : "    p \xe2\x89\xa5 0.05: not significant");
+      if (t) pcat(pnote, "    df = ", n - 1);
+    }
+    pcurve(d, q);
+    return;
+  }
+  const float * q = pq[pd];
+  const bool disc = p_discrete(pd);
+  float m = 0, sd = 1; // the range: the mean +- about 4 SDs (chi-square, Poisson: from 0)
+  switch (pd) {
+  case PD_NORM: m = q[0]; sd = q[1]; break;
+  case PD_T: sd = q[0] < 3 ? 1.6f : 1; break;
+  case PD_CHI: m = q[0]; sd = sqrtf(2 * q[0]); break;
+  case PD_BIN: m = q[0] * q[1]; sd = sqrtf(q[0] * q[1] * (1 - q[1])); break;
+  default: m = q[0]; sd = sqrtf(q[0]);
+  }
+  px0 = m - 4 * sd; px1 = m + 4 * sd;
+  if (pd >= PD_CHI && px0 < 0) px0 = 0;
+  if (pd == PD_BIN && (px1 > q[0] || q[0] <= 40)) px1 = q[0];
+  if (pd == PD_BIN && q[0] <= 40) px0 = 0;
+  if (disc) { px0 = floorf(px0); px1 = ceilf(px1); if (px1 - px0 > 140) { px0 = floorf(m - 70); px1 = px0 + 140; } if (px1 - px0 < 4) px1 = px0 + 4; }
+  if (pd == PD_CHI && px1 < 8) px1 = 8;
+  if (!pinv) {
+    float lo = ptail == 1 ? -1e30f : pa, hi = ptail == 2 ? 1e30f : ptail == 3 ? pa : pb;
+    if (disc) { lo = ceilf(lo - 1e-4f); hi = floorf(hi + 1e-4f); }
+    float v;
+    if (hi < lo) v = 0;
+    else if (ptail == 2 && pd <= PD_T) v = p_cdf(pd, q, pd == PD_T ? -lo : 2 * q[0] - lo); // (the right tail by symmetry: small ones exact)
+    else v = p_cdf(pd, q, hi) - (ptail == 1 ? 0 : p_cdf(pd, q, disc ? lo - 1 : lo));
+    SL[0] = lo; SR[0] = hi;
+    if (ptail != 1) MK[NM++] = lo;
+    if (ptail == 0 || ptail == 1) MK[NM++] = hi;
+    if (ptail == 3) NM = 1;
+    strcpy(pres, "P(");
+    if (ptail == 0) { pcat(pres, "", lo); pcat(pres, "<=X<=", hi); }
+    else if (ptail == 3) pcat(pres, "X=", lo);
+    else pcat(pres, ptail == 1 ? "X<=" : "X>=", ptail == 1 ? hi : lo);
+    pcat(pres, ")=", v);
+  } else { // the x for the area
+    const float lo = pd == PD_NORM ? q[0] - 40 * q[1] : pd == PD_T ? -1000 : 0, hi = pd == PD_NORM ? q[0] + 40 * q[1] : pd == PD_T ? 1000 : 50 * q[0] + 200;
+    const float a = ptail == 0 ? par : ptail == 1 ? 1 - par : (1 + par) / 2, x = p_inv(pd, q, a, lo, hi);
+    NM = 1; MK[0] = x;
+    if (ptail == 0) { SL[0] = -1e30f; SR[0] = x; strcpy(pnote, "P(X \xe2\x89\xa4 x) = area"); pcat(pres, "x=", x); }
+    else if (ptail == 1) { SL[0] = x; SR[0] = 1e30f; strcpy(pnote, "P(X \xe2\x89\xa5 x) = area"); pcat(pres, "x=", x); }
+    else {
+      const float y = pd == PD_NORM ? 2 * q[0] - x : -x;
+      SL[0] = y; SR[0] = x; MK[NM++] = y;
+      strcpy(pnote, "the middle area");
+      pcat(pres, "", y); pcat(pres, "<=X<=", x);
+    }
+  }
+  if (!disc) pcurve(pd, q);
+}
+static NOINL void ptabs() {
+  static const char * const REG[4] = {"a\xe2\x89\xa4X\xe2\x89\xa4" "b", "X\xe2\x89\xa4x", "X\xe2\x89\xa5x", "X=k"}, * const INV[3] = {"left", "right", "middle"};
+  static const char * tabs[5];
+  if (ptest >= 0) { tabs[0] = ptest & 1 ? (talt == 0 ? "Ha: \xe2\x89\xa0" : talt == 1 ? "Ha: <" : "Ha: >") : ""; tabs[1] = ptest >= 2 ? "from L1" : ""; tabs[2] = tabs[3] = ""; tabs[4] = "back"; }
+  else { tabs[0] = "dist"; tabs[1] = pinv ? INV[ptail] : REG[ptail]; tabs[2] = p_discrete(pd) ? "" : pinv ? "area" : "inverse"; tabs[3] = "tests"; tabs[4] = "back"; }
+  focus_bar_tabs(tabs, -1);
+}
+static NOINL bool pcommit() { // the value typed into the field selected
+  giac::ctrl_c = giac::interrupted = false;
+  if (!edn) { editing = 0; return true; }
+  edb[edn] = 0;
+  const float v = fv(eval(gen(edb, contextptr), 1, contextptr));
+  if (!pvalid(v, PF[psel].kind)) { emsg = PF[psel].kind == 2 || PF[psel].kind == 4 ? "A whole number" : PF[psel].kind == 5 || PF[psel].kind == 3 ? "Between 0 and 1" : PF[psel].kind == 1 ? "More than 0" : "Not a number"; return false; }
+  *PF[psel].v = v;
+  editing = 0; edn = 0;
+  return true;
+}
+static NOINL void ploop() { // the distribution screen or a test's: keys until back
+  for (;;) {
+    pfields();
+    if (psel >= pn) psel = pn - 1;
+    if (!editing) pcompute();
+    focus_status_label(ptest >= 0 ? (ptest < 2 ? "TEST  1-proportion z" : "TEST  1-sample t") : "PROBABILITY");
+    ptabs();
+    paint_prob();
+    const int key = key_();
+    emsg = 0;
+    if (const int ch = typed(key)) {
+      if (!editing) { editing = 1; edn = 0; }
+      if (edn < (int)sizeof(edb) - 2) { edb[edn++] = (char)ch; edb[edn] = 0; }
+      continue;
+    }
+    if (key == KEY_CTRL_DEL && editing) { if (edn) edb[--edn] = 0; else editing = 0; continue; }
+    if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_F5) { if (editing) { editing = 0; continue; } break; }
+    if (key == KEY_CTRL_EXE || key == KEY_CTRL_UP || key == KEY_CTRL_DOWN || key == KEY_CTRL_LEFT || key == KEY_CTRL_RIGHT) {
+      if (editing && !pcommit()) continue;
+      if (key == KEY_CTRL_LEFT || key == KEY_CTRL_UP) psel = (psel + pn - 1) % pn;
+      else psel = (psel + 1) % pn;
+      continue;
+    }
+    if (ptest >= 0) {
+      if (key == KEY_CTRL_F1 && (ptest & 1)) talt = (talt + 1) % 3;
+      if (key == KEY_CTRL_F2 && ptest >= 2) { // the mean, SD and size of L1
+        load();
+        onevar o;
+        if (!stats1(D_[0], o) || o.n < 2) { emsg = "Type 2 or more values in L1 (Statistics)"; continue; }
+        float * v = tv[ptest] + (ptest == 3);
+        v[0] = fv(o.mean); v[1] = fv(o.sx); v[2] = o.n;
+      }
+      continue;
+    }
+    if (key == KEY_CTRL_F1) {
+      static const char * const hint[PD_N] = {"\xce\xbc, \xcf\x83", "df", "df", "n, p", "\xce\xbb"};
+      const int c = focus_card_list(4, "dist", 0, PNAME, hint, PD_N, pd);
+      if (c >= 0 && c != pd) { pd = c; ptail = 0; psel = 0; if (p_discrete(pd)) pinv = 0; pq[PD_BIN][0] = 10; pa = pd >= PD_BIN ? 2 : -1; pb = pd >= PD_BIN ? 5 : 1; }
+    }
+    if (key == KEY_CTRL_F2) ptail = (ptail + 1) % (pinv ? (pd == PD_CHI ? 2 : 3) : p_discrete(pd) ? 4 : 3);
+    if (key == KEY_CTRL_F3 && !p_discrete(pd)) { pinv = !pinv; ptail = 0; }
+    if (key == KEY_CTRL_F4) {
+      static const char * const TN[4] = {"1-proportion z interval", "1-proportion z test", "1-sample t interval", "1-sample t test"};
+      static const char * const TH[4] = {"x, n, C", "p0, x, n", "mean, s, n, C", ("\xce\xbc" "0, mean, s, n")};
+      focus_bar_tabs(0, -1); paint_prob(); // (the card over a repainted view)
+      const int c = focus_card_list(4, "tests", 0, TN, TH, 4, 0);
+      if (c >= 0) { ptest = c; talt = 0; psel = 0; ploop(); ptest = -1; psel = 0; }
+    }
+  }
+}
+void focus_prob() {
+  giac::ctrl_c = giac::interrupted = false;
+  if (!pinit) { // the TI's defaults: N(0, 1), t(10), chi-square(5), B(10, 0.5), Poisson(3); 95%
+    pinit = 1;
+    pq[PD_NORM][1] = 1; pq[PD_T][0] = 10; pq[PD_CHI][0] = 5; pq[PD_BIN][0] = 10; pq[PD_BIN][1] = 0.5f; pq[PD_POIS][0] = 3;
+    pa = -1; pb = 1; par = 0.95f;
+    static const float T0[4][4] = {{58, 100, 0.95f, 0}, {0.5f, 58, 100, 0}, {5, 1.2f, 25, 0.95f}, {5, 5.4f, 1.2f, 25}};
+    memcpy(tv, T0, sizeof tv);
+  }
+  editing = edn = 0; emsg = 0; psel = 0; ptest = -1;
+  const int view0 = focus_view;
+  focus_view = 1;
+  ploop();
   focus_view = view0;
   focus_status_label(0);
   focus_invalidate();

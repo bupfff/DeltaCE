@@ -69,6 +69,7 @@ void focus_tab_open_box(int i);           // (DeltaCE) tab i's open shape, joine
 int focus_card_list(int col, const char * word, const char * const * maths, const char * const * labels, const char * const * hints, int n, int sel);
 void focus_graph_points(const float * x, const float * y, int n); // (DeltaCE) data points the next graph draws with its curves (a copy; n = 0: none)
 void focus_stats();                     // (DeltaCE) statistics: data, a column's statistics, fitted curves (focus_stats.cc)
+void focus_prob();                      // (DeltaCE) probability: distributions, inverses, one-sample intervals and tests (focus_stats.cc)
 int focus_graph_input(const char * in); // (DeltaCE) plot, plotparam, plotpolar, plotfield, plotode: the graph screen (focus_graph.cc); 0: not a plot, -1: one it cannot draw
 void focus_tab(int i, int on, int bank); // the standard layer's tab of F-key i (on: its menu is open)
 void focus_bar_tabs(const char * const * labels, int on); // the F-key bar as 5 text tabs, tab on selected
@@ -78,7 +79,7 @@ void focus_icon(int ic, int x, int cy, int bank, int c, int bg); // the prototyp
 // focus_menu.cc: F1-F5 and the math key open a popover over the dimmed stage. Returns FA_NONE
 // (closed), FA_INSERT with the template to insert (*text, then the caret back *back chars), or
 // an action for the console.
-enum { FA_NONE, FA_INSERT, FA_CATALOG, FA_PLOT, FA_FILE, FA_CLEAR, FA_GRAPH, FA_THEME, FA_STATS };
+enum { FA_NONE, FA_INSERT, FA_CATALOG, FA_PLOT, FA_FILE, FA_CLEAR, FA_GRAPH, FA_THEME, FA_STATS, FA_PROB };
 void focus_toggle_theme();             // Paper <-> Night, at once (the palette), saved in the appvar FocusUI
 int focus_popover(int key, const char ** text, int * back);
 
