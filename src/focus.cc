@@ -164,7 +164,7 @@ static const char * steps_input(const fent & e) {
   if (const char * f = e.out < 0 ? 0 : console_form_steps((const char *)Line[e.out].str)) return focus_steps_able(f) ? f : 0; // (DeltaCE: F4's completed square, long division, factored)
   if (e.in < 0 || !r || (is_text(r) && strncmp(r, "does not exist", 14) && strncmp(r, "diverges", 8) && strncmp(r, "no limit", 8) && strncmp(r, "no solution", 11))) return 0; // (a limit's "does not exist" or "no limit", a series' "diverges", an equation's "no solution" too)
   const char * s = (const char *)Line[e.in].str;
-  return focus_steps_able(s) ? s : 0;
+  return focus_steps_able(s, r) ? s : 0;
 }
 #endif
 static void scan() {

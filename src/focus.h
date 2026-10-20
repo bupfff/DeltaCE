@@ -99,10 +99,10 @@ int focus_arg_label(const char * name, int n, int i, const char ** label);
 int focus_call_entry(const char * s, int caret);
 void focus_entry_help(int e, char * desc, int dsize, char * ex, int esize);
 // focus_steps.cc (the steps build): 1 if the steps screen explains the calculation typed as s (a
-// derivative or an integral); the steps screen for it (ans: its answer, as shown). focus.cc: that
-// calculation when it is shown large with its answer (*ans; Enter on the empty line opens its
-// steps), else 0.
-int focus_steps_able(const char * s);
+// derivative or an integral; ans: its answer, as shown, when known: a division whose factor
+// cancelled); the steps screen for it (ans: its answer, as shown). focus.cc: that calculation when
+// it is shown large with its answer (*ans; Enter on the empty line opens its steps), else 0.
+int focus_steps_able(const char * s, const char * ans = 0);
 void focus_steps(const char * in, const char * ans);
 void focus_analyze(const char * in);     // DeltaCE: a function's analysis (analyze.cc) on the steps' page
 const char * focus_steps_input(const char ** ans);

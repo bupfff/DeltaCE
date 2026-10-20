@@ -1914,10 +1914,12 @@ static giac::gen numeric_hard_integrals(const giac::gen & g){
 
 // An equation typed alone (x^2-4=0, 2x+1=5, sin(x)=1/2) is solved for its only unknown, as an
 // online calculator does; x=5 or f(x)=... never get here (equaltosto stores, the input pre-pass
-// turns f(x)= into a definition). Returns the unknown, or 0.
+// turns f(x)= into a definition). (DeltaCE) An inequality too: 3x-5<7 is x<4 (giac wrote 7>3x-5).
+// Returns the unknown, or 0.
 static giac::gen equation_unknown(const giac::gen & g){
   using namespace giac;
-  if (!g.is_symb_of_sommet(at_equal))
+  if (!g.is_symb_of_sommet(at_equal) && !g.is_symb_of_sommet(at_inferieur_strict) && !g.is_symb_of_sommet(at_inferieur_egal)
+      && !g.is_symb_of_sommet(at_superieur_strict) && !g.is_symb_of_sommet(at_superieur_egal))
     return 0;
   vecteur v=lidnt(g),u;
   for (unsigned k=0;k<v.size();++k){
@@ -2648,17 +2650,33 @@ static giac::gen sec_only(const giac::gen & g){
 }
 // long division of a rational function of x whose top has at least the bottom's degree: the
 // quotient plus the remainder over the divisor, factored as the answers' denominators are
-// ((4x^8+8x^3-9)/(x-2) is 4x^7+8x^6+...+544+1079/(x-2)); undef when there is nothing to divide
+// ((4x^8+8x^3-9)/(x-2) is 4x^7+8x^6+...+544+1079/(x-2)); the quotient alone when it divides
+// ((x^4-16)/(x+2), which giac leaves as it is); undef when there is nothing to divide
 static giac::gen long_division(const giac::gen & g){
   using namespace giac;
   const vecteur lv=lvar(g);
   if (lv.size()!=1 || lv.front().type!=_IDNT)
     return undef;
-  const gen d=_denom(g,contextptr);
-  const gen qr=_quorem(makesequence(_numer(g,contextptr),d,lv.front()),contextptr);
-  if (qr.type!=_VECT || qr._VECTptr->size()!=2 || is_zero(qr._VECTptr->front()) || is_zero(qr._VECTptr->back()))
+  gen n=_numer(g,contextptr),d=_denom(g,contextptr);
+  if (lidnt(d).empty() && g.is_symb_of_sommet(at_prod) && g._SYMBptr->feuille.type==_VECT){ // numer and denom cancel:
+    gen up=1,down=1; // (x^4-16)/(x+2) as written, not x^3-2x^2+4x-8 over 1
+    for (const_iterateur it=g._SYMBptr->feuille._VECTptr->begin();it!=g._SYMBptr->feuille._VECTptr->end();++it){
+      if (it->is_symb_of_sommet(at_inv))
+        down=down*it->_SYMBptr->feuille;
+      else
+        up=up*(*it);
+    }
+    if (!lidnt(down).empty()){
+      n=up;
+      d=down;
+    }
+  }
+  const gen qr=_quorem(makesequence(n,d,lv.front()),contextptr);
+  if (qr.type!=_VECT || qr._VECTptr->size()!=2 || is_zero(qr._VECTptr->front()))
     return undef;
   const gen & q=qr._VECTptr->front();
+  if (is_zero(qr._VECTptr->back()))
+    return lidnt(d).empty()?undef:q; // (a polynomial: nothing to divide)
   gen fd=_factor(d,contextptr);
   if (is_undef(fd) || fd.type==_STRNG)
     fd=d;

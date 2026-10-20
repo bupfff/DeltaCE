@@ -149,12 +149,14 @@ static void print_steps(const char * s){
   // STEPS_PEAK: the most heap the steps held at once (the calculator has far less than the PC)
   const bool pk=getenv("STEPS_PEAK") && tab;
   if (pk){ track_start(); peak_bytes=0; }
+  steps_method=getenv("STEPS_METHOD")?atoi(getenv("STEPS_METHOD")):0; // (DeltaCE: a division's other methods)
   bool ok=steps_of(g,v,contextptr);
   if (pk){ track_stop(); printf("   peak heap %zu bytes\n",peak_bytes); }
   clock_gettime(CLOCK_MONOTONIC,&t1);
   steps_timer(0);
   ctrl_c=kbd_interrupted=interrupted=false;
   printf("== %s   [%s, %d steps, %.0f ms]\n",s,ok?"ok":"NO STEPS",(int)v.size(),(t1.tv_sec-t0.tv_sec)*1e3+(t1.tv_nsec-t0.tv_nsec)/1e6);
+  if (steps_methods>1) printf("   method %d of %d: %s\n",steps_method%steps_methods+1,steps_methods,steps_method_name);
   for (unsigned i=0;(ok || getenv("STEPS_REJECTED")) && i<v.size();++i){ // (STEPS_REJECTED: also a failed search's)
     const char * t=steps_title(v[i]);
     printf("%s%*s%s%s%s\n",ok?"":"x",2+4*v[i].depth-!ok,"",*t?t:"",*t?":  ":"= ",steps_math(v[i],contextptr).print(contextptr).c_str());
@@ -197,7 +199,7 @@ int focus_steps_preview(const char * in,const char * ans,int stop);
 #include "../../src/ui_fontdata.h"
 extern "C" { extern unsigned char * ui_fb; unsigned short * ui_host_palette(void); }
 int focus_analyze_preview(const char * in,int stop);
-int focus_steps_able(const char * s);
+int focus_steps_able(const char * s,const char * ans=0);
 static void write_ppm(const char * fn);
 // -W <dir>: the analysis screen of each input (DeltaCE), as -V: <dir>/<n>_<stop>.ppm
 static void view_analysis(const char * dir,int n,const char * s){
@@ -233,7 +235,8 @@ static void view_steps(const char * dir,int n,const char * s){
   const size_t ap=ans.find("  ~"); // (the decimal value: shown apart on the calculator)
   if (ap!=std::string::npos) ans=ans.substr(0,ap);
   int stops=1;
-  for (int k=0;k<stops && k<8;++k){
+  steps_method=getenv("STEPS_METHOD")?atoi(getenv("STEPS_METHOD")):0; // (DeltaCE: a division's other methods)
+  for (int k=0;k<stops && k<16;++k){
     stops=focus_steps_preview(s,ans.c_str(),k);
     if (stops<0){ printf("%d: %s  no steps\n",n,s); return; }
     ui_fill(0,0,UI_W,18,ui_col(0,UC_BG)); // the status bar, as on the calculator (its label)
