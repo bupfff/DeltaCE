@@ -23,7 +23,22 @@ esac
 cd "$SRC"
 [ "$(cedev-config --version)" = v15.0 ] || { echo "not CEdev v15.0"; exit 1; }
 if [ "$(cat obj/.variant 2>/dev/null)" != "v15-$VARIANT" ]; then rm -rf obj bin; mkdir -p obj; echo "v15-$VARIANT" > obj/.variant; fi
+# A workspace moved or renamed (~/FlowCE to ~/DeltaCE, 2026-10-19): the objects' dependency files
+# name the old place (make stopped: "No rule to make target .../toolchain/..."), and a git worktree
+# its old link: both pointed here again
+old=$(grep -h -o -m1 '[^ ]*/toolchain/CEdev-v15.0/' obj/src/*.d 2>/dev/null | head -1)
+if [ -n "$old" ] && [ "$old" != "$CEDEV15/" ]; then
+  prev="${old%/toolchain/CEdev-v15.0/}"
+  echo "the workspace moved from $prev: the objects' dependency files point here again"
+  grep -rl "$prev/" obj --include='*.d' | xargs sed -i '' "s#$prev/#$ROOT/#g"
+fi
+if [ -f .git ] && ! git rev-parse --git-dir > /dev/null 2>&1 && [ -d "$ROOT/FlowCE-src/.git" ]; then
+  echo "the git worktree's link is stale: git worktree repair"
+  git -C "$ROOT/FlowCE-src" worktree repair "$SRC" >> "$ROOT/work/build-$NAME.log" 2>&1
+fi
 LOG="$ROOT/work/build-$NAME.log"; : > "$LOG"
+# (DeltaCE) the catalog's descriptions, packed from menufr.cc (rewritten only when they changed)
+[ ! -f tools/catpack.py ] || python3 tools/catpack.py src/menufr.cc src/catalog_text.h || { echo "tools/catpack.py failed"; exit 1; }
 echo "building $SRC (v15, $VARIANT), log: $LOG"
 LDX="--defsym=___heapbot=___heap_low --defsym=___heaptop=___heap_high"
 # the code's placement in flash (a section ordering file for ld): ORDER_FILE=<file> (none: the
