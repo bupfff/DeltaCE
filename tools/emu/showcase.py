@@ -73,6 +73,9 @@ SCENES = {
     'steps_system':   [('p', 'solve([2x+3y=12,x-y=1],[x,y])'), ('k', '{enter}'), ('w', 6000)],
     'steps_log':      [('p', 'solve(log(x)+log(x-3)=1,x)'), ('k', '{enter}'), ('w', 8000)],
     'steps_trig':     [('p', 'solve(2cos(x)+sqrt(3)=0,x)'), ('k', '{enter}'), ('w', 8000), ('k', '{down}{down}{down}'), ('w', 1500)],
+    'steps_synth':    [('p', '(x^3-8)/(x-2)'), ('k', '{enter}'), ('w', 5000), ('k', '{trace}'), ('w', 5000), ('k', '{right}{right}{right}{down}'), ('w', 1500)],
+    'steps_ineq':     [('p', 'x^2-x-6>0'), ('k', '{enter}'), ('w', 6000), ('k', '{right}{right}{right}'), ('w', 1500)],
+    'steps_abs':      [('p', 'abs(3-2x)<=5'), ('k', '{enter}'), ('w', 4000)],
     # Statistics (more menu, 5): hours studied and test scores in L1 and L2
     'stats_data':     [('p', 'L1:=[1,2,3,4,5,6,7,8]'), ('p', 'L2:=[52,55,61,64,70,74,79,85]'), ('k', '{graph}5')],
     'stats_box':      [('p', 'L1:=[1,2,3,4,5,6,7,8]'), ('p', 'L2:=[52,55,61,64,70,74,79,85]'), ('k', '{graph}5{window}')],

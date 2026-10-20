@@ -35,9 +35,13 @@ click Install, then press `enter` once on the calculator.
   checked), factoring (GCF, differences of squares and cubes, two numbers or the ac method,
   grouping, rational roots), systems of 2 or 3 equations by elimination, exponential and log
   equations (the same base, ln of both sides, the log rules, every solution checked), trig
-  equations (the reference angle, its quadrants, every solution, those in [0, 2π)), and implicit
-  differentiation (`implicitdiff(x^2+y^2=25,x,y)`). Each step names its rule; `▲` `▼` move between
-  them.
+  equations (the reference angle, its quadrants, every solution, those in [0, 2π)), implicit
+  differentiation (`implicitdiff(x^2+y^2=25,x,y)`), polynomial division (long division, synthetic
+  division, or factor and cancel with the excluded values: `F4` on the steps page switches),
+  inequalities (linear ones flip the sign by a negative; polynomial and rational ones get their
+  critical numbers and a number tested in each interval) and absolute values (two cases or one
+  compound inequality, every candidate checked). Each step names its rule; `▲` `▼` move between
+  them. An equation or inequality typed alone (`3x-5<7`) is solved.
 - **Answers like your textbook, and their other forms.** `F4` cycles an answer's forms: simplified,
   one fraction, factored, expanded, the completed square, long division, partial fractions,
   decimal; `enter` on one shows its work. On an antiderivative, `F4` checks it by differentiating.
@@ -98,6 +102,8 @@ click Install, then press `enter` once on the calculator.
 | probability: a tail, shaded | a t test on its curve | practice, checked |
 | ![Steps for a system of two equations: elimination](docs/screenshots/steps_system.png) | ![Steps for log(x) + log(x − 3) = 1: the product rule](docs/screenshots/steps_log.png) | ![Steps for 2cos(x) + √3 = 0: the quadrants](docs/screenshots/steps_trig.png) |
 | steps: a system | steps: a log equation | steps: a trig equation |
+| ![Synthetic division of x³ − 8 by x − 2: the table, a column at a time](docs/screenshots/steps_synth.png) | ![Steps for x² − x − 6 > 0: a number tested in each interval](docs/screenshots/steps_ineq.png) | ![Steps for abs(3 − 2x) ≤ 5: between −5 and 5](docs/screenshots/steps_abs.png) |
+| steps: synthetic division (`F4`) | steps: an inequality | steps: an absolute value |
 | ![Data in two columns](docs/screenshots/stats_data.png) | ![A column's statistics and its box plot](docs/screenshots/stats_box.png) | ![A line fitted to the points](docs/screenshots/stats_fit.png) |
 | statistics: your data | a column's statistics | a fitted line, exact |
 | ![A parametric curve](docs/screenshots/graph_param.png) | ![Units](docs/screenshots/units.png) | ![The sum of 1/n² is π²/6](docs/screenshots/basel.png) |
@@ -152,7 +158,8 @@ The bundle's INST is patched to run on OS 5.8.4 (the original stops with *"Unkno
 | Key | What it does |
 |---|---|
 | F1 to F5 | menus: algebra, calculus, trig, symbols, more (with `2nd` or `alpha`: more menus) |
-| `enter` after an answer | its steps (calculus, equations, factoring, F4's forms) |
+| `enter` after an answer | its steps (calculus, equations, inequalities, factoring, divisions, F4's forms) |
+| F4 on the steps page | another method, when there is one (a division: long, synthetic, factor and cancel) |
 | `▶` after an answer | its action row: `◀` `▶` move, `enter` does it |
 | `math` | templates: fraction, root, integrals, derivative, limit, sum |
 | ▲ / ▼ | history / search every command |
