@@ -13,14 +13,15 @@
 </p>
 
 <p align="center">
-  <img src="docs/deltace_light.gif" width="48%" alt="DeltaCE: a definite integral typed in 2D, the sum of 1/n² giving π²/6, then x³ − 3x graphed from the row of actions under it, with its key points labeled">
+  <img src="docs/deltace_light.gif" width="48%" alt="DeltaCE: a definite integral typed in 2D, the sum of 1/n² giving π²/6, then x³ − 3x flipped to its factored form and graphed from the Δ key's moves, with its key points labeled">
   <img src="docs/deltace_steps.gif" width="48%" alt="DeltaCE's steps: an antiderivative, then enter for its steps: integration by parts, down to the answer">
 </p>
 
 DeltaCE is a computer algebra system for the TI-84 Plus CE, built for algebra and Calc 1 to 3. It
 is a fork of [FlowCE](https://github.com/tommyb3ll/FlowCE) (itself a fork of KhiCAS): everything
-FlowCE Steps does, plus steps for algebra, a new graph screen, function analysis, statistics,
-probability, a practice mode, units, and a look of its own. Answers are exact: `π²/6`, not `1.64493`; `ln|sec x + tan x| + C`. The decimal value
+FlowCE Steps does, plus a Δ key that tells you what anything you type is, word problems typed in
+their own words, steps for algebra, a new graph screen, function analysis, statistics, probability,
+units, and a look of its own. Answers are exact: `π²/6`, not `1.64493`; `ln|sec x + tan x| + C`. The decimal value
 sits right under the exact one.
 
 **[Install it from the DeltaCE page](https://bupfff.github.io/DeltaCE/)**: plug in the calculator,
@@ -28,6 +29,25 @@ click Install, then press `enter` once on the calculator.
 
 ## What it does
 
+- **The Δ key: what is it?** Type anything and press `prgm`. DeltaCE says what it is, in a
+  textbook's words, and gives the facts a textbook asks about it, with what to do next a key away
+  (`1` to `4`). A quadratic: its vertex, axis, discriminant, vertex form, factored form, intercepts.
+  `2sin(3x-π)+1`: amplitude, period, phase shift, midline, range. A circle, an ellipse, a hyperbola
+  or a parabola in x and y: center, radius, vertices, foci, asymptotes, directrix (completing the
+  squares). An equation: its kind and every solution (a trig equation: the general solution and
+  each one in [0, 2π)). An inequality: its solution, interval notation and a number line. A number: prime or not,
+  its factors and divisors; a fraction: its decimal, percent, mixed number. Data: mean, median,
+  mode, quartiles (the TI's way), standard deviations, outliers. A matrix: rank, determinant,
+  inverse, eigenvalues. A system: where the lines meet, or why they don't. On an empty line it reads
+  the last answer; on a line typed while an answer shows, it also checks the two against each
+  other: equal, equal but for a constant (two antiderivatives), or the x where they differ.
+- **Word problems, in their words.** *more* → Word problems (or type a word in the search: `more`,
+  `percent`, `rate`): phrases with boxes, like "the value of [] when [] = []", "the average rate of
+  change of [] from [] = [] to []", "[] at [] % compounded [] times a year for [] years". A story is
+  told a fact a line, "[l] is [3] more than [2w]", "a rectangle [l] by [w] has perimeter [36]", each
+  one shown as its equation, then "find [w]": w = 5, l = 13. Forty-nine phrases, from percents and
+  points to rates, areas and volumes, sequences, interest, chance, and a thrown ball (when it lands,
+  how high it goes).
 - **The steps.** After an answer, press `enter` to see how to get it, the way a worked example in a
   textbook does: derivatives, integrals, limits, sums and Taylor series (FlowCE Steps), and in
   algebra, linear and quadratic equations (always by the formula: a, b and c, the discriminant,
@@ -45,9 +65,10 @@ click Install, then press `enter` once on the calculator.
 - **Answers like your textbook, and their other forms.** `F4` cycles an answer's forms: simplified,
   one fraction, factored, expanded, the completed square, long division, partial fractions,
   decimal; `enter` on one shows its work. On an antiderivative, `F4` checks it by differentiating.
-- **What to do next, one key away.** Under an answer, a row of its likeliest next steps: Factor or
-  Expand, Solve = 0, Graph, or Derivative, Integral, Graph for a function of sin, ln, √... `▶`
-  picks one, `enter` does it; *more* lists them all.
+- **The answer bar.** Under an answer, one row: `◀` `▶` flip it through its forms (as `F4` does),
+  then `prgm` with the moves it offers (Factor · Zeros, or Derivative · Graph): `prgm` opens the
+  answer's facts card with its moves numbered, `1` to `9` do one, *More actions* lists them all.
+  Digits still start a new calculation and `enter` still shows the steps.
 - **A graph screen that knows its key points.** Zeros, extrema, inflection points and crossings,
   exact (`(π/3, √3/2)`), labeled on the graph. Pan and zoom while a key is held, trace, a table, the
   tangent line, the area under the curve, value at x, solve f(x) = …, max and min on [a, b].
@@ -64,10 +85,6 @@ click Install, then press `enter` once on the calculator.
   Poisson distributions drawn with the area you ask for shaded, P(a ≤ X ≤ b), a tail or P(X = k),
   and the inverse (the x for an area, left, right or in the middle). Intervals and tests for a
   proportion (z) and a mean (t, its data from `L1` if you like), on their curve, with the p-value.
-- **Practice.** *more* → Practice: problems made up for you in 8 topics (linear and quadratic
-  equations, systems, exponents and logs, derivatives, integrals, factoring, trig equations). Type
-  your answer: any equivalent form counts. When it is not right, you see the answer and, with `F2`,
-  its steps.
 - **Function analysis.** `analyze(f)` (or F2 → Analyze f(x)): domain, intercepts, symmetry,
   asymptotes and holes, increasing and decreasing, extrema, concavity, inflection points.
 - **Units.** A units menu on `alpha` `F4`: 72 units in 8 categories, Celsius to Fahrenheit, results
@@ -92,14 +109,16 @@ click Install, then press `enter` once on the calculator.
 
 | | | |
 |:-:|:-:|:-:|
+| ![The Δ card of x² − 5x + 6: a quadratic, its vertex, axis and the next moves](docs/screenshots/delta_quadratic.png) | ![The Δ card of x² − x − 6 > 0: its solution, interval notation and number line](docs/screenshots/delta_inequality.png) | ![A word problem: two facts typed as phrases, then find w: w = 5, l = 13](docs/screenshots/phrase_story.png) |
+| `prgm`: what is it? | an inequality, on a number line | a word problem, in words |
 | ![Steps for a quadratic equation](docs/screenshots/steps_quadratic.png) | ![Steps for factoring a cubic](docs/screenshots/steps_factor.png) | ![Steps for the integral of x sin x: integration by parts](docs/screenshots/steps_parts.png) |
 | steps: a quadratic, by the formula | steps: factoring | steps: integration by parts |
 | ![The answer card and its action row](docs/screenshots/action_row.png) | ![Key points of x³ − 3x](docs/screenshots/graph_points.png) | ![The analysis of a rational function](docs/screenshots/analyze.png) |
-| `▶`: what to do next | key points, exact | `analyze(f)` |
+| the answer bar: `◀` `▶` forms, `prgm` next | key points, exact | `analyze(f)` |
 | ![An ellipse and a line](docs/screenshots/graph_conic.png) | ![A polar curve](docs/screenshots/graph_polar.png) | ![A slope field and a solution](docs/screenshots/graph_field.png) |
 | equations in x and y | polar curves | slope fields |
-| ![P(X ≥ 130) for IQ scores, N(100, 15), the right tail shaded](docs/screenshots/prob_normal.png) | ![A one-sample t test on its curve, both tails shaded, t = 1.667, p = 0.1086](docs/screenshots/prob_ttest.png) | ![Practice: a derivative, answered right](docs/screenshots/practice.png) |
-| probability: a tail, shaded | a t test on its curve | practice, checked |
+| ![P(X ≥ 130) for IQ scores, N(100, 15), the right tail shaded](docs/screenshots/prob_normal.png) | ![A one-sample t test on its curve, both tails shaded, t = 1.667, p = 0.1086](docs/screenshots/prob_ttest.png) | ![Things to do: Solve, Factor, Derivative, Integral, Limit, Graph, Statistics, Probability and All commands, a card each](docs/screenshots/home.png) |
+| probability: a tail, shaded | a t test on its curve | *more* → Things to do |
 | ![Steps for a system of two equations: elimination](docs/screenshots/steps_system.png) | ![Steps for log(x) + log(x − 3) = 1: the product rule](docs/screenshots/steps_log.png) | ![Steps for 2cos(x) + √3 = 0: the quadrants](docs/screenshots/steps_trig.png) |
 | steps: a system | steps: a log equation | steps: a trig equation |
 | ![Synthetic division of x³ − 8 by x − 2: the table, a column at a time](docs/screenshots/steps_synth.png) | ![Steps for x² − x − 6 > 0: a number tested in each interval](docs/screenshots/steps_ineq.png) | ![Steps for abs(3 − 2x) ≤ 5: between −5 and 5](docs/screenshots/steps_abs.png) |
@@ -158,9 +177,11 @@ The bundle's INST is patched to run on OS 5.8.4 (the original stops with *"Unkno
 | Key | What it does |
 |---|---|
 | F1 to F5 | menus: algebra, calculus, trig, symbols, more (with `2nd` or `alpha`: more menus) |
+| `prgm` | Δ: what the line (or the last answer) is, its facts; `1` to `9` the next moves, `enter` the first |
+| *more* → Word problems | the phrases; `enter` puts one on the line, `▶` goes to its next box |
 | `enter` after an answer | its steps (calculus, equations, inequalities, factoring, divisions, F4's forms) |
 | F4 on the steps page | another method, when there is one (a division: long, synthetic, factor and cancel) |
-| `▶` after an answer | its action row: `◀` `▶` move, `enter` does it |
+| `◀` `▶` after an answer | its other forms, back and forth (as `F4`) |
 | `math` | templates: fraction, root, integrals, derivative, limit, sum |
 | ▲ / ▼ | history / search every command |
 | F4 on an answer | its other forms |
@@ -173,7 +194,6 @@ The bundle's INST is patched to run on OS 5.8.4 (the original stops with *"Unkno
 | *more* → Graph | graphs the line or the answer: F1 pan or trace, F2 zoom, F3 key points and tools, F4 table, F5 more |
 | *more* → Statistics | data in L1 and L2: F1/F2 a column's statistics, F3 fit a curve, F4 plot the points, F5 edit (insert, delete, sort, clear) |
 | *more* → Probability | a distribution: F1 which one, F2 the region, F3 inverse, F4 intervals and tests; type the values, ◀ ▶ move |
-| *more* → Practice | `enter` answers, F2 the steps, F3 another problem, F4 the topic |
 | `mode` | settings (*Simplify answers* on or off), shortcuts, about |
 | `2nd quit` | quit (your session is kept) |
 
@@ -200,7 +220,7 @@ Parisse.
 
 - **Math engine:** Giac, by Bernard Parisse and contributors (Institut Fourier, Université
   Grenoble Alpes).
-- **Interface, steps and the web installer:** FlowCE, by Tommy Bell.
+- **Interface, steps, the web installer and 2.2's quicker menus:** FlowCE, by Tommy Bell.
 - **Console interface:** adapted from Eigenmath for the Casio Prizm by G. Maia, Mike Smith,
   Nemhardy and LePhenixNoir.
 - **Thanks** to Adrien Bertrand, Xavier Andreani and the TI-83/84 development community,

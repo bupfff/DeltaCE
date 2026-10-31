@@ -9,13 +9,15 @@
 // A line of the report: a section (text: its title), or a row: its label (text) and its math, the
 // items (giac syntax; text after \1) separated by '\n', drawn joined by sep (", ", " or ", " ");
 // no math: the label alone, as a sentence.
-enum { AN_SECTION, AN_ROW, AN_HEAD };
+enum { AN_SECTION, AN_ROW, AN_HEAD, AN_NUMLINE }; // (DeltaCE: AN_NUMLINE, delta.cc's number line: its math as numline_of encodes it)
 enum { AN_COMMA, AN_OR, AN_SPACE };
 struct an_line { unsigned char kind, sep; const char * text; std::string math; };
 
 // The analysis of f (parsed, not evaluated: as typed, its holes kept) in its variable. 0: done,
 // else why not.
 const char * analyze_of(const giac::gen & f, std::vector<an_line> & out, const giac::context * contextptr);
+// (DeltaCE) the Δ key's facts (delta.cc): analyze_of stops after the asymptotes and has no head
+extern bool analyze_brief;
 
 // The graph's key points (focus_graph.cc): the analysis' points, exact; kind 0 zero, 1 y-intercept,
 // 2 local max, 3 local min, 4 inflection point. per: the period (0: none; the points are then the

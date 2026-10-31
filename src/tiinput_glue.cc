@@ -44,6 +44,8 @@ namespace {
       return TI_NAME_KEYWORD;
     if (in_list(flex_values,sizeof(flex_values)/sizeof(*flex_values),s))
       return TI_NAME_VALUE;
+    if (len>3 && !strncmp(s,"ph_",3)) // (DeltaCE) a phrase (phrase.cc): ph_fact(l=2*w+3), not ph_fact*(...)
+      return TI_NAME_FUNCTION;
     std::pair<charptr_gen *,charptr_gen *> p=std::equal_range(builtin_lexer_functions_begin(),builtin_lexer_functions_end(),std::pair<const char *,gen>(s,0),tri);
     if (p.first!=p.second && p.first!=builtin_lexer_functions_end()){
       int token=p.first->second.subtype; // same decoding as find_or_make_symbol (kglobal.cc)

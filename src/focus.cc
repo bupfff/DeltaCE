@@ -14,6 +14,7 @@
 #include "ui_font.h"
 #include "ui_fontdata.h"
 #include "ui_math.h"
+#include "phrase.h"
 #ifdef TICE
 #include <sys/power.h>
 #include <sys/rtc.h>
@@ -30,7 +31,7 @@ const char * console_form_steps(const char * s); // main.cc: F4's form on line s
 extern const char * console_approx_for; // main.cc: the decimal value of that printed result
 extern bool answer_simplify_on;     // answer.cc: Simplify answers (mode) is on, as last read
 const char * console_approx();
-int console_answer_row(const char ** lab, signed char * idx); // console.cc: the answer's likeliest actions (the row under it)
+const char * console_answer_moves(); // console.cc: the Δ key's moves on the answer shown (the bar under it)
 
 // what a result line shows: giac prints the lists of solve as list[a,b], shown [a,b]
 static const char * shown(const char * s) { return s && !strncmp(s, "list[", 5) ? s + 4 : s; }
@@ -281,12 +282,9 @@ static int key_hint(int x, int base, const char * k, const char * label) {
 // a banded repaint paints it once per band from these.
 enum { HM_HINT, HM_MATH, HM_TEXT, HM_RESULT };
 static int hm = HM_HINT, hy0, hh, hx, hbase, hcaret;
-// (DeltaCE) the action row under an answer shown large: the action selected (-1: none, act_n:
-// "more"), its actions (their labels and chips' widths, found once a repaint: hero_prepare), its
-// baseline (0: no row on screen)
-static int act_sel = -1, act_n, act_y;
-static const char * act_lab[3];
-static short act_w[3];
+// (DeltaCE) the moves the Δ key offers on the answer shown large, for the bar under it (found
+// once a repaint: hero_prepare; 0: none named)
+static const char * act_mv;
 static mi_layout * HL; // HM_MATH: the edit line's layout (heap)
 static int hb_y0, hb_y1; // HM_MATH: the rows it covers (ink overhang included)
 static int help_e = -1;  // HM_MATH: the command the caret is in (catalog entry), for the help lines
@@ -294,7 +292,6 @@ enum { HELP_H = 32 };    // ... at the bottom of the hero
 
 static void hero_prepare(int y0, int h) {
   hy0 = y0; hh = h;
-  act_y = 0;
   const char * s = (const char *)Console_GetEditLine();
   hcaret = console_caret();
   help_e = -1;
@@ -318,14 +315,8 @@ static void hero_prepare(int y0, int h) {
   } else if (s && *s) hm = HM_TEXT; // Python: plain text
   else if (hero_last && NE && E[NE - 1].out >= 0) hm = HM_RESULT;
   else hm = HM_HINT;
-  if (hm != HM_RESULT) act_sel = -1;
-  act_n = 0;
 #ifdef FLOWCE_STEPS
-  if (hm == HM_RESULT && !is_text(shown(Line[E[NE - 1].out].str))) {
-    signed char idx[3];
-    act_n = console_answer_row(act_lab, idx);
-    for (int k = 0; k < act_n; ++k) act_w[k] = (short)(ui_text_width(&ui_tb9, act_lab[k], -1) + 12);
-  }
+  act_mv = hm == HM_RESULT ? console_answer_moves() : 0;
 #endif
 }
 // rows [y0, y1) meet the band (the clip) being painted: what is outside is not drawn (a full
@@ -433,6 +424,10 @@ static const tip tips[] = {
   {"^", "then enter: paste an earlier answer"},
   {"2nd", "then F1 to F5: arithmetic, matrices and more"},
   {"2nd", "then down, on the steps: jump to the answer"},
+#ifdef FLOWCE_STEPS
+  {"prgm", "on anything: what it is, its facts, what next"}, // (DeltaCE: the Δ key, delta.cc)
+  {"more 7", "word problems, typed in their words"},          // (DeltaCE: phrase.cc)
+#endif
 };
 enum { N_TIPS = sizeof(tips) / sizeof(tips[0]) };
 static int tip_k = -1;
@@ -468,8 +463,7 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
       if (in_band(top - 2, top + c.a + c.d + 3)) draw_math(Line[e.in].str, c, kx + 14, top + c.a, UC_SUB, UC_BG, MI_F_TIDY);
       top += c.a + c.d + 6;
     }
-    const int na = act_n;
-    const int ab = kb - 7, cy = na ? ab - 21 : ab - 1; // the baselines of the action row and of the footer
+    const int cy = kb - 8; // the footer's baseline
     int bot = cy - 12; // above the forms chip (tall fractions ran into it)
     const int RW = kw - 20;
     if (!in_band(top - 4, bot + 4)) ;
@@ -494,8 +488,10 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
         ui_draw_text(&ui_mi24, "C", -1, cx, base, ramp(UC_SUB, UC_BG), 0);
       }
     }
-    // the footer: the decimal value of an exact result, then the forms chip (the form shown;
-    // F4 cycles them, main.cc console_cycle_form), centered together as in the prototype
+    // the footer, one row: the decimal value of an exact result; the form shown, between the
+    // arrows that flip it (F4 too: main.cc console_cycle_form); (DeltaCE) the steps chip (enter);
+    // the Δ key and the moves it offers on the answer; centered together, the moves left out
+    // first, then the decimal value, when it is too wide
     if (!in_band(cy - 12, cy + 5)) ;
     else if (!is_text(r)) {
       const char * fn = console_form_of((const char *)Line[e.out].str) ? console_form_name : "exact";
@@ -504,25 +500,38 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
       char abuf[40] = "";
       if (*ap) { strcpy(abuf, "\xe2\x89\x88 "); strncat(abuf, ap, sizeof(abuf) - 5); } // ≈ value
       int aw = *abuf ? ui_text_width(&ui_tr10, abuf, -1) + 12 : 0;
-      int cw2 = ui_text_width(&ui_tb9, fn, -1) + ui_text_width(&ui_tb9, "F4", -1) + 20;
+      const int fw = ui_text_width(&ui_tb9, fn, -1) + 12, cw2 = fw + 16; // the chip, with its arrows
 #ifdef FLOWCE_STEPS
       // the steps of a derivative or an integral: a filled chip, the action of Enter (console.cc)
       const int sw = steps_input(e) ? ui_text_width(&ui_tb9, "steps", -1) + ui_text_width(&ui_tb9, "enter", -1) + 28 : 0;
-      if (aw + cw2 + sw > kw - 8) { aw = 0; *abuf = 0; }
+      const int pw = ui_text_width(&ui_tb9, "prgm", -1) + 23; // the key, after a rule
+      const char * mv = act_mv ? act_mv : "what is it";
+      int mw = ui_text_width(&ui_tr9, mv, -1) + 4;
+      if (aw + cw2 + sw + pw + mw > kw - 8) mw = 0;
+      if (aw + cw2 + sw + pw + mw > kw - 8) { aw = 0; *abuf = 0; }
 #else
-      const int sw = 0;
+      const int sw = 0, pw = 0, mw = 0;
 #endif
-      int x0 = (UI_W - aw - cw2 - sw) / 2, cx = x0 + aw;
+      int x0 = (UI_W - aw - cw2 - sw - pw - mw) / 2, cx = x0 + aw;
       if (*abuf) ui_draw_text(&ui_tr10, abuf, -1, x0, cy, ramp(UC_SUB, UC_BG), 0);
-      ui_rrect(0, cx, cy - 10, cw2, 13, 6, UC_ACCSOFT, UC_BG);
-      int w1 = ui_text(&ui_tb9, fn, cx + 6, cy, UC_ACC, UC_ACCSOFT, 0);
-      ui_text(&ui_tb9, "F4", cx + 12 + w1, cy, UC_SUB, UC_ACCSOFT, 0);
-      if (sw) { // (soft while the action row has the keys: enter does the action selected)
-        const int sx = cx + cw2 + 8, on = act_sel < 0, bg = on ? UC_ACC : UC_ACCSOFT;
-        ui_rrect(0, sx, cy - 10, sw - 8, 13, 6, bg, UC_BG);
-        int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, on ? UC_ONACC : UC_ACC, bg, 0);
-        ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, on ? UC_ACCSOFT : UC_SUB, bg, 0);
+      for (int k = 0; k < 4; ++k) { // ◀ and ▶
+        ui_fill(cx + 3 - k, cy - 7 + k, 1, 7 - 2 * k, col(UC_SUB));
+        ui_fill(cx + fw + 12 + k, cy - 7 + k, 1, 7 - 2 * k, col(UC_SUB));
       }
+      ui_rrect(0, cx + 8, cy - 10, fw, 13, 6, UC_ACC, UC_BG);
+      ui_text(&ui_tb9, fn, cx + 14, cy, UC_ONACC, UC_ACC, 0);
+      cx += cw2;
+#ifdef FLOWCE_STEPS
+      if (sw) {
+        const int sx = cx + 8;
+        ui_rrect(0, sx, cy - 10, sw - 8, 13, 6, UC_ACC, UC_BG);
+        int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, UC_ONACC, UC_ACC, 0);
+        ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
+        cx += sw;
+      }
+      ui_fill(cx + 7, cy - 10, 1, 13, col(UC_LINE));
+      key_hint(cx + 15, cy, "prgm", mw ? mv : "");
+#endif
     }
 #ifdef FLOWCE_STEPS
     else if (steps_input(e)) { // a text answer with steps (no solution, does not exist): their chip alone
@@ -530,33 +539,6 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
       ui_rrect(0, sx, cy - 10, sw, 13, 6, UC_ACC, UC_BG);
       int w2 = ui_text(&ui_tb9, "steps", sx + 6, cy, UC_ONACC, UC_ACC, 0);
       ui_text(&ui_tb9, "enter", sx + 12 + w2, cy, UC_ACCSOFT, UC_ACC, 0);
-    }
-    // (DeltaCE) the action row: what the right arrow offers on this answer (console.cc), the
-    // likeliest first, outlined chips after the key; "more": the whole list. The right arrow
-    // selects the first (console.cc Console_GetKey), left and right move, enter does it.
-    act_y = na ? ab : 0;
-    if (na && in_band(cy + 6, ab + 5)) {
-      ui_fill(kx + 12, cy + 7, kw - 24, 1, col(UC_LINE));
-      const short * ws = act_w;
-      const char * const * act = act_lab;
-      int w = 17 + 6 + ui_text_width(&ui_tr9, "more", -1);
-      for (int k = 0; k < na; ++k) w += ws[k] + 5;
-      int x = (UI_W - w) / 2;
-      ui_rframe(0, x, ab - 10, 17, 13, 3, UC_SUB, UC_BG); // the right arrow key
-      for (int k = 0; k < 4; ++k) ui_fill(x + 7 + k, ab - 7 + k, 1, 7 - 2 * k, col(UC_SUB));
-      x += 17 + 6;
-      for (int k = 0; k < na; ++k) {
-        const int on = act_sel == k;
-        if (on) ui_rrect(0, x, ab - 10, ws[k], 13, 6, UC_ACC, UC_BG);
-        else ui_rframe(0, x, ab - 10, ws[k], 13, 6, UC_ACC, UC_BG);
-        ui_text(&ui_tb9, act[k], x + 6, ab, on ? UC_ONACC : UC_ACC, on ? UC_ACC : UC_BG, 0);
-        x += ws[k] + 5;
-      }
-      if (act_sel == na) { // (selected: a chip as the others)
-        const int mw = ui_text_width(&ui_tb9, "more", -1) + 12;
-        ui_rrect(0, x, ab - 10, mw, 13, 6, UC_ACC, UC_BG);
-        ui_text(&ui_tb9, "more", x + 6, ab, UC_ONACC, UC_ACC, 0);
-      } else ui_text(&ui_tr9, "more", x, ab, UC_SUB, UC_BG, 0);
     }
 #endif
   } else {
@@ -570,6 +552,10 @@ __attribute__((noinline)) static void hero_paint() { // in the current clip
     x = key_hint(x, b, "math", "templates") + 12;
     x = key_hint(x, b, "^", "history") + 12;
     key_hint(x, b, "v", "search");
+    if (b + 40 < y0 + h - 12) { // (DeltaCE) the Δ key (prgm) and the home card (F5 then 1)
+      const int hw = ui_text_width(&ui_tb9, "prgm", -1) + ui_text_width(&ui_tr9, "what is it", -1) + ui_text_width(&ui_tb9, "more 1", -1) + 24 + 12 + ui_text_width(&ui_tr9, "things to do", -1);
+      key_hint(key_hint((UI_W - hw) / 2, b + 22, "prgm", "what is it") + 12, b + 22, "more 1", "things to do");
+    }
     // a tip at the bottom, a different one each time the app starts: its key, what it does
     const int tb = y0 + h - 12;
     if (tb - 12 < b + 16) return;
@@ -619,11 +605,16 @@ static void spaced_text(const ui_face * f, const char * s, int x, int base, cons
   for (; *s; ++s) x += ui_draw_glyph(f, (unsigned char)*s, x, base, rp, 0) + sp;
 }
 
-// battery level 0-4: boot_GetBatteryStatus takes about 150 ms, so it is read at startup and
-// when the calculator has been idle for a few seconds (focus_idle), never while keys are handled
-static int battery_lv = 4;
+// battery level 0-4: boot_GetBatteryStatus takes about 150 ms, during which a key is not seen, so it
+// is read at startup, then when the calculator has been idle for a few seconds (focus_idle) at most
+// once a minute (every few seconds, a quick key pressed then was lost: FlowCE's fix), never while
+// keys are handled
+static int battery_lv = 4, battery_min = -1;
 static void read_battery() {
 #ifdef TICE
+  const int m = rtc_Minutes;
+  if (m == battery_min) return;
+  battery_min = m;
   battery_lv = boot_GetBatteryStatus();
 #endif
 }
@@ -955,7 +946,6 @@ static __attribute__((noinline)) void compute_model() {
   for (int k = 0; k < M.col_n; ++k) y += E[k].h;
   M.col_h = y;
   M.sel = M.hist ? entry_of_line(cl) : -1; M.selout = 0;
-  if (M.hist) { act_y = 0; act_sel = -1; } // (the answer shown large went into the history)
   if (M.sel >= 0) M.selout = cl != E[M.sel].in;
   hist_sel = M.sel;
   if (M.hist) {
@@ -1001,8 +991,10 @@ static void scroll_stage(int from, int to) {
 }
 
 bool focus_hold; // the start screen stays while the session loads (it painted half a console)
+char focus_fresh; // (the console's redraw after a cancelled menu took as long as its closing)
 void focus_disp(int mode) {
   if (focus_hold) return;
+  if (focus_fresh) { focus_fresh = 0; return; }
   focus_phase = 1;
   const char * es = (const char *)Console_GetEditLine();
   int nonempty = es && *es;
@@ -1116,6 +1108,9 @@ void focus_init() {
   theme = t && t[0] == 'N' ? &ui_theme_night : &ui_theme_paper;
   ui_set_theme(theme);
   read_battery();
+#ifdef FLOWCE_STEPS
+  mi_phrase = phrase_words; // (DeltaCE) phrases drawn as their words (phrase.cc)
+#endif
 }
 // every Focus pixel is a palette entry: the new theme shows at once, without a redraw
 void focus_toggle_theme() {
@@ -1128,15 +1123,7 @@ extern "C" void focus_idle(void) { // getkey, after a few idle seconds
   read_battery();
   status_draw(0);
 }
-void focus_evaluated() { hero_last = 1; act_sel = -1; }
-// (DeltaCE) the action row's selection: the action selected (-1: none, the row's count: "more"),
-// -1 without a row; select k (-1: none) and repaint the row and the steps chip; 0: no row shown
-int focus_act() { return act_y ? act_sel : -1; }
-int focus_act_select(int k) {
-  if (!act_y || k < -1 || k > act_n) return 0;
-  if (k != act_sel) { act_sel = k; focus_repaint(act_y - 33, act_y + 4); }
-  return 1;
-}
+void focus_evaluated() { hero_last = 1; }
 int focus_clear_hero() {
   if (!hero_last) return 0;
   hero_last = 0;

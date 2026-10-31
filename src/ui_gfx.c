@@ -152,13 +152,16 @@ static int revict(int bank) {
   }
   return mr - 1;
 }
+static unsigned char lfg[2] = {255, 255}, lbg[2], lk[2]; // the ramp handed out last (drawing loops ask again and again; FlowCE's)
 const unsigned char * ui_ramp(int bank, int fg, int bg) {
   int k;
+  if (fg == lfg[bank] && bg == lbg[bank]) return ridx[bank][lk[bank]];
   for (k = 0; k < nr[bank]; ++k)
-    if (rfg[bank][k] == fg && rbg[bank][k] == bg) { rtouch(bank, k); return ridx[bank][k]; }
+    if (rfg[bank][k] == fg && rbg[bank][k] == bg) { rtouch(bank, k); lfg[bank] = (unsigned char)fg; lbg[bank] = (unsigned char)bg; lk[bank] = (unsigned char)k; return ridx[bank][k]; }
   if (k >= RMAX(bank)) k = revict(bank); // full: one no pixel uses
   else ++nr[bank];
   rtouch(bank, k);
+  lfg[bank] = (unsigned char)fg; lbg[bank] = (unsigned char)bg; lk[bank] = (unsigned char)k;
   rfg[bank][k] = fg; rbg[bank][k] = bg;
   unsigned char * r = ridx[bank][k];
   r[0] = ui_col(bank, bg); r[3] = ui_col(bank, fg);
@@ -181,14 +184,6 @@ void ui_fill(int x, int y, int w, int h, unsigned char idx) {
   for (; y0 < y1; ++y0, p += UI_W) memset(p, idx, n);
 }
 
-// pixel x of the framebuffer row row (inside the clip rows), shade lv: keeps the darker shade
-static void put(unsigned char * row, int x, int lv, const unsigned char * r) {
-  if (lv <= 0 || x < ui_cx0 || x >= ui_cx1) return;
-  unsigned char * p = row + x, o = *p;
-  int ol = o == r[3] ? 3 : o == r[2] ? 2 : o == r[1] ? 1 : 0;
-  if (lv > ol) *p = r[lv];
-}
-
 static int isqrt(long v) { // floor(sqrt(v)), v < 2^31
   long r = 0, b = 1L << 30;
   while (b > v) b >>= 2;
@@ -209,26 +204,82 @@ static void disc_limits(int R, int lim[3]) {
 static int disc_level(int q, const int lim[3]) {
   return q < lim[0] ? 3 : q < lim[1] ? 2 : q < lim[2] ? 1 : 0;
 }
-// corners of a rounded rectangle: pixels of the r x r corner boxes by distance to the arc
-// (24-bit integers only: r <= 60)
-static void corners(int x, int y, int w, int h, int r, const unsigned char * ramp, int ring) {
+// (DeltaCE, FlowCE's) The shades of a corner box (r x r, the top left one: the others are its
+// mirror images) by distance to the arc, 24-bit integers only (r <= 60); ring: the 1 px arc. Worked
+// out once per radius and kind and kept (a few in use: cards, items, keycaps): the arithmetic per
+// pixel was a tenth of a menu's opening.
+static void corner_shades(unsigned char * t, int r, int ring) {
   int R = r * 8, lim[3], lim1[3];
   disc_limits(R, lim);
   disc_limits(R - 8, lim1);
+  for (int j = 0; j < r; ++j) {
+    // per row d2, then additions only: a multiplication or a 24-bit shift is a helper call on the eZ80
+    int ey = j * 8 + 4 - R, ex = 4 - R, d2 = ex * ex + ey * ey, step = 16 * ex + 64;
+    for (int i = 0; i < r; ++i, ++t) {
+      *t = (unsigned char)(ring ? disc_level(d2, lim) - disc_level(d2, lim1) : disc_level(d2, lim)); // (a ring: the disc of radius r minus that of r - 1)
+      d2 += step; step += 128; // d2 = ex^2 + ey^2, ex += 8 per pixel
+    }
+  }
+}
+enum { CT_N = 16 };
+static unsigned char * ct_tab[CT_N], ct_key[CT_N], ct_next; // (kept: r | ring << 6)
+// the table: the r x r shades, then (a disc's corner) per row the first pixel shaded and the first full one
+static const unsigned char * corner_table(int r, int ring) {
+  const unsigned char key = (unsigned char)(r | ring << 6);
+  for (int i = 0; i < CT_N; ++i) if (ct_tab[i] && ct_key[i] == key) return ct_tab[i];
+  const int i = ct_next;
+  ct_next = (unsigned char)(i + 1 == CT_N ? 0 : i + 1);
+  free(ct_tab[i]);
+  unsigned char * t = (unsigned char *)malloc(r * r + 2 * r);
+  if (!(ct_tab[i] = t)) return 0;
+  ct_key[i] = key;
+  corner_shades(t, r, ring);
+  for (int j = 0; j < r; ++j) {
+    const unsigned char * s = t + j * r;
+    int z = 0, a;
+    while (z < r && !s[z]) ++z;
+    for (a = z; a < r && s[a] < 3; ++a) ;
+    t[r * r + 2 * j] = (unsigned char)z; t[r * r + 2 * j + 1] = (unsigned char)a;
+  }
+  return t;
+}
+// corners of a rounded rectangle (its r x r corner boxes) from the table, inside the clip; a disc's:
+// per row its full run filled at once, its shaded edge pixels one by one (keeping the darker shade)
+static void corners(int x, int y, int w, int h, int r, const unsigned char * ramp, int ring) {
+  if (r <= 0 || r > 60) return;
+  unsigned char tmp[64];
+  const unsigned char * t = corner_table(r, ring);
+  if (!t) { if (r > 8) return; corner_shades(tmp, r, ring); t = tmp; ring |= 4; } // (no memory: worked out here, no runs)
+  const unsigned char c1 = ramp[1], c2 = ramp[2], c3 = ramp[3];
   for (int q = 0; q < 4; ++q) {
-    int bx = (q & 1) ? x + w - r : x, by = (q & 2) ? y + h - r : y;
-    int cx8 = ((q & 1) ? x + w - r : x + r) * 8, cy8 = ((q & 2) ? y + h - r : y + r) * 8;
-    for (int py = by; py < by + r; ++py) {
-      if (py < ui_cy0 || py >= ui_cy1) continue;
-      // per row the framebuffer row and d2, then additions only: a multiplication or a 24-bit shift
-      // is a helper call on the eZ80 (two per pixel made the busy dots 1% of a calculation)
-      unsigned char * row = ui_fb + py * UI_W;
-      int ey = py * 8 + 4 - cy8, ex = bx * 8 + 4 - cx8, d2 = ex * ex + ey * ey, step = 16 * ex + 64;
-      for (int px = bx; px < bx + r; ++px) {
-        // a 1 px ring is the disc of radius r minus the disc of radius r - 1
-        int lv = ring ? disc_level(d2, lim) - disc_level(d2, lim1) : disc_level(d2, lim);
-        put(row, px, lv, ramp);
-        d2 += step; step += 128; // d2 = ex^2 + ey^2, ex += 8 per pixel
+    const int bx = (q & 1) ? x + w - r : x, by = (q & 2) ? y + h - r : y;
+    int j0 = ui_cy0 - by, j1 = ui_cy1 - by, i0 = ui_cx0 - bx, i1 = ui_cx1 - bx; // (the box inside the clip)
+    if (j0 < 0) j0 = 0;
+    if (j1 > r) j1 = r;
+    if (i0 < 0) i0 = 0;
+    if (i1 > r) i1 = r;
+    if (i0 >= i1) continue;
+    unsigned char * row = ui_fb + (by + j0) * UI_W + bx;
+    for (int j = j0; j < j1; ++j, row += UI_W) {
+      const int jj = (q & 2) ? r - 1 - j : j;
+      const unsigned char * s = t + jj * r;
+      int e0 = i0, e1 = i1; // the pixels done one by one (all of them but a disc's full run)
+      if (!ring) {
+        const int z = t[r * r + 2 * jj], a = t[r * r + 2 * jj + 1];
+        int f0 = (q & 1) ? 0 : a, f1 = (q & 1) ? r - a : r; // the full run, mirrored at the right
+        if (f0 < i0) f0 = i0;
+        if (f1 > i1) f1 = i1;
+        if (f1 > f0) memset(row + f0, c3, f1 - f0);
+        e0 = (q & 1) ? r - a : z; e1 = (q & 1) ? r - z : a; // the shaded edge
+        if (e0 < i0) e0 = i0;
+        if (e1 > i1) e1 = i1;
+      }
+      for (int i = e0; i < e1; ++i) {
+        const int lv = s[(q & 1) ? r - 1 - i : i];
+        if (!lv) continue;
+        unsigned char * p = row + i, o = *p;
+        const int ol = o == c3 ? 3 : o == c2 ? 2 : o == c1 ? 1 : 0;
+        if (lv > ol) *p = ramp[lv];
       }
     }
   }
@@ -280,8 +331,9 @@ void ui_seg16(int ax, int ay, int bx, int by, int th, const unsigned char * ramp
     if (p0 < vlo) p0 = vlo;
     if (p1 >= vhi) p1 = vhi - 1;
     unsigned char * q = steep ? ui_fb + i * UI_W + p0 : ui_fb + p0 * UI_W + i;
-    for (int px = p0; px <= p1; ++px, q += steep ? 1 : UI_W) {
-      int c0 = px << 8, c1 = c0 + 256, cov = (hi < c1 ? hi : c1) - (lo > c0 ? lo : c0);
+    // (c0 = px << 8 by additions: a 24-bit shift is a helper call, per pixel a fifth of an icon's time)
+    for (int px = p0, c0 = p0 * 256; px <= p1; ++px, c0 += 256, q += steep ? 1 : UI_W) {
+      int c1 = c0 + 256, cov = (hi < c1 ? hi : c1) - (lo > c0 ? lo : c0);
       int lv = cov >= 200 ? 3 : cov >= 108 ? 2 : cov >= 36 ? 1 : 0;
       if (lv) {
         unsigned char o = *q;

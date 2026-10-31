@@ -83,6 +83,9 @@ extern int (*mi_arg_label)(const char * name, int nlen, int i, const char ** lab
 // Whether a call to name[0,nlen) with na arguments is drawn as a template (the integral sign,
 // d/dx, lim, sigma, taylor, a root...) rather than as its name and arguments.
 int mi_drawn_as_template(const char * name, int nlen, int na);
+// (DeltaCE) the words of the phrase called name[0,nlen) with na arguments (phrase.cc: na + 1 pieces
+// each ending in a 0), else 0: the call is drawn as its words around its boxes; 0: no phrases
+extern const char * (*mi_phrase)(const char * name, int nlen, int na);
 
 // What Backspace should do: delete [from,to) (from==to: delete nothing) and return the new
 // caret. m is only used when Backspace acts like LEFT (hidden structure char).

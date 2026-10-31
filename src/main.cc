@@ -18,6 +18,7 @@
 #include "main.h"
 #include "focus.h"
 #include "answer.h"
+#include "phrase.h"
 #include <giac/kdisplay.h>
 #if !defined std
 #define std ustl
@@ -603,6 +604,10 @@ bool console_draw2d(const char * s,int top,int height,int ymin){
 static const char * form_line; // text of the result being cycled (its str pointer)
 static answer_forms * forms;   // its forms
 static int form_idx;           // the form shown: 0 the original, k form k-1 of forms->order
+// (DeltaCE) the forms shown in this round, in order (form_idx values: left goes back), their
+// number, the one shown, and whether the round is complete (right after the last: the first)
+static unsigned char form_trail[16];
+static int form_tn,form_tp,form_round;
 const char * console_form_name="exact"; // the form of the line F4 cycles (Focus chip)
 // s (a history line) is the result F4 cycles: its address, with the form's text still (a cleared
 // line can give its address to the next result, whose F4 then cycled the old forms)
@@ -628,7 +633,7 @@ const char * console_form_steps(const char * s){
   return in->c_str();
 }
 #endif
-void console_cycle_form(int l){
+void console_cycle_form(int l,int back){
   using namespace giac;
   if (!forms)
     forms=new answer_forms;
@@ -642,15 +647,26 @@ void console_cycle_form(int l){
       if (Line[k].type==LINE_TYPE_INPUT){ answer_forms_input=(const char *)Line[k].str; break; }
     answer_forms_start(*forms,orig,*console_approx() && orig==console_approx_for);
     form_idx=0;
+    form_trail[0]=0; form_tn=1; form_tp=0; form_round=0;
   }
   const std::string cur((const char *)Line[l].str);
-  form_idx=answer_forms_next(*forms,form_idx,cur,form_busy);
+  if (back) // the one before (from the first: the last, once known)
+    form_tp=form_tp?form_tp-1:form_round?form_tn-1:0;
+  else if (form_tp+1<form_tn || form_round) // shown already: at once
+    form_tp=form_tp+1<form_tn?form_tp+1:0;
+  else {
+    const int k=answer_forms_next(*forms,form_idx,cur,form_busy);
+    if (!k) form_round=!(oom_hit || ctrl_c || interrupted);
+    else if (form_tn<16) form_trail[form_tn++]=k;
+    form_tp=k?form_tn-1:0;
+  }
+  form_idx=form_trail[form_tp];
   logptr(savelog,contextptr);
   dconsole_mode=1;
   const bool oom=oom_hit; // memory ran out (a huge expansion): back to the original form
   if (oom || ctrl_c || interrupted){
     ctrl_c=interrupted=false;
-    form_idx=0;
+    form_idx=0; form_tp=0;
   }
   const std::string & text=form_idx?forms->text[form_idx-1]:forms->orig;
   gen lay;
@@ -984,6 +1000,9 @@ int restore_session(const char * fname){
     focus_splash(1); // first start: tips, any key
     int key;
     ck_getkey(&key);
+#ifdef FLOWCE_STEPS
+    focus_tour(); // (DeltaCE: then a few cards on what it does)
+#endif
     return 0;
   }
   clear_screen(); // Bdisp_AllClr_VRAM();
@@ -1152,8 +1171,41 @@ void do_run(const char * s){
     }
   }
   struct freer { char * p; ~freer(){ free(p); } } withans_freed={withans}; // on every return
+#ifdef FLOWCE_STEPS
+  // (DeltaCE) find (phrase.cc): the story's facts typed since the last find, each put into giac,
+  // joined by commas (the line run may be in the history already: that find is skipped)
+  char * story=0;
+  struct freer story_freed={0};
+  if (phrase_is_find(s)){
+    int len=0;
+    bool first=true;
+    for (int l=Last_Line-1;l>=0;--l){
+      if (Line[l].type!=LINE_TYPE_INPUT || !Line[l].str) continue;
+      const char * t=(const char *)Line[l].str;
+      if (phrase_is_find(t)){ if (first && !strcmp(t,s)){ first=false; continue; } break; }
+      first=false;
+      if (!phrase_is_fact(t)) continue;
+      const int c=2*strlen(t)+64;
+      char * b=(char *)malloc(c), * n=b?(char *)malloc(len+c+2):0;
+      if (!n){ free(b); break; }
+      strcpy(b,t);
+      phrase_bare=1;
+      answer_prepass(b,c,true); // its phrase in giac (bare: an equation), its implicit products
+      phrase_bare=0;
+      strcpy(n,b); // (this fact first: the history is read backwards)
+      if (len){ strcat(n,","); strcat(n,story); }
+      free(story); free(b);
+      story=n; len=strlen(n);
+    }
+    story_freed.p=story;
+    phrase_story=story;
+  }
+  int S=strlen(s);
+  const int cap=max(2*S+32+(story?2*(int)strlen(story)+64:0),256); // room for the pre-pass (* := parentheses, a story)
+#else
   int S=strlen(s);
   const int cap=max(2*S+32,256); // room for the paper-notation pre-pass (* := parentheses)
+#endif
   char * buf=(char *)malloc(cap);
   if (!buf){
     do_confirm("Memory full");
@@ -1172,6 +1224,9 @@ void do_run(const char * s){
     }
   }
   answer_prepass(buf,cap,focus_on); // 2sinx -> 2*sin(x), f(x)=... -> f(x):=..., log10 (answer.cc)
+#ifdef FLOWCE_STEPS
+  phrase_story=0;
+#endif
   S=strlen(buf);
   if (S==3 && buf[0]=='[' && buf[2]==']' && buf[1]>='A' && buf[1]<='I'){
     string mats=get_timatrix(buf[1]-'A');

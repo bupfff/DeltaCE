@@ -164,6 +164,32 @@ static void print_steps(const char * s){
   if (khicas_do_run) printf("   FlowCE answer: %s\n",khicas_do_run(s).c_str());
   fflush(stdout);
 }
+// -Y: the tutor (src/tutor.cc, DeltaCE's "Your turn"), one script line each: "? solve(...)" starts a
+// problem, "h" asks for a hint, any other line is the student's (its verdict and message printed)
+#include "../../src/tutor.h"
+static void tutor_line(const char * s){
+  std::string m;
+  if (s[0]=='?'){
+    const char * c=s+1; while (*c==' ') ++c;
+    const bool ok=tutor_start(c,contextptr);
+    int r,w,h,b; tutor_counts(r,w,h,b);
+    printf("== %s   [%s] %s %s (book: %d steps)\n",c,ok?"taken":"NOT TAKEN",ok?tutor_ask():"",ok?tutor_problem().c_str():"",b);
+    if (getenv("TUTOR_BOOK")){ void tutor_dump(); tutor_dump(); }
+    return;
+  }
+  if (!strcmp(s,"h")){
+    std::string t; std::vector<std::string> l;
+    const int lv=tutor_hint(t,l,contextptr);
+    printf("   hint %d: %s\n",lv,t.c_str());
+    for (unsigned i=0;i<l.size();++i) printf("        shown: %s\n",l[i].c_str());
+    return;
+  }
+  ctrl_c=interrupted=false;
+  const tutor_res r=tutor_check(s,contextptr);
+  m=r.msg; for (unsigned i=0;i<m.size();++i) if (m[i]=='\n') m[i]='|';
+  printf("   %-6s %-26s %s\n",r.ok==1?(r.solved?"SOLVED":"ok"):r.ok==0?"WRONG":"??",s,m.c_str());
+  if (r.solved){ int a,w,h,b; tutor_counts(a,w,h,b); printf("          (%d right, %d wrong, %d hints; the book: %d steps)\n",a,w,h,b); }
+}
 double hg_now_ms(){ struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return t.tv_sec*1e3+t.tv_nsec/1e6; }
 // -A: the analysis of each input (src/analyze.cc, DeltaCE): its report, line by line
 #include "../../src/analyze.h"
@@ -189,6 +215,34 @@ static void print_analysis(const char * s){
     if (v[i].kind==AN_SECTION) printf("  %s\n",v[i].text);
     else printf("    %s%s%s\n",v[i].text?v[i].text:"",v[i].text && *v[i].text && !m.empty()?":  ":"",m.c_str());
   }
+  fflush(stdout);
+}
+// -D: the Δ key's card of each input (src/delta.cc, DeltaCE): its lines as -A prints them, then
+// its moves ("> label [how] command")
+#include "../../src/delta.h"
+#include "../../src/phrase.h"
+static void print_delta(const char * s){
+  signal(SIGALRM,steps_alarm);
+  steps_timer(getenv("STEPS_ALARM_MS")?atol(getenv("STEPS_ALARM_MS")):20000);
+  char buf[1024]; strncpy(buf,s,500); buf[500]=0;
+  answer_prepass(buf,sizeof(buf),true);
+  gen g(buf,contextptr);
+  std::vector<an_line> v;
+  std::vector<dl_move> mv;
+  struct timespec t0,t1; clock_gettime(CLOCK_MONOTONIC,&t0);
+  const char * why=delta_of(g,s,getenv("DELTA_LAST"),v,mv,contextptr); // (DELTA_LAST: the answer shown)
+  clock_gettime(CLOCK_MONOTONIC,&t1);
+  steps_timer(0);
+  ctrl_c=kbd_interrupted=interrupted=false;
+  printf("== %s   [%s, %.0f ms]\n",s,why?why:"ok",(t1.tv_sec-t0.tv_sec)*1e3+(t1.tv_nsec-t0.tv_nsec)/1e6);
+  for (unsigned i=0;i<v.size();++i){
+    std::string m=v[i].math;
+    for (unsigned k=0;k<m.size();++k){ if (m[k]=='\n') m[k]='|'; else if (m[k]=='\1') m[k]='~'; }
+    if (v[i].kind==AN_SECTION) printf("  %s\n",v[i].text);
+    else if (v[i].kind==AN_HEAD) printf("    %s\n",m.c_str());
+    else printf("    %s%s%s\n",v[i].text?v[i].text:"",v[i].text && *v[i].text && !m.empty()?":  ":"",m.c_str());
+  }
+  for (unsigned i=0;i<mv.size();++i) printf("  > %s [%c] %s\n",mv[i].label,mv[i].how,mv[i].cmd.c_str());
   fflush(stdout);
 }
 // -V <dir>: the steps screen of each input (src/focus_steps.cc) drawn off screen, one image per
@@ -259,11 +313,15 @@ static void view_steps(const char * dir,int n,const char * s){
 static std::string eval_one(const char * s,bool autosimp,bool prepass){
   ctrl_c=kbd_interrupted=interrupted=false; // do_eval
   std::string text(s);
-  if (prepass){ // do_run: buffer of max(2*S+32,256) chars
-    const int S=strlen(s),cap=2*S+32>256?2*S+32:256;
+  if (prepass){ // do_run: buffer of max(2*S+32,256) chars, answer_prepass (DeltaCE: phrases too;
+    // PHRASE_STORY: the story a find solves, as the console gathers it)
+    const int S=strlen(s),cap=2*S+32>256?2*S+32+1024:1024;
     char * buf=(char *)malloc(cap);
     strcpy(buf,s);
-    khicas_implicit_mult(buf,cap);
+    phrase_story=getenv("PHRASE_STORY");
+    phrase_bare=getenv("PHRASE_BARE")!=0;
+    answer_prepass(buf,cap,true);
+    phrase_story=0;
     text=buf;
     free(buf);
   }
@@ -278,7 +336,7 @@ static std::string eval_one(const char * s,bool autosimp,bool prepass){
 
 int main(int argc,char ** argv){
   int N=1,trace_round=0;
-  bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false,steps=false; bool analysis=false,able=false;
+  bool autosimp=false,print=false,measure=false,prepass=false,dorun=false,timing=false,forms=false,steps=false; bool analysis=false,able=false,tutor=false,delta=false;
   const char * viewdir=0; const char * aviewdir=0;
   const char * file=0;
   static const char * exprs[8192]; int ne=0;
@@ -298,7 +356,9 @@ int main(int argc,char ** argv){
     else if (!strcmp(argv[i],"-m")) measure=true;
     else if (!strcmp(argv[i],"-S")) steps=true;
     else if (!strcmp(argv[i],"-A")) analysis=true;
+    else if (!strcmp(argv[i],"-D")) delta=true;
     else if (!strcmp(argv[i],"-Q")) able=true;
+    else if (!strcmp(argv[i],"-Y")) tutor=true;
     else if (!strcmp(argv[i],"-V") && i+1<argc) viewdir=argv[++i];
     else if (!strcmp(argv[i],"-W") && i+1<argc) aviewdir=argv[++i];
     else if (!strcmp(argv[i],"-t") && i+1<argc) trace_round=atoi(argv[++i]);
@@ -339,6 +399,14 @@ int main(int argc,char ** argv){
   }
   if (analysis){
     for (int k=0;k<ne;++k) print_analysis(exprs[k]);
+    return 0;
+  }
+  if (delta){
+    for (int k=0;k<ne;++k) print_delta(exprs[k]);
+    return 0;
+  }
+  if (tutor){
+    for (int k=0;k<ne;++k) tutor_line(exprs[k]);
     return 0;
   }
   if (steps){

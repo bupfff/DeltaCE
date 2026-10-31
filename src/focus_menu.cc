@@ -57,14 +57,17 @@ static const fm_item m_sym[] = { // what the keypad has no key for, or hides beh
   {"=", 0, 0, 0, 0, 0}, {"<=", 0, 0, 0, 0, 0}, {">=", 0, 0, 0, 0, 0}, {"!=", 0, 0, 0, 0, 0},
 };
 static const fm_item m_more[] = {
+  {0, 0, 0, "Things to do", "home", FA_HOME}, // (DeltaCE: the home card; All commands is on it)
   {0, 0, 0, "Graph", "line or answer", FA_GRAPH},
-  {0, 0, 0, "All commands", "search", FA_CATALOG},
   {0, 0, 0, "Paper or Night", "theme", FA_THEME},
   {0, 0, 0, "Other plots", "kinds", FA_PLOT},
 #ifdef FLOWCE_STEPS
   {0, 0, 0, "Statistics", "data, fits", FA_STATS}, // (DeltaCE: focus_stats.cc)
   {0, 0, 0, "Probability", "curves, tests", FA_PROB}, // (DeltaCE: focus_stats.cc)
+  {0, 0, 0, "Word problems", "phrases", FA_PHRASES}, // (DeltaCE: phrase.cc, in the command search)
+#ifdef WITH_PRACTICE
   {0, 0, 0, "Practice", "problems", FA_PRACTICE}, // (DeltaCE: focus_practice.cc)
+#endif
 #endif
   {0, 0, 0, "File", "sessions", FA_FILE},
   {0, 0, 0, "Clear history", 0, FA_CLEAR},
@@ -74,14 +77,29 @@ static const fm_item m_math[] = {
   {"integrate(,x)", 3, 0, 0, 0, 0}, {"integrate(,x,,)", 5, 0, 0, 0, 0}, {"diff(,x)", 3, 0, 0, 0, 0},
   {"limit(,x,)", 4, 0, 0, 0, 0}, {"sum(,k,,)", 5, 0, 0, 0, 0}, {"^()", 1, 0, 0, 0, 0},
 };
+// (DeltaCE) the home card ("Things to do", more's first item, F5 then 1): what DeltaCE does, a task
+// a card; a template goes on the line, its argument named in its box and an example under the line
+static const fm_item m_home[] = {
+  {"solve(,x)", 3, 0, "Solve", 0, 0}, {"factor()", 1, 0, "Factor", 0, 0},
+  {"diff(,x)", 3, 0, "Derivative", 0, 0}, {"integrate(,x)", 3, 0, "Integral", 0, 0},
+  {"limit(,x,)", 4, 0, "Limit", 0, 0}, // (in Practice's place since 2026-10-30: 3 by 3 again)
+  {"plot()", 1, 0, "Graph", 0, 0},
+#ifdef FLOWCE_STEPS
+  {0, 0, 0, "Statistics", 0, FA_STATS}, {0, 0, 0, "Probability", 0, FA_PROB},
+#ifdef WITH_PRACTICE
+  {0, 0, 0, "Practice", 0, FA_PRACTICE},
+#endif
+#endif
+  {0, 0, 0, "All commands", 0, FA_CATALOG},
+};
 #define N(a) (char)(sizeof(a) / sizeof(a[0]))
-static const fm_menu MENUS[6] = { // F1 F2 F3 F4 F5 math
+static const fm_menu MENUS[7] = { // F1 F2 F3 F4 F5 math, home
 #ifdef FLOWCE_STEPS
   {0, 1, N(m_alg), m_alg}, {2, 3, N(m_calc), m_calc}, {1, 3, N(m_trig), m_trig}, // (7 calculus items: 3 columns)
 #else
   {0, 1, N(m_alg), m_alg}, {2, 2, N(m_calc), m_calc}, {1, 3, N(m_trig), m_trig},
 #endif
-  {1, 4, N(m_sym), m_sym}, {0, 1, N(m_more), m_more}, {1, 3, N(m_math), m_math},
+  {1, 4, N(m_sym), m_sym}, {0, 1, N(m_more), m_more}, {1, 3, N(m_math), m_math}, {2, 3, N(m_home), m_home},
 };
 #undef N
 
@@ -105,7 +123,7 @@ static void geometry(int id, const fm_menu & m) {
   px = anchor - pw / 2;
   if (px < mg) px = mg;
   if (px > UI_W - pw - mg) px = UI_W - pw - mg;
-  py = id == 5 ? ST + (SBOT - ST - ph) / 2 : SBOT - ph; // (DeltaCE: on the bar, joined to its tab)
+  py = id >= 5 ? ST + (SBOT - ST - ph) / 2 : SBOT - ph; // (DeltaCE: on the bar, joined to its tab; home centered)
 }
 
 // the box of item k (screen coordinates)
@@ -117,10 +135,29 @@ static void item_box(const fm_menu & m, int k, int & x, int & y, int & w, int & 
 // the previews of the open menu, laid out once (empty arguments drawn as boxes)
 static mi_layout * PL;
 static signed char PLV[16];
-static void prepare(const fm_menu & m) {
+// (DeltaCE, FlowCE's) the F-key cards' previews kept once laid out (their layout was a third of a
+// card's opening), laid out ahead while a key is awaited (focus_warm), given back when the heap
+// runs out (focus_menu_release, allocator_custom.c)
+struct kept { mi_layout * L; signed char lv[16]; };
+static kept * KP[7];
+static char card_open;
+static void drop_pl() { // the open card's previews let go (kept ones stay)
+  for (int c = 0; c < 7; ++c) if (PL && KP[c] && PL == KP[c]->L) { PL = 0; return; }
   delete[] PL;
+  PL = 0;
+}
+extern "C" int focus_menu_release(void) {
+  int r = 0;
+  for (int c = 0; c < 7; ++c)
+    if (KP[c] && KP[c]->L != PL) { delete[] KP[c]->L; delete KP[c]; KP[c] = 0; r = 1; }
+  return r;
+}
+// warm: laid out ahead, stopped by a key (kept for the next getkey); false: not all laid out
+static bool prepare(const fm_menu & m, int warm = 0) {
+  drop_pl();
   PL = new mi_layout[m.n];
   for (int k = 0; k < m.n; ++k) {
+    if (warm && key_waiting()) { drop_pl(); return false; }
     const fm_item & it = m.items[k];
     const char * t = it.pv ? it.pv : it.text;
     PLV[k] = -1;
@@ -129,6 +166,14 @@ static void prepare(const fm_menu & m) {
     else if (m.grid) PLV[k] = (signed char)ui_math_fit(t, strlen(t), -1, 3, cw - 8, CH - 4, MI_F_CALLBOX, PL[k]);
     else PLV[k] = (signed char)ui_math_fit(t, strlen(t), -1, 4, 100, RH - 2, MI_F_CALLBOX, PL[k]);
   }
+  return true;
+}
+static void prepare_kept(const fm_menu & m, int c, int warm = 0) { // menu c's previews: kept, or laid out and kept
+  if (KP[c]) { drop_pl(); PL = KP[c]->L; memcpy(PLV, KP[c]->lv, sizeof PLV); return; }
+  kept * k;
+  if (!prepare(m, warm) || m.n > 16 || !(k = new kept)) return;
+  k->L = PL; memcpy(k->lv, PLV, sizeof k->lv);
+  KP[c] = k;
 }
 // item k's preview, centered vertically at ymid; centered in w if center, else from x
 static void preview(int k, const char * t, int x, int ymid, int w, int ink, int bg, int center) {
@@ -153,6 +198,7 @@ static void sym_text(const char * s, int cx, int cy, int fg, int bg) {
   ui_draw_text(f, s, -1, cx - ui_text_width(f, s, -1) / 2, cy - (t + b) / 2, ui_ramp(1, fg, bg), 0);
 }
 
+static char fresh; // paint_rows: the card was just painted under the items (FlowCE's)
 static __attribute__((noinline)) void paint_item(const fm_menu & m, int k, int sel) {
   const fm_item & it = m.items[k];
   int x, y, w, h;
@@ -160,7 +206,7 @@ static __attribute__((noinline)) void paint_item(const fm_menu & m, int k, int s
   // (DeltaCE) the selected item: a soft teal row with a teal edge (FlowCE's: filled teal)
   int on = k == sel, bg = on ? UC_ACCSOFT : UC_CARD, fg = UC_INK, sub = on ? UC_ACC : UC_SUB;
   ui_clip(x, y, x + w, y + h);
-  ui_fill(x, y, w, h, ui_col(1, UC_CARD));
+  if (!fresh) ui_fill(x, y, w, h, ui_col(1, UC_CARD));
   if (m.grid) {
     if (on) { ui_rrect(1, x + 1, y + 1, w - 2, h - 2, 6, UC_ACCSOFT, UC_CARD); ui_rframe(1, x + 1, y + 1, w - 2, h - 2, 6, UC_ACC, UC_ACCSOFT); }
     if (m.grid == 2) { // a card: the preview, its label under it (a label alone: centered)
@@ -203,6 +249,7 @@ static __attribute__((noinline)) void paint_item(const fm_menu & m, int k, int s
 // paints rows [y0, y1) of the card (and its shadow) over what the screen shows
 static void paint_rows(const fm_menu & m, int y0, int y1, int sel, int all) {
   int rows = ui_band_open(48);
+  fresh = (char)all;
   for (int b = y0; b < y1; b += rows ? rows : y1 - y0) {
     int e = rows && b + rows < y1 ? b + rows : y1;
     if (rows) { ui_band_begin(b, e); ui_band_load(); }
@@ -232,6 +279,7 @@ static void paint_rows(const fm_menu & m, int y0, int y1, int sel, int all) {
     }
     if (rows) ui_band_end();
   }
+  fresh = 0;
   ui_noclip();
 }
 
@@ -246,6 +294,7 @@ static void tab_text(int i, const char * w, int fg);
 // (layer 0: its icon and word; 2nd, alpha: its text label), the card is painted
 static const char * tab_word_; // (DeltaCE) the open tab's word instead of the console's (the graph's menus)
 static void open_card(const fm_menu & m, int col, int layer, int sel) {
+  card_open = 1;
   ui_dim(1);
   paint_rows(m, py, col < 5 ? SBOT : py + ph + 4, sel, 1);
   if (col < 5) { // (DeltaCE) its tab, joined to the card: the card rises out of its key
@@ -264,8 +313,8 @@ static void open_card(const fm_menu & m, int col, int layer, int sel) {
 // closes the card: the scene comes back; under it, the stage is repainted (repaint) unless a
 // view owns the screen (the graph redraws itself); bar0: the bar's plain layer
 static void close_card(int bar0, int repaint) {
-  delete[] PL;
-  PL = 0;
+  drop_pl();
+  card_open = 0;
   ui_dim(0);
   if (focus_view || !repaint) return;
   focus_repaint(py - 2, py + ph + 6);
@@ -695,7 +744,7 @@ static const char * const fm_lab[] = { // command, label
   "plotode", "Solution curve",
   "draw_pixel", "Pixel", "draw_line", "Line", "draw_rectangle", "Rectangle", "draw_polygon", "Polygon",
   "draw_circle", "Circle", "draw_string", "Text", "get_pixel", "Read pixel", "clearscreen", "Clear",
-  "rand", "Random", "randint", "Random integer", "binomial", "Binomial", "and", "And", "or", "Or",
+  "rand", "Random", "randint", "Random integer", "and", "And", "or", "Or",
 };
 static int namec(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
 static const char * fm_label(const char * s) {
@@ -838,7 +887,48 @@ const char * focus_units(int idx) {
 }
 #endif
 
-static signed char pop_last[6]; // (DeltaCE) each menu opens on the item picked last
+// (DeltaCE, FlowCE's) getkey, idle with no card open: the next F-key card's previews laid out and
+// kept, so even its first opening is quick; a key pressed meanwhile stops it (kept, read next)
+extern "C" void focus_warm(void) {
+  static signed char next;
+  while (next < 6 && KP[next]) ++next;
+  if (next >= 6 || card_open || (int)(size_t)malloc(0xffffff) < 40 * 1024) return; // (the heap short: not now)
+  const int c = next;
+  geometry(c, MENUS[c]);
+  prepare_kept(MENUS[c], c, 1);
+  if (KP[c]) ++next;
+  PL = 0; // (kept, or let go by prepare)
+}
+// (DeltaCE) the first start (no session yet): what DeltaCE does, a card a key
+void focus_tour() {
+  static const char * const T[][2] = {
+    {"Welcome to DeltaCE", "Type math as you see it: fractions,\npowers and roots are drawn as you go.\nThe F-keys below open menus."},
+    {"Answers do more", "enter on an answer: its steps\nF4: its other forms\nright arrow: what to do with it"},
+    {"What is it?", "prgm on anything you type: what it is,\nthe facts a textbook asks about it,\nwhat to do next. Word problems: more, 7"},
+    {"Things to do", "more (F5), then 1: what DeltaCE can do,\na task a card. Have fun!"}};
+  const int nt = sizeof(T) / sizeof(T[0]);
+  const int w = 288, h = 112, x = (UI_W - w) / 2, y = ST + (SBOT - ST - h) / 2;
+  ui_noclip();
+  ui_fill(0, 0, UI_W, UI_H, ui_col(1, UC_BG)); // (the start screen's picture away: the cards alone)
+  for (int k = 0; k < nt; ++k) {
+    note_card(x, y, w, h);
+    ui_draw_text(&ui_tb12, T[k][0], -1, x + 14, y + 24, ui_ramp(1, UC_ACC, UC_CARD), 0);
+    char n[8] = {(char)('1' + k), '/', (char)('0' + nt), 0};
+    ui_draw_text(&ui_tr10, n, -1, x + w - 14 - ui_text_width(&ui_tr10, n, -1), y + 24, ui_ramp(1, UC_SUB, UC_CARD), 0);
+    int b = y + 48;
+    for (const char * p = T[k][1];; b += 18) {
+      const char * q = strchr(p, '\n');
+      ui_draw_text(&ui_tr12, p, q ? q - p : -1, x + 14, b, ui_ramp(1, UC_INK, UC_CARD), 0);
+      if (!q) break;
+      p = q + 1;
+    }
+    int key;
+    GetKey(&key);
+    if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC) break;
+  }
+  focus_invalidate();
+}
+static signed char pop_last[7]; // (DeltaCE) each menu opens on the item picked last
 int focus_popover(int key, const char ** text, int * back) {
   int id = key == KEY_CTRL_SYMB ? 5 : key - KEY_CTRL_F1;
   if (id < 0 || id > 5) return FA_NONE;
@@ -846,7 +936,7 @@ int focus_popover(int key, const char ** text, int * back) {
     const fm_menu & m = MENUS[id];
     const int sel = pop_last[id] < m.n ? pop_last[id] : 0;
     geometry(id, m);
-    prepare(m);
+    prepare_kept(m, id);
     open_card(m, id, 0, sel);
     cur = id;
     int r = run_keys(m, sel, fk_pop), res = FA_NONE;
@@ -855,11 +945,14 @@ int focus_popover(int key, const char ** text, int * back) {
       const fm_item & it = m.items[r];
       if (it.act) res = it.act;
       else { *text = it.text; *back = it.back; res = FA_INSERT; }
+      if (res == FA_HOME) { close_card(0, 1); id = 6; continue; } // (DeltaCE: more's Things to do: the home card)
     }
     // the card's rows are repainted from the stage (not under the command search, which covers
-    // the screen at once)
-    close_card(0, res != FA_CATALOG);
-    if (r > -2) return res;
+    // the screen at once; DeltaCE: not for a template, which the console redraws the screen
+    // after: twice took as long again)
+    close_card(0, res != FA_CATALOG && res != FA_INSERT);
+    if (res == FA_INSERT) focus_invalidate();
+    if (r > -2) { focus_fresh = res == FA_NONE && !focus_view; return res; }
     id = -2 - r;
   }
 }

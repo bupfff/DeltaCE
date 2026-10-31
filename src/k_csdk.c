@@ -197,6 +197,8 @@ int getkey(int allow_suspend){
           display_time();
         if ((j&0x1ff)==0x1ff)
           focus_idle();
+        else if ((j&0x1f)==0x1f)
+          focus_warm(); // (DeltaCE: the menus' previews laid out ahead, once)
         i=key_csc?key_csc:os_GetCSC();
         key_csc=0;
         ++getkey_polls;

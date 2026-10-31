@@ -59,6 +59,7 @@ try:
     e.key('apps'); e.run(1000); shot('apps_menu')
     e.key('2'); e.run(1500); shot('splash')                     # 1:Finance 2:FlowCE after the reset
     e.key('enter'); e.run(1500)
+    e.key('clear'); e.run(1000)                                 # (DeltaCE: the first start's tour, ended)
     bmp = f'/tmp/emu_install_{os.getpid()}.bmp'
     e.cmd(f'screenshot {bmp}')
     d = open(bmp, 'rb').read(); off = struct.unpack_from('<I', d, 10)[0]

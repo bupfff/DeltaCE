@@ -1959,8 +1959,12 @@ const char * trig(){
     const int l=strlen(out);
     if (console_input2d() && l>1 && out[l-1]=='(')
       console_input_call(out);
-    else
+    else {
       Console_Input((const Char *)out);
+      if (!strncmp(out,"ph_",3)) // (DeltaCE) a phrase: the caret in its first box
+        for (int b=l-(strchr(out,'(')-out)-1;b>0;--b)
+          Console_MoveCursor(CURSOR_LEFT);
+    }
     return true;
   }
 
@@ -2486,7 +2490,7 @@ static const char * console_action_answer(char * v,int cap){
   const int rl=focus_result_line();
   if (rl<0 || !Line[rl].str) return 0;
   const char * a=(const char *)Line[rl].str;
-  if (strchr(a,'=') || strchr(a,'[') || strchr(a,'"') || strchr(a,'<') || strchr(a,'>')) return 0; // (solutions, lists, text)
+  if (strchr(a,'=') || strchr(a,'[') || strchr(a,'"') || strchr(a,'<') || strchr(a,'>') || strstr(a,"ph_")) return 0; // (solutions, lists, text, a phrase's equation)
   console_action_var("ans()",v,cap);
   const int vn=strlen(v);
   bool has=false; // the letter in the answer (2x: x; exp(x): x; not a number)
@@ -2495,30 +2499,28 @@ static const char * console_action_answer(char * v,int cap){
   return has?a:0;
 }
 static const char * const answer_labels[]={"Factor","Expand","Simplify","Solve = 0","Derivative","Integral","Value at","Graph","Analyze"};
-// (DeltaCE) the row under an answer shown large (focus.cc): its likeliest actions, their number
-// (0: none). A function (sin, ln, sqrt): Derivative, Integral, Graph; else Factor (Expand for a
-// product or a power of a sum), Solve = 0, Graph.
-int console_answer_row(const char ** lab,signed char * idx){
+// (DeltaCE) the moves the Δ key offers on the answer shown large, named in the bar under it
+// (focus.cc), as delta.cc function_of orders them: a function (sin, ln, sqrt, a quotient) its
+// derivative, a polynomial (a power, or its letter twice) its factored form and zeros, a line its
+// graph; 0: not an expression in its letter
+const char * console_answer_moves(){
   char v[16];
   const char * a=console_action_answer(v,sizeof(v));
   if (!a) return 0;
   bool fn=false;
-  for (const char * p=a;*p && !fn;++p) fn=isalpha((unsigned char)p[0]) && p[1]=='(';
-  static const signed char calc[3]={4,5,7},alg[3]={0,3,7}; // (indexes in answer_labels)
-  for (int i=0;i<3;++i) idx[i]=fn?calc[i]:alg[i];
-  if (!fn && (strstr(a,")*") || strstr(a,"*(") || strstr(a,")^"))) idx[0]=1;
-  for (int i=0;i<3;++i) lab[i]=answer_labels[(int)idx[i]];
-  return 3;
+  for (const char * p=a;*p && !fn;++p) fn=(isalpha((unsigned char)p[0]) && p[1]=='(') || (p[0]=='/' && (p[1]=='(' || isalpha((unsigned char)p[1])));
+  const char * p=strstr(a,v);
+  return fn?"Derivative \xc2\xb7 Graph \xc2\xb7 more":strchr(a,'^') || (p && strstr(p+1,v))?"Factor \xc2\xb7 Zeros \xc2\xb7 more":"Graph \xc2\xb7 more";
 }
-// the actions on the answer: pick (an index in answer_labels), or the list of all (pick < 0)
-static int console_answer_actions(int pick){
+// the actions on the answer, from the list of all (a Δ move: "More actions")
+static int console_answer_actions(){
   char v[16];
   const char * a=console_action_answer(v,sizeof(v));
   if (!a) return -1;
   const int vn=strlen(v);
   const char * const * labels=answer_labels;
   static const char * const how[]={"factor(ans())","expand(ans())","simplify(ans())","solve(ans()=0,@)","diff(ans(),@)","integrate(ans(),@)","","",""};
-  const int c=pick>=0?pick:focus_list("Use this answer",labels,9,0,0,0);
+  const int c=focus_list("Use this answer",labels,9,0,0,0);
   if (c<0){ Console_Disp(1); return CONSOLE_SUCCEEDED; }
   if (c==6) // Value at: subst(Ans, x=[]) with the caret in the box
     return console_apply_action("subst(,x=)")?CONSOLE_SUCCEEDED:-1;
@@ -2539,6 +2541,42 @@ static int console_answer_actions(int pick){
   return Console_NewLine(LINE_TYPE_INPUT,1);
 }
 #endif
+#ifdef FLOWCE_STEPS
+// (DeltaCE) the Δ key (prgm): the card of the line typed, else of the selected or shown answer
+// (focus_delta, delta.cc); a move picked is entered as a line (its graph: plot(...)), a move with
+// steps opens them once its answer shows (delta_steps: an enter for Console_GetKey). -1: no line
+static int delta_steps;
+static int console_delta(){
+  std::string in;
+  const char * last=0; // (the answer shown, when a line is typed: compared with it)
+  char cmd[512],how=0;
+  int more=0; // (on the answer shown, an expression in its letter: also the list of all its actions)
+  if (Current_Line==Last_Line && Edit_Line && Edit_Line[0]){
+    in=(const char *)Edit_Line;
+    const int rl=focus_result_line();
+    if (rl>=0 && Line[rl].str) last=(const char *)Line[rl].str;
+  }
+  else {
+    const int l=Current_Line<Last_Line?Current_Line:focus_result_line();
+    if (l>=0 && Line[l].str) in=(const char *)Line[l].str;
+    more=Current_Line==Last_Line && console_action_answer(cmd,16);
+  }
+  if (in.empty()){ focus_status_msg("Type something, then prgm"); return -1; }
+  if (focus_delta(in.c_str(),last,more,cmd,sizeof(cmd)-8,&how)<0) return -1;
+  if (how=='a'){ focus_analyze(cmd); return -1; }
+  if (how=='m') return console_answer_actions();
+  for (int k=0;Current_Line<Last_Line && k<4000;++k)
+    Console_MoveCursor(CURSOR_DOWN);
+  Console_Clear_EditLine();
+  if (how=='g'){ // (in a char buffer: uSTL's string + string reset the calculator once)
+    memmove(cmd+5,cmd,strlen(cmd)+1); memcpy(cmd,"plot(",5); strcat(cmd,")");
+  }
+  Console_Input((const Char *)cmd);
+  console_prepare_input();
+  delta_steps=how=='s';
+  return Console_NewLine(LINE_TYPE_INPUT,1);
+}
+#endif
 static const char * const console_yesno[]={"Clear history","Cancel"};
 int Console_GetKey(){
   unsigned int key, move_line, move_col;
@@ -2551,6 +2589,10 @@ int Console_GetKey(){
     if (oldkeyflag!=keyflag)
       console_disp_status(keyflag);
     oldkeyflag=keyflag;
+#ifdef FLOWCE_STEPS
+    if (delta_steps){ delta_steps=0; key=KEY_CTRL_EXE; } // (a Δ move with steps: enter on its answer)
+    else
+#endif
     ck_getkey((int *)&key);
     if (key==KEY_CTRL_QUIT
 #if !defined WITH_PLOT && !defined FLOWCE_STEPS // (DeltaCE: F1 is a menu, not save and quit)
@@ -2561,30 +2603,19 @@ int Console_GetKey(){
     if (key==KEY_CTRL_SHIFT || key==KEY_CTRL_ALPHA)
       continue;
 #ifdef FLOWCE_STEPS
-    // (DeltaCE) the action row under an answer has the keys once the right arrow selected an
-    // action: left and right move (left of the first: out), enter does it ("more": the list of
-    // all); any other key leaves the row, then does what it does (clear: only that)
-    if (focus_on && focus_act()>=0){
-      const int sel=focus_act();
-      const char * lab[3];
-      signed char idx[3];
-      const int n=Current_Line==Last_Line && Edit_Line && !Edit_Line[0]?console_answer_row(lab,idx):0;
-      if (n && key==KEY_CTRL_RIGHT){ if (sel<n) focus_act_select(sel+1); continue; }
-      if (n && key==KEY_CTRL_LEFT){ focus_act_select(sel-1); continue; }
-      focus_act_select(-1);
-      if (n && key==KEY_CTRL_EXE){
-        const int r=console_answer_actions(sel<n?idx[sel]:-1);
-        if (r!=-1) return r;
-        continue;
-      }
-      if (key==KEY_CTRL_EXIT || key==KEY_CTRL_AC) continue;
+    if (key==KEY_CTRL_PRGM){ // (DeltaCE) the Δ key
+      const int r=console_delta();
+      if (r!=-1) return r;
+      Console_Disp(1);
+      continue;
     }
 #endif
     // Focus: F1-F3, F5 and the math key open popovers (focus_menu.cc); F4 cycles the forms of a
-    // result (selected, or shown large), else opens the symbols
-    if (focus_on && key==KEY_CTRL_F4 && Current_Line==Last_Line && focus_result_line()>=0){
+    // result (selected, or shown large), else opens the symbols; (DeltaCE) on the answer shown
+    // large, right and left flip them too (the bar under it), left back
+    if (focus_on && (key==KEY_CTRL_F4 || key==KEY_CTRL_RIGHT || key==KEY_CTRL_LEFT) && Current_Line==Last_Line && focus_result_line()>=0){
 #ifdef WITH_EQW
-      console_cycle_form(focus_result_line());
+      console_cycle_form(focus_result_line(),key==KEY_CTRL_LEFT);
 #endif
       Console_Disp(1);
       continue;
@@ -2601,7 +2632,10 @@ int Console_GetKey(){
         quick_item q={0,text,(signed char)back};
         return console_insert_template(q);
       }
-      if (a==FA_CATALOG){ // "All commands": the command search (Console_GetLine redraws)
+      if (a==FA_CATALOG || a==FA_PHRASES){ // "All commands": the command search (Console_GetLine redraws)
+#ifdef FLOWCE_STEPS
+        if (a==FA_PHRASES) focus_catalog_only=CAT_CATEGORY_PHRASE; // (DeltaCE) Word problems: the phrases
+#endif
         console_search("",0);
         return CONSOLE_SUCCEEDED;
       }
@@ -3143,13 +3177,6 @@ int Console_GetKey(){
       Console_Disp(1);
       continue;
     }
-#ifdef FLOWCE_STEPS
-    if (focus_on && key==KEY_CTRL_RIGHT && Current_Line==Last_Line && Edit_Line && !Edit_Line[0]){
-      if (focus_act_select(0)) continue; // (DeltaCE) on an answer: its action row (above)
-      const int r=console_answer_actions(-1); // (no row on screen: the list)
-      if (r!=-1) return r;
-    }
-#endif
     if (console_input2d() && (key==KEY_CTRL_LEFT || key==KEY_CTRL_RIGHT || key==KEY_CTRL_UP || key==KEY_CTRL_DOWN)){
       const char * s=(const char *)Edit_Line;
       const int dir=key==KEY_CTRL_LEFT?0:key==KEY_CTRL_RIGHT?1:key==KEY_CTRL_UP?2:3;
@@ -3702,17 +3729,17 @@ int Console_Init()
 #if defined WITH_PLOT || defined FLOWCE_STEPS // (DeltaCE: F3's plots, its graph screen's)
 
 #ifdef FRANCAIS
-  constexpr const char conf_standard[] = "F1 algebre\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF2  calcul\n'\ndiff(\nintegrate(\nlimit(\ntabvar(\nseries(\nsolve(\ndesolve(\n=\nF3   graphes  \nplot(\nplotparam(\nplotpolar(\nplotfield(\nplotode(\nF5 menu\nreserved\nF6  arithm. \nirem(\n mod \nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reels\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomes\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   alg. lin.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\nbinomial(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
+  constexpr const char conf_standard[] = "F1 algebre\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF2  calcul\n'\ndiff(\nintegrate(\nlimit(\ntabvar(\nseries(\nsolve(\ndesolve(\n=\nF3   graphes  \nplot(\nplotparam(\nplotpolar(\nplotfield(\nplotode(\nF5 menu\nreserved\nF6  arithm. \nirem(\n mod \nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reels\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomes\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   alg. lin.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
 #else
-  constexpr const char conf_standard[] = "F1 algebra\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF2 calculus\n'\ndiff(\nintegrate(\nlimit(\nseries(\nsolve(\ndesolve(\n=\nF3  plot  \nplot(\nplotparam(\nplotpolar(\nplotfield(\nplotode(\nF5 menu\nreserved\nF6  arithm. \n mod \nirem(\nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reals\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomials\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   lin. alg.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\nbinomial(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
+  constexpr const char conf_standard[] = "F1 algebra\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF2 calculus\n'\ndiff(\nintegrate(\nlimit(\nseries(\nsolve(\ndesolve(\n=\nF3  plot  \nplot(\nplotparam(\nplotpolar(\nplotfield(\nplotode(\nF5 menu\nreserved\nF6  arithm. \n mod \nirem(\nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reals\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomials\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   lin. alg.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
 #endif
 
 #else // WITH_PLOT
 
 #ifdef FRANCAIS
-  constexpr const char conf_standard[] = "F1 save,quit\nreserved\nF2 algebre\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF4 calcul\n'\ndiff(\nintegrate(\nlimit(\nseries(\nsolve(\ndesolve(\n=\nF5 menu\nreserved\nF6  arithm. \nirem(\n mod \nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reels\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomes\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   alg. lin.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\nbinomial(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
+  constexpr const char conf_standard[] = "F1 save,quit\nreserved\nF2 algebre\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF4 calcul\n'\ndiff(\nintegrate(\nlimit(\nseries(\nsolve(\ndesolve(\n=\nF5 menu\nreserved\nF6  arithm. \nirem(\n mod \nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reels\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomes\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   alg. lin.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
 #else
-  constexpr const char conf_standard[] = "F1 save,quit\nreserved\nF2 algebra\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF4 calculus\n'\ndiff(\nintegrate(\nlimit(\nseries(\nsolve(\ndesolve(\n=\nF5 menu\nreserved\nF6  arithm. \n mod \nirem(\nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reals\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomials\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   lin. alg.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\nbinomial(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
+  constexpr const char conf_standard[] = "F1 save,quit\nreserved\nF2 algebra\nsimplify(\nfactor(\npartfrac(\ntcollect(\ntexpand(\nsum(\noo\nproduct(\nF4 calculus\n'\ndiff(\nintegrate(\nlimit(\nseries(\nsolve(\ndesolve(\n=\nF5 menu\nreserved\nF6  arithm. \n mod \nirem(\nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF7   reals\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF8 complexes\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF9   polynomials\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nF:   lin. alg.\nmatrix(\ndet(\nmatpow(\nranm(\nrref(\ntran(\negvl(\negv(\nF;  misc\n()/()\n_\n!\nrand()\nrandint(\n and \n or \nF>   units\n=>\nF?   colors\nred\ngreen\nblue\nmagenta\ncyan\nyellow\nwhite\nfilled\nF<   lists\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\n\nF=   program\n:\n&\n#\nhex(\nbin(\nf(x):=\ndebug(\npython(\nF@ mat\n[A]\n[B]\n[C]\n[D]\n[E]\n[F]\n[G]\n[H]";
 #endif
 
 #endif

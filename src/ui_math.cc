@@ -210,8 +210,14 @@ void ui_math_draw(const mi_layout & L, const char * s, int lv, int x, int y, int
       bezier(x0 + W * 42 / 100, y0 + H - W * 38 / 100, x0 + W * 40 / 100, y0 + H,
              x0 + W * 10 / 100, y0 + H + W * 5 / 100, x0 + W * 2 / 100, y0 + H - W * 20 / 100, th, r);
     } break;
-    case MI_SIGMA: { // top bar, two diagonals, bottom bar
+    case MI_SIGMA: { // top bar, two diagonals, bottom bar (style 1, DeltaCE: the capital pi of a product, two legs)
       int x0 = ox * 16, y0 = oy * 16, W = w * 16, H = h * 16;
+      if (o.style == 1) {
+        int p[] = {x0 + 8, y0 + 8, x0 + W - 8, y0 + 8}, a[] = {x0 + W * 22 / 100, y0 + 8, x0 + W * 22 / 100, y0 + H - 8},
+            b[] = {x0 + W * 78 / 100, y0 + 8, x0 + W * 78 / 100, y0 + H - 8};
+        ui_poly16(p, 2, th, r); ui_poly16(a, 2, th, r); ui_poly16(b, 2, th, r);
+        break;
+      }
       int p[] = {x0 + W - 8, y0 + 8, x0 + 8, y0 + 8, x0 + W * 55 / 100, y0 + H / 2, x0 + 8, y0 + H - 8, x0 + W - 8, y0 + H - 8};
       ui_poly16(p, 5, th, r);
     } break;
@@ -232,11 +238,11 @@ void ui_math_draw(const mi_layout & L, const char * s, int lv, int x, int y, int
       bezier(xo, y0, xi, y0 + (mid - y0) / 2, xi, mid - (mid - y0) / 3, xi, mid, th - 4, r);
       bezier(xi, mid, xi, mid + (y1 - mid) / 3, xi, y1 - (y1 - mid) / 2, xo, y1, th - 4, r);
     } break;
-    case MI_LBRACKET: case MI_RBRACKET: {
+    case MI_LBRACKET: case MI_RBRACKET: { // (DeltaCE: style 1, floor, no top serif; 2, ceiling, no bottom one)
       int l = o.code == MI_LBRACKET, xs = l ? ox + 1 : ox + w - 2;
       ui_fill(xs, oy, 1, h, r[3]);
-      ui_fill(l ? xs : ox, oy, w - 1, 1, r[3]);
-      ui_fill(l ? xs : ox, oy + h - 1, w - 1, 1, r[3]);
+      if (o.style != 1) ui_fill(l ? xs : ox, oy, w - 1, 1, r[3]);
+      if (o.style != 2) ui_fill(l ? xs : ox, oy + h - 1, w - 1, 1, r[3]);
     } break;
     case MI_LBRACE: case MI_RBRACE: {
       int l = o.code == MI_LBRACE, xo = (l ? ox + w - 1 : ox + 1) * 16, xm = (ox * 16) + w * 8, xi = (l ? ox : ox + w) * 16;

@@ -10,7 +10,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cemu import Emu, KB
 
-# name: list of steps. ('p', text) paste + EXE; ('k', keys) type keys; ('w', ms) run; ('night',)
+# name: list of steps. ('p', text) paste + EXE; ('v', text) paste only; ('k', keys) type keys; ('w', ms) run; ('night',)
 SCENES = {
     'hero_integral':  [('p', 'integrate(x^2*sin(x),x)')],
     'definite':       [('p', 'integrate(sin(x)^2,x,0,pi)')],
@@ -55,7 +55,7 @@ SCENES = {
     'steps_hint':     [('p', 'integrate(x*e^x,x)')],
     'steps_parts_end': [('p', 'integrate(x*sin(x),x)'), ('k', '{enter}'), ('w', 8000), ('k', '{down}{down}{down}'), ('w', 1500)],
     'steps_subst':    [('p', 'integrate(2x*cos(x^2),x)'), ('k', '{enter}'), ('w', 8000)],
-    # DeltaCE: the action row, algebra steps, the analysis, units, the graph screen's kinds
+    # DeltaCE: the answer bar (right: the next form), algebra steps, the analysis, units, the graph screen's kinds
     'action_row':     [('p', 'expand((x+1)*(x-2)*(x+3))'), ('k', '{right}')],
     'steps_quadratic': [('p', 'solve(2x^2-3x-5=0,x)'), ('k', '{enter}'), ('w', 6000)],
     'steps_factor':   [('p', 'factor(x^3+2x^2-5x-6)'), ('k', '{enter}'), ('w', 6000)],
@@ -66,10 +66,17 @@ SCENES = {
     'graph_param':    [('p', 'plotparam([cos(3t),sin(2t)],t)'), ('w', 5000)],
     'graph_polar':    [('p', 'plotpolar(1+2cos(theta),theta)'), ('w', 5000)],
     'graph_field':    [('p', 'plotode(x-y,[0,1])'), ('w', 6000)],
-    # DeltaCE 2.0: probability (more menu, 6), practice (7), the new steps
+    # DeltaCE 2.0: probability (more menu, 6), the new steps; 2.2: the home card (more menu, 1)
     'prob_normal':    [('k', '{graph}6'), ('w', 2500), ('k', '100{enter}15{enter}{window}{window}130{enter}'), ('w', 3000)],
     'prob_ttest':     [('k', '{graph}6'), ('w', 2500), ('k', '{trace}'), ('w', 1000), ('k', '4'), ('w', 4000)],
-    'practice':       [('k', '{graph}7'), ('w', 1500), ('k', '5'), ('w', 3000), ('k', '{enter}'), ('w', 800), ('k', '9x^2+2x-5{enter}'), ('w', 3000)],  # (the same problem each run: the emulator is deterministic)
+    'home':           [('k', '{graph}1'), ('w', 2000)],
+    # 2.2: the Δ key (prgm) and word problems (more menu, 7: phrases)
+    'delta_quadratic': [('k', 'x{sq}-5x+6{prgm}'), ('w', 4000)],
+    'delta_circle':   [('k', 'x{sq}+y{sq}-4x+6y=12{prgm}'), ('w', 4000)],
+    'delta_inequality': [('v', 'x^2-x-6>0'), ('k', '{prgm}'), ('w', 4000), ('k', '{down}'), ('w', 1000)],
+    'phrase_story':   [('k', '{graph}7'), ('w', 2000), ('k', 'more{enter}'), ('w', 800), ('k', 'l{right}3{right}2w{enter}'), ('w', 1500),
+                       ('k', '{graph}7'), ('w', 2000), ('k', 'perim{enter}'), ('w', 800), ('k', 'l{right}w{right}36{enter}'), ('w', 1500),
+                       ('k', '{graph}7'), ('w', 2000), ('k', 'find{enter}'), ('w', 800), ('k', 'w{enter}'), ('w', 3000)],
     'steps_system':   [('p', 'solve([2x+3y=12,x-y=1],[x,y])'), ('k', '{enter}'), ('w', 6000)],
     'steps_log':      [('p', 'solve(log(x)+log(x-3)=1,x)'), ('k', '{enter}'), ('w', 8000)],
     'steps_trig':     [('p', 'solve(2cos(x)+sqrt(3)=0,x)'), ('k', '{enter}'), ('w', 8000), ('k', '{down}{down}{down}'), ('w', 1500)],
@@ -93,6 +100,9 @@ def run_scene(state, outdir, name, steps):
             if st[0] == 'night':  # more menu, item 3: Paper or Night
                 e.type('{graph}3')
                 e.run(1500)
+            elif st[0] == 'v':  # (DeltaCE) pasted on the edit line, not entered
+                e.paste(st[1])
+                e.run(300)
             elif st[0] == 'p':
                 e.paste(st[1])
                 e.key('enter')

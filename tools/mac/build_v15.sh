@@ -39,6 +39,8 @@ fi
 LOG="$ROOT/work/build-$NAME.log"; : > "$LOG"
 # (DeltaCE) the catalog's descriptions, packed from menufr.cc (rewritten only when they changed)
 [ ! -f tools/catpack.py ] || python3 tools/catpack.py src/menufr.cc src/catalog_text.h || { echo "tools/catpack.py failed"; exit 1; }
+# (DeltaCE) the steps' rule texts, packed the same way from src/steps.cc's ST("...")
+[ ! -f tools/catpack.py ] || ! grep -q '#include "steps_text.h"' src/steps.cc || python3 tools/catpack.py src/steps.cc src/steps_text.h ST st || { echo "tools/catpack.py (steps) failed"; exit 1; }
 echo "building $SRC (v15, $VARIANT), log: $LOG"
 LDX="--defsym=___heapbot=___heap_low --defsym=___heaptop=___heap_high"
 # the code's placement in flash (a section ordering file for ld): ORDER_FILE=<file> (none: the

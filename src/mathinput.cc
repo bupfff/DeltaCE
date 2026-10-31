@@ -73,7 +73,9 @@ enum { TK_END, TK_NUM, TK_NAME, TK_STR, OP_DEF, OP_IMP, OP_ARR, OP_EQ, OP_NE, OP
 // node kinds; leaves first
 enum { K_TEXT, K_OP, K_OPU, K_SEP, K_DOT, K_BLANK, K_FLAT, K_PI, K_INF, K_THETA,
        K_EMPTY, K_ROW, K_GROUP, K_CALL, K_FRAC, K_POW,
-       K_SQRT, K_SURD, K_ABS, K_INT, K_DEFINT, K_DIFF, K_SUM, K_LIM, K_EXP, K_SER };
+       K_SQRT, K_SURD, K_ABS, K_INT, K_DEFINT, K_DIFF, K_SUM, K_LIM, K_EXP, K_SER,
+       K_FLOOR, K_CEIL, K_NORM, K_CONJ, K_COMB, K_PROD, K_LOGB, K_DIFFN, // (DeltaCE: functions in their symbols)
+       K_PHRASE }; // (DeltaCE: a phrase, its words around its boxes: mi_phrase)
 enum { F_IMPL = 1, F_HID = 2, F_CLOSED = 4, F_NOBOX = 8, F_ARGSEP = 16, F_NAME = 32, F_FN = 64, F_LABEL = 128 };
 
 struct mi_node {
@@ -85,6 +87,7 @@ struct mi_node {
 
 static mi_node T[MAXN + 1];  // T[0] = nil, T[MAXN] = overflow sink (never used in practice)
 int (*mi_arg_label)(const char * name, int nlen, int i, const char ** label);
+const char * (*mi_phrase)(const char * name, int nlen, int na);
 enum { MAXLB = 12 };         // MI_F_HINTS: the empty boxes (F_LABEL) and the names they show
 static short lbn[MAXLB];
 static const char * lbs[MAXLB];
@@ -300,7 +303,13 @@ static int pgroup() { // ( [ { : content to the matching closer or the end
 static const struct { const char * nm; unsigned char na, k; } spec[] = {
   {"sqrt", 1, K_SQRT}, {"surd", 2, K_SURD}, {"abs", 1, K_ABS}, {"integrate", 2, K_INT},
   {"integrate", 4, K_DEFINT}, {"int", 2, K_INT}, {"int", 4, K_DEFINT}, {"diff", 2, K_DIFF},
-  {"sum", 4, K_SUM}, {"limit", 3, K_LIM}, {"exp", 1, K_EXP}, {"series", 4, K_SER}};
+  {"sum", 4, K_SUM}, {"limit", 3, K_LIM}, {"exp", 1, K_EXP}, {"series", 4, K_SER},
+  // (DeltaCE) the functions that have a symbol, drawn in it: floor(x), ceil(x), norm(v), conj(z),
+  // comb(n,k) and nCr(n,k) as (n k), product as the capital pi, log(u,b) and logb(u,b) as log_b(u),
+  // diff(f,x,n) as d^n/dx^n
+  {"floor", 1, K_FLOOR}, {"ceil", 1, K_CEIL}, {"norm", 1, K_NORM}, {"conj", 1, K_CONJ},
+  {"comb", 2, K_COMB}, {"nCr", 2, K_COMB}, {"product", 4, K_PROD}, {"log", 2, K_LOGB},
+  {"logb", 2, K_LOGB}, {"diff", 3, K_DIFFN}};
 
 int mi_drawn_as_template(const char * name, int nlen, int na) {
   for (unsigned i = 0; i < sizeof(spec) / sizeof(spec[0]); ++i) {
@@ -329,6 +338,7 @@ static int pcall(int nm) { // name( args ): normal or special call
   for (unsigned i = 0; i < sizeof(spec) / sizeof(spec[0]); ++i)
     if (spec[i].na == na && namei(nm, spec[i].nm)) k = spec[i].k;
   if (!k && na == 4 && (M->flags & MI_F_IMPLDOT) && namei(nm, "limit")) k = K_LIM; // a result: lim x->0+
+  if (!k && na <= 4 && mi_phrase && mi_phrase(S + T[nm].c, T[nm].b - T[nm].c, na)) k = K_PHRASE; // (DeltaCE)
   if (k) { T[cl].k = k; T[cl].kid = T[nm].nx; T[cl].c = T[nm].c; } // name is structure
   else {
     T[cl].kid = nm;
@@ -522,7 +532,8 @@ static int slot(int n, int i) { // i-th slot content of a 2D construct (hidden p
 }
 static int sfont(int k, int i, int sm) { // font of slot i (must match the sl() calls in cons)
   if (k == K_POW || k == K_EXP || (k == K_SURD && i == 1) || (k == K_DEFINT && i >= 2) ||
-      ((k == K_SUM || k == K_LIM || k == K_SER) && i >= 1)) return 1;
+      ((k == K_SUM || k == K_PROD || k == K_LIM || k == K_SER) && i >= 1) || (k == K_LOGB && i == 1) ||
+      (k == K_DIFFN && i == 2)) return 1;
   return sm;
 }
 static int needp(int n) { // diff(f,x): f needs parentheses (top level + - = , ...)
@@ -552,9 +563,9 @@ static void sl(int i, int x, int y, int sm) { // slot i (node sn[i]) at (x, y)
   if (gm == GM_MEASURE) { by0 = mn(by0, y - T[sn[i]].as); by1 = mx(by1, y + T[sn[i]].ds); }
   else if (gm == i) { gx = ox + x; gy = oy + y; gs = sm; }
 }
-static void dec(int code, int sm, int x, int y, int w, int h) { // decoration box
-  if (gm == GM_MEASURE) { by0 = mn(by0, y); by1 = mx(by1, y + h); }
-  else if (gm == GM_DECO) op(code, sm, ox + x, oy + y, w, h, -1, 0, 0);
+static void dec(int code, int sm, int x, int y, int w, int h, int st = MI_UP) { // decoration box
+  if (gm == GM_MEASURE) { by0 = mn(by0, y); by1 = mx(by1, y + h); }  // (st: a variant, ui_math.cc)
+  else if (gm == GM_DECO) op(code, sm, ox + x, oy + y, w, h, -1, 0, 0, st);
 }
 static void dtext(const char * lit, int ng, int sm, int x, int y) { // literal text, ng glyphs
   const mi_font & f = fnt(sm);
@@ -562,6 +573,16 @@ static void dtext(const char * lit, int ng, int sm, int x, int y) { // literal t
   else if (gm == GM_DECO) op(MI_TEXT, sm, ox + x, oy + y, lw(lit, ng, sm), f.asc + f.desc, -1, ng, lit, MI_SYM);
 }
 
+// (DeltaCE) a phrase's words at (x, y), upright (a literal wider than a symbol: measured as text); their width
+static int dword(const char * lit, int sm, int x, int y) {
+  int n = 0;
+  while (lit[n]) ++n;
+  const mi_font & f = fnt(sm);
+  const int w = M->wf ? M->wf(lit, n, sm, MI_UP) : n * f.adv;
+  if (gm == GM_MEASURE) { by0 = mn(by0, y - f.asc); by1 = mx(by1, y + f.desc); }
+  else if (gm == GM_DECO) op(MI_TEXT, sm, ox + x, oy + y, w, f.asc + f.desc, -1, n, lit, MI_UP);
+  return w;
+}
 static void cons(int n, int x, int y, int sm) {
   const mi_font & f = fnt(sm), & sf = M->small;
   int k = T[n].k, a = f.adv, h = a / 2, ax = f.asc / 3, t, u, v, i;
@@ -651,11 +672,11 @@ static void cons(int n, int x, int y, int sm) {
     if (i) dec(MI_RPAREN, sm, t + A.w, -ca, h + 1, ca + cd);
     cw = t + A.w + (i ? h + 1 : 2);
   } break;
-  case K_SUM: { // column: b, sigma, k=a; then f
+  case K_SUM: case K_PROD: { // column: b, sigma (product: capital pi), k=a; then f
     int sh = 2 * f.asc, sw = M->wf ? lw("S", 1, sm) : a + 4, st = -ax - sh / 2, bx, bb, ew = lw("=", 1, 1);
     u = B.w + ew + C.w; v = mx(sf.asc, mx(B.as, C.as));
     t = mx(sw, mx(u, D.w));
-    dec(MI_SIGMA, sm, (t - sw) / 2, st, sw, sh);
+    dec(MI_SIGMA, sm, (t - sw) / 2, st, sw, sh, k == K_PROD);
     bx = (t - u) / 2; bb = st + sh + 1 + v;
     sl(1, bx, bb, 1);
     dtext("=", 1, 1, bx + B.w, bb);
@@ -667,6 +688,82 @@ static void cons(int n, int x, int y, int sm) {
     sl(0, t, 0, sm);
     if (i) { dec(MI_RPAREN, sm, t + A.w, -ca, h + 1, ca + cd); t += h + 1; }
     cw = t + 2 + A.w;
+  } break;
+  case K_FLOOR: case K_CEIL: // (DeltaCE) brackets without their top (floor) or bottom (ceiling) serifs
+    dec(MI_LBRACKET, sm, 0, -ca, h + 1, ca + cd, k == K_FLOOR ? 1 : 2);
+    sl(0, h + 2, 0, sm);
+    dec(MI_RBRACKET, sm, h + 3 + A.w, -ca, h + 1, ca + cd, k == K_FLOOR ? 1 : 2);
+    cw = 2 * h + 4 + A.w;
+    break;
+  case K_NORM: // (DeltaCE) the bars of |v| doubled
+    t = mx(1, h - 1); u = mx(3, h / 2 + 1);
+    dec(MI_BAR, sm, 0, -ca, t, ca + cd); dec(MI_BAR, sm, u, -ca, t, ca + cd);
+    sl(0, u + t + 1, 0, sm);
+    v = u + t + 2 + A.w;
+    dec(MI_BAR, sm, v, -ca, t, ca + cd); dec(MI_BAR, sm, v + u, -ca, t, ca + cd);
+    cw = v + u + t;
+    break;
+  case K_CONJ: // (DeltaCE) the conjugate: a bar over the argument
+    dec(MI_HLINE, sm, 0, -ca - GAP - BAR, A.w + 1, BAR);
+    sl(0, 0, 0, sm);
+    cw = A.w + 1;
+    break;
+  case K_COMB: { // (DeltaCE) the binomial coefficient: n over k, no bar, in tall parentheses
+    const int g = GAP, top = -ax - g - A.ds - A.as, bot = -ax + g + B.as + B.ds;
+    u = mx(A.w, B.w);
+    dec(MI_LPAREN, sm, 0, top, h + 1, bot - top);
+    sl(0, h + 1 + (u - A.w) / 2, -ax - g - A.ds, sm);
+    sl(1, h + 1 + (u - B.w) / 2, -ax + g + B.as, sm);
+    dec(MI_RPAREN, sm, h + 1 + u, top, h + 1, bot - top);
+    cw = 2 * h + 2 + u;
+  } break;
+  case K_PHRASE: { // (DeltaCE) a phrase: its words, its arguments' boxes between them, a space apart
+    int nl = 0, na = 0;
+    while (T[n].c + nl < L && namec(ch(T[n].c + nl))) ++nl;
+    while (na < 4 && sn[na]) ++na;
+    const char * w = mi_phrase ? mi_phrase(S + T[n].c, nl, na) : 0;
+    t = 0;
+    for (i = 0; i <= na; ++i) {
+      if (w) {
+        if (*w) t += dword(w, sm, t, 0) + h;
+        while (*w) ++w;
+        ++w;
+      }
+      if (i < na) { sl(i, t, 0, sm); t += T[sn[i]].w + h; }
+    }
+    cw = t > h ? t - h : t;
+  } break;
+  case K_LOGB: { // (DeltaCE) log_b(u): "log", the base small and lowered, then (u)
+    const int lgw = lw("log", 3, sm);
+    dtext("log", 3, sm, 0, 0);
+    sl(1, lgw + 1, f.desc / 2 + B.as / 2, 1);
+    t = lgw + 2 + B.w;
+    dec(MI_LPAREN, sm, t, -ca, h + 1, ca + cd);
+    sl(0, t + h + 1, 0, sm);
+    dec(MI_RPAREN, sm, t + h + 1 + A.w, -ca, h + 1, ca + cd);
+    cw = t + 2 * h + 2 + A.w;
+  } break;
+  case K_DIFFN: { // (DeltaCE) diff(f,x,n): d^n/(dx^n) then f; the n after x drawn again from the buffer
+    const int g = GAP, b = BAR, dw = lw("d", 1, sm), ny = -(f.asc * 45 / 100) - C.ds, tw = dw + C.w;
+    const int simple = T[sn[2]].k == K_TEXT, ew = simple ? C.w : 0; // (n a number or a name)
+    i = needp(sn[0]) || (T[n].nx && T[T[n].nx].k == K_DOT);
+    u = mx(mx(f.asc, B.as), simple ? C.as + C.ds + f.asc * 45 / 100 + 1 : 0); // (room for dx's n under the bar)
+    v = mx(tw, dw + B.w + ew) + 2 * g;
+    dec(MI_HLINE, sm, 0, -ax, v, b);
+    dtext("d", 1, sm, (v - tw) / 2, -ax - g - f.desc);
+    sl(2, (v - tw) / 2 + dw, -ax - g - f.desc + ny, 1);
+    dtext("d", 1, sm, g, -ax + b + g + u);
+    sl(1, g + dw, -ax + b + g + u, sm);
+    if (simple) {
+      const int ey = -ax + b + g + u + ny, ec = T[sn[2]].c, el = T[sn[2]].b - ec;
+      if (gm == GM_MEASURE) { by0 = mn(by0, ey - sf.asc); by1 = mx(by1, ey + sf.desc); }
+      else if (gm == GM_DECO) op(MI_TEXT, 1, ox + g + dw + B.w, oy + ey, ew, sf.asc + sf.desc, ec, el, 0, style(sn[2], K_TEXT));
+    }
+    t = v + g;
+    if (i) { dec(MI_LPAREN, sm, t, -ca, h + 1, ca + cd); t += h + 1; }
+    sl(0, t, 0, sm);
+    if (i) dec(MI_RPAREN, sm, t + A.w, -ca, h + 1, ca + cd);
+    cw = t + A.w + (i ? h + 1 : 2);
   } break;
   case K_SER: { // series(f,x,a,n), as lim: column "taylor" over "x->a deg n" (small); then f
     int bx, bb, tw = lw("taylor", 6, sm), aw = lw("", 1, 1), dw = lw(" deg ", 5, 1);
@@ -963,7 +1060,8 @@ void mi_build(const char * s, int len, int caret, const mi_metrics & m, mi_layou
 // of the last one beside the construct; left the same, mirrored. vorder: the drawn order.
 static int vorder(int k, int * o) {
   static const signed char t[][5] = {{K_DEFINT, 2, 3, 0, 1}, {K_SUM, 1, 2, 3, 0}, {K_LIM, 1, 2, 0, -1},
-                                     {K_DIFF, 1, 0, -1, -1}, {K_SURD, 1, 0, -1, -1}, {K_SER, 1, 2, 3, 0}};
+                                     {K_DIFF, 1, 0, -1, -1}, {K_SURD, 1, 0, -1, -1}, {K_SER, 1, 2, 3, 0},
+                                     {K_PROD, 1, 2, 3, 0}, {K_LOGB, 1, 0, -1, -1}, {K_DIFFN, 2, 1, 0, -1}}; // (DeltaCE)
   for (unsigned i = 0; i < sizeof(t) / sizeof(t[0]); ++i)
     if (t[i][0] == k) {
       int n = 0;
@@ -1043,8 +1141,8 @@ int mi_backspace(const char * s, int len, int caret, int & from, int & to, const
         if (T[q].a <= i && i < T[q].b) nx = q;
       if (!nx) { // hidden structure char of construct n
         for (j = 0; (q = slot(n, j)); ++j) // the default variable x (k for sum) counts as empty
-          if (T[q].k != K_EMPTY && !(j == 1 && k >= K_INT && k <= K_LIM && T[q].k == K_TEXT &&
-                                       namei(q, k == K_SUM ? "k" : "x")))
+          if (T[q].k != K_EMPTY && !(j == 1 && ((k >= K_INT && k <= K_LIM) || k == K_PROD || k == K_DIFFN) &&
+                                     T[q].k == K_TEXT && namei(q, k == K_SUM || k == K_PROD ? "k" : "x")))
             return mi_move(s, len, c, 0, m); // a slot is not empty: act like LEFT
         j = k == K_POW ? T[T[n].kid].b : T[n].a; // empty template: delete it whole
         while (j < L && blank(ch(j))) ++j;

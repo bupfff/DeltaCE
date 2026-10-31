@@ -9,7 +9,7 @@ extern "C" {
 #endif
 #define focus_on 1 // the console is drawn by focus.cc (a constant: the classic screen's paths compile away)
 // DeltaCE, a fork of FlowCE: its own version, in the status bar and on the start screen
-#define DELTACE_VERSION "2.1"
+#define DELTACE_VERSION "2.2"
 #ifdef FLOWCE_STEPS
 #define FLOWCE_VERSION "2.0b1" // the step-by-step build, in beta (the FlowCE release DeltaCE is based on)
 #else
@@ -18,6 +18,7 @@ extern "C" {
 void focus_status(void);                // status bar (statusline / statusflags in focus mode)
 void focus_status_msg(const char * msg); // a message in the status bar ("computing...")
 void focus_idle(void); // getkey, idle for a few seconds: slow refreshes (battery)
+void focus_warm(void); // getkey, idle: the F-key cards' previews laid out ahead (focus_menu.cc)
 #ifdef __cplusplus
 }
 
@@ -29,8 +30,6 @@ void focus_evaluated();                 // after an evaluation: the result is sh
 void focus_busy(int on);                // a calculation starts (1; >1: dots at that row at once) / ends (0)
 bool focus_busy_tick();                 // giac's control_c_hook while calculating: "Calculating"
 int focus_clear_hero();                 // CLEAR on an empty edit line: 1 if it hid the result
-int focus_act();                        // (DeltaCE) the action row's action selected (-1: none or no row)
-int focus_act_select(int k);            // selects action k of the row (-1: none); 0 if no row is shown
 const mi_metrics & focus_metrics();     // metrics of the edit line as drawn (caret moves)
 int focus_result_line();                // the output line F4 cycles (selected, or shown large); -1
 void focus_repaint(int y0, int y1);     // repaints stage rows [y0, y1) from the model
@@ -54,6 +53,7 @@ int focus_fmenu(int idx, const char * const * entries, int n);
 // DeltaCE's units menu (alpha F4, menu idx): a category, then a unit; the text to type, 0 if none
 const char * focus_units(int idx);
 int focus_screen();                     // 1 if the screen shows the Focus console (popovers can dim it)
+extern char focus_fresh;                // (DeltaCE) a card cancelled over the console, its rows painted back: the next focus_disp has nothing to do
 extern int focus_view;                  // 1 while another view (the graph) owns the screen: popovers
                                         // do not repaint the console when they close
 void focus_bar_redraw();                // repaints the F-key bar
@@ -80,7 +80,7 @@ void focus_icon(int ic, int x, int cy, int bank, int c, int bg); // the prototyp
 // focus_menu.cc: F1-F5 and the math key open a popover over the dimmed stage. Returns FA_NONE
 // (closed), FA_INSERT with the template to insert (*text, then the caret back *back chars), or
 // an action for the console.
-enum { FA_NONE, FA_INSERT, FA_CATALOG, FA_PLOT, FA_FILE, FA_CLEAR, FA_GRAPH, FA_THEME, FA_STATS, FA_PROB, FA_PRACTICE };
+enum { FA_NONE, FA_INSERT, FA_CATALOG, FA_PLOT, FA_FILE, FA_CLEAR, FA_GRAPH, FA_THEME, FA_STATS, FA_PROB, FA_PRACTICE, FA_HOME, FA_PHRASES };
 void focus_toggle_theme();             // Paper <-> Night, at once (the palette), saved in the appvar FocusUI
 int focus_popover(int key, const char ** text, int * back);
 
@@ -88,6 +88,7 @@ int focus_popover(int key, const char ** text, int * back);
 // empty. Returns 1 and fills out (0-terminated, at most outsize bytes) with the text to insert,
 // or 0 when cancelled. On return the console redraws everything (Console_Disp(1)).
 int focus_catalog(const char * query, char * out, int outsize);
+extern int focus_catalog_only; // (DeltaCE) the next search lists this category only (CAT_CATEGORY_PHRASE)
 // a call's template from its catalog signature: "irem(" -> "irem(,)", a box per required argument,
 // lists with their brackets (linsolve([],[])). Returns its length, *caret (may be 0) the offset
 // of the first box; 0 if the command has none.
@@ -104,7 +105,15 @@ void focus_entry_help(int e, char * desc, int dsize, char * ex, int esize);
 // it is shown large with its answer (*ans; Enter on the empty line opens its steps), else 0.
 int focus_steps_able(const char * s, const char * ans = 0);
 void focus_steps(const char * in, const char * ans);
+// (DeltaCE) "Your turn" (focus_tutor.cc, WITH_TUTOR): the problem cmd solved line by line; next:
+// Practice's next problem (0: F4 starts it again); label: the status bar's. false: not one it takes
+bool focus_tutor(const char * cmd, const char * (*next)(), const char * label);
+void focus_tour(); // (DeltaCE) the first start: a few cards on what DeltaCE does (focus_menu.cc)
 void focus_analyze(const char * in);     // DeltaCE: a function's analysis (analyze.cc) on the steps' page
+// (DeltaCE) the Δ key (prgm, delta.cc): the card of in; the move picked (its index; its command in
+// cmd[cap], how: 'r' run, 's' run then its steps, 'g' graph, 'a' analysis, 'm' the answer's list
+// of all actions (more: that move last), else -1
+int focus_delta(const char * in, const char * last, int more, char * cmd, int cap, char * how); // last: the answer shown, compared (0: none)
 const char * focus_steps_input(const char ** ans);
 #endif
 #endif

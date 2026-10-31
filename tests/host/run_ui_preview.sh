@@ -13,7 +13,8 @@ for f in ui_gfx ui_font ui_fontdata; do
 done
 g++ -std=c++14 -O1 -g -Wall -I"$root/src" -o "$bin" \
   "$here/ui_preview.cc" "$root/src/mathinput.cc" "$root/src/ui_math.cc" /tmp/ui_gfx.o /tmp/ui_font.o /tmp/ui_fontdata.o
-"$bin" /tmp/ui_preview.ppm "$scene"
+shift 3 2>/dev/null || shift $#
+"$bin" /tmp/ui_preview.ppm "$scene" "$@"
 python3 -c "
 from PIL import Image
 im=Image.open('/tmp/ui_preview.ppm'); s=$scale

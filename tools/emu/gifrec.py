@@ -29,10 +29,10 @@ SERIES = [('p', 'sum(1/n^2,n,1,inf)', 1800)]
 FORMS = [('p', '(x+1)^3', 1300), ('k', '{trace}', 1700), ('w', 2500)]
 GRAPH = [('k', 'sin(x)*e^(-x/5)', 250), ('k', '{graph}1', 0), ('w', 6000), ('f', 900), ('k', '{yequ}', 600),
          ('k', '{right}' * 20, 1600, 90)]
-# DeltaCE: the action row under an answer: right arrow to Graph, enter, then the key points (F3, 4:
-# their labels)
-ACTIONS = [('p', 'x^3-3x', 1300), ('k', '{right}{right}{right}', 900, 450), ('k', '{enter}', 0), ('w', 5000),
-           ('f', 1000), ('k', '{zoom}', 900), ('k', '4', 0), ('w', 4000), ('f', 2600)]
+# DeltaCE: the answer bar: right arrow to its factored form, back, the Δ key (prgm) for its card,
+# 3 for its graph, then the key points (F3, 4: their labels)
+ACTIONS = [('p', 'x^3-3x', 1300), ('k', '{right}', 1300), ('k', '{left}', 700), ('k', '{prgm}', 0), ('w', 3000),
+           ('f', 1600), ('k', '3', 0), ('w', 5000), ('f', 1000), ('k', '{zoom}', 900), ('k', '4', 0), ('w', 4000), ('f', 2600)]
 
 # the steps: an antiderivative from the calculus menu, enter, then enter again for its steps, read
 # down to the answer

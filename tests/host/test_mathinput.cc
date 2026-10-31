@@ -805,7 +805,7 @@ static const char * hold(const std::string & s, int variant) {
 
 static int g_bad, g_maxops, g_maxlen;
 static const mi_metrics * FM = &mi_default_metrics; // metrics of the fuzz pass
-static void fuzz_one(const std::string & str, int variant) {
+static void fuzz_one(const std::string & str, int variant, int rt = 1) { // rt 0: no left-right round trips
   const mi_metrics & MM = *FM;
   const char * s = hold(str, variant);
   int n = (int)str.size(), c = (int)rnd(n + 3) - 1, p, q, r, f, t;
@@ -820,13 +820,13 @@ static void fuzz_one(const std::string & str, int variant) {
     if (q < (d < 2 ? 0 : -1) || q > n) ++g_bad;
   }
   q = mi_move(s, n, p, LEFT, MM); // left then right returns to an equivalent location
-  if (q != p) {
+  if (rt && q != p) {
     r = mi_move(s, n, q, RIGHT, MM);
     mi_build(s, n, p, MM, L); mi_build(s, n, r, MM, L2);
     if (L.cx != L2.cx || L.cy != L2.cy || L.ch != L2.ch) ++g_bad;
   }
   q = mi_move(s, n, p, RIGHT, MM); // and right then left
-  if (q != p) {
+  if (rt && q != p) {
     r = mi_move(s, n, q, LEFT, MM);
     mi_build(s, n, p, MM, L); mi_build(s, n, r, MM, L2);
     if (L.cx != L2.cx || L.cy != L2.cy || L.ch != L2.ch) ++g_bad;
@@ -870,6 +870,34 @@ static void t_fuzz() {
   CHECK(g_maxops <= 400);
   printf("    25200 buffers (longest %d bytes), max ops %d\n", g_maxlen, g_maxops);
   hold(std::string(), 0); // release the last buffer
+  g_bad = 0;
+  const unsigned rng0 = g_rng; // (DeltaCE: its own random stream; the later tests' buffers as before)
+  g_rng = 0x5eed1234u;
+  for (int pass = 0; pass < 2; ++pass) { // (DeltaCE) the functions drawn in their symbols, parentheses closed
+    // pass 0: those drawn in buffer order, every check; pass 1: those whose slots are drawn out of
+    // buffer order (log_b(u): b first; the product's bounds; d^n/dx^n), no round trips: in such a
+    // construct with an empty slot beside a nested one, left then right can land elsewhere, as it
+    // did before them (((diff(,sqrt()))), (surd(,abs(()))); the original vocabulary rarely builds them)
+    static const char * sym0[] = {"floor(", "ceil(", "norm(", "conj(", "comb(", "nCr(", "abs(", "sqrt(",
+                                  ",", ")", "x", "k", "2", "+", "/", "^"};
+    static const char * sym1[] = {"product(", "log(", "logb(", "diff(", "floor(", "comb(",
+                                  ",", ")", "x", "k", "2", "+", "/", "^", "x", "2"};
+    g_bad = 0;
+    for (int i = 0; i < 5000; ++i) {
+      std::string s;
+      int m = (int)rnd(24), open = 0;
+      for (int j = 0; j < m; ++j) {
+        const char * t = (pass ? sym1 : sym0)[rnd(16)];
+        if (*t == ')' && !open) continue;
+        open += t[strlen(t) - 1] == '(' ? 1 : *t == ')' ? -1 : 0;
+        s += t;
+      }
+      while (open--) s += ')';
+      fuzz_one(s, i, !pass);
+    }
+    CHECKEQ(g_bad, 0);
+  }
+  g_rng = rng0;
 }
 
 // ---------------------------------------------------------------- proportional fonts (Focus UI)
@@ -926,6 +954,71 @@ static void t_proportional() {
 }
 
 // ---------------------------------------------------------------- corpus
+// (DeltaCE) functions drawn in their symbols: floor, ceil, norm, conj, comb/nCr, product, log base, n-th derivative
+static void t_symbols() {
+  const char * s = "floor(x/2)+ceil(x)";
+  mi_layout L = lay(s);
+  CHECKEQ(cnt(L, MI_LBRACKET), 2);
+  CHECKEQ(cnt(L, MI_RBRACKET), 2);
+  CHECKEQ(OP(opc(L, MI_LBRACKET, 0)).style, 1); // floor: no top serif
+  CHECKEQ(OP(opc(L, MI_LBRACKET, 1)).style, 2); // ceiling: no bottom serif
+  CHECKEQ(parens(L), 4);
+  CHECK(!text(L, s, "floor") && !text(L, s, "ceil"));
+  L = lay("norm(v)");
+  CHECKEQ(cnt(L, MI_BAR), 4);
+  s = "conj(2+3i)";
+  L = lay(s);
+  CHECKEQ(cnt(L, MI_HLINE), 1);
+  CHECK(OP(opc(L, MI_HLINE)).y + OP(opc(L, MI_HLINE)).h <= OP(text(L, s, "2")).y - 14); // over the content
+  s = "comb(n,k)";
+  L = lay(s);
+  CHECKEQ(cnt(L, MI_LPAREN) + cnt(L, MI_RPAREN), 2);
+  CHECKEQ(cnt(L, MI_HLINE), 0);
+  CHECK(OP(text(L, s, "n")).y < OP(text(L, s, "k")).y); // n over k
+  CHECK(text(lay("nCr(5,2)"), "nCr(5,2)", "5") != 0 && !text(lay("nCr(5,2)"), "nCr(5,2)", "nCr"));
+  L = lay("product(k,k,1,n)");
+  CHECKEQ(cnt(L, MI_SIGMA), 1);
+  CHECKEQ(OP(opc(L, MI_SIGMA)).style, 1);
+  CHECKEQ(OP(opc(lay("sum(k,k,1,n)"), MI_SIGMA)).style, 0);
+  s = "log(8,2)";
+  L = lay(s);
+  CHECK(text(L, s, "log") != 0);
+  CHECKEQ(OP(text(L, s, "2")).small, 1);                      // the base, small
+  CHECK(OP(text(L, s, "2")).y > OP(text(L, s, "8")).y);        // lowered
+  CHECK(OP(text(L, s, "2")).x < OP(text(L, s, "8")).x);        // before the argument
+  CHECKEQ(cnt(L, MI_LPAREN), 1);
+  CHECK(text(lay("logb(x,3)"), "logb(x,3)", "logb") == 0);
+  CHECK(text(lay("log(x)"), "log(x)", "log") != 0); // one argument: as before
+  s = "diff(f(x),x,2)";
+  L = lay(s);
+  CHECKEQ(cnt(L, MI_HLINE), 1);
+  int n2 = 0;
+  for (size_t i = 0; i < L.ops.size(); ++i) n2 += optext(L.ops[i], s, "2") && L.ops[i].small;
+  CHECKEQ(n2, 2); // d^2 and dx^2
+  // every caret position: in bounds; RIGHT from 0 reaches the end, LEFT from the end reaches 0
+  const char * all[] = {"floor(x/2)+1", "ceil(x)", "norm([3,4])", "conj(z)", "comb(n,k)", "nCr(10,3)",
+                        "product(1+1/k,k,1,n)", "log(8,2)", "logb(x+1,3)", "diff(x^3,x,2)", "diff(y,t,n)",
+                        "floor()", "comb(,)", "product(,k,,)", "log(,)", "diff(,x,)"};
+  for (unsigned t = 0; t < sizeof(all) / sizeof(all[0]); ++t) {
+    const char * e = all[t];
+    const int n = slen(e);
+    bool ok = true;
+    for (int p = 0; p <= n; ++p) {
+      ok = ok && inb(lay(e, p));
+      for (int d = 0; d < 4; ++d) { const int q = mv(e, p, d); ok = ok && q >= -1 && q <= n; }
+    }
+    int p = 0, steps = 0;
+    while (p >= 0 && p < n && steps++ < 4 * n) { const int q = mv(e, p, RIGHT); if (q == p) break; p = q; }
+    ok = ok && p == n;
+    p = n; steps = 0;
+    while (p > 0 && steps++ < 4 * n) { const int q = mv(e, p, LEFT); if (q == p) break; p = q; }
+    ok = ok && p == 0;
+    if (!ok) printf("    symbols \"%s\": a caret out of bounds or the arrows stopped\n", e);
+    CHECK(ok);
+  }
+  CHECKEQ(mv("log(8,2)", 0, RIGHT), 6); // right from before log_2(8): into the base first, as a TI's logBASE
+}
+
 static void t_corpus() {
   const char * c[] = {"(x+1)/(x-1)", "x^2+3x+1", "2^(3/2)", "sqrt(x^2+1)", "abs(x-1)",
                       "integrate(x*sin(x),x)", "integrate(x^2,x,0,1)", "diff(x^3,x)",
@@ -996,6 +1089,7 @@ int main() {
   run_case("templates in \"\" and \"2+\"", t_templates);
   run_case("robustness: random buffers", t_fuzz);
   run_case("proportional fonts, styles, implicit *", t_proportional);
+  run_case("functions in their symbols (DeltaCE)", t_symbols);
   run_case("corpus", t_corpus);
   run_case("performance (report)", t_perf);
   printf("\n%d cases, %d failed; %d checks, %d failed\n", g_cases, g_cases_failed, g_checks, g_fails);

@@ -75,6 +75,9 @@ int main(int argc, char ** argv) {
       int x = 4 + (i % 2) * 160, y = 4 + (i / 2) * 58;
       ui_math_draw(L, ex[i], lv, x + (150 - L.width) / 2, y + (56 - L.asc - L.desc) / 2 + L.asc, 0, UC_INK, UC_BG, UC_ACC);
     }
+  } else if (scene == "expr") { // (DeltaCE) the expressions given after the scene, one a row (results: MI_F_IMPLDOT)
+    const int n = argc - 3, rh = n > 0 ? 236 / n : 0;
+    for (int i = 0; i < n; ++i) math_centered(argv[3 + i], 2, 4, 2 + i * rh, 312, rh, UC_INK, MI_F_IMPLDOT, -1);
   } else if (scene == "sizes") {
     int y = 4;
     for (int lv = 0; lv < UI_NSIZES; ++lv) {

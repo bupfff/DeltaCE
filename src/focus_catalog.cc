@@ -30,7 +30,7 @@ struct cat_state {
   const catalogFunc * C;   // the catalog
   short * idx;             // the matches in order (indices in C)
   unsigned char * cls;     // per entry: its match class 0-2, 3 = none
-  int nc, ni, tab, sel, top, ql, exlv;
+  int nc, ni, tab, sel, top, ql, exlv, only; // only: the one category listed (0: all)
   char q[QMAX + 1], ex[96]; // the query (lowercase); the selected entry's example
   mi_layout L;             // ... laid out at level exlv (-1: none)
   // what the screen shows: the field's query and count (sn < 0: no card yet), the scrollbar
@@ -217,6 +217,7 @@ static int classify(const catalogFunc * c) {
 #ifndef WITH_TABVAR
   if (!strncmp(nm, "tabvar", 6)) return 3; // not in this build (makefile FEATURE_DEFS)
 #endif
+  if (s.only && (c->category & 0xff) != s.only) return 3; // (DeltaCE: Word problems)
   if (s.tab) { // any of its 3 category bytes in the tab's categories
     const unsigned char * t = TCAT[s.tab - 1], * b = (const unsigned char *)&c->category;
     int k = 0;
@@ -489,6 +490,7 @@ static void update() {
 }
 
 // ------------------------------------------------------------------ the search
+int focus_catalog_only;
 int focus_catalog(const char * query, char * out, int outsize) {
   S = new cat_state;
   cat_state & s = *S;
@@ -496,10 +498,11 @@ int focus_catalog(const char * query, char * out, int outsize) {
   s.idx = new short[s.nc];
   s.cls = new unsigned char[s.nc];
   s.tab = s.ql = 0;
+  s.only = focus_catalog_only; focus_catalog_only = 0;
   for (; query && *query && s.ql < QMAX; ++query) s.q[s.ql++] = low(*query);
   s.q[s.ql] = 0;
   s.sn = -1; s.sb = -2; s.sf = -2; // nothing on screen yet
-  focus_status_label("COMMANDS");
+  focus_status_label(s.only ? "WORD PROBLEMS" : "COMMANDS");
   lock_alpha(); // plain keys type letters
   focus_phase = 65;
   focus_bar_tabs(TABS, 0);

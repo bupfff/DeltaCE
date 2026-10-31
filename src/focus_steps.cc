@@ -21,6 +21,7 @@
 #include "steps.h"
 #include "answer.h"
 #include "analyze.h"
+#include "delta.h"
 
 extern giac::context * contextptr;
 namespace giac { extern bool (*control_c_hook)(); }
@@ -250,10 +251,26 @@ static bool relation(const char * s) {
 }
 int focus_steps_able(const char * s, const char * ans) {
   if (starts(s, "implicitdiff(")) return 1;
-  if (!starts(s, "solve(") && strlen(s) < 200 && relation(s)) { // as solve(...)
-    char b[210];
-    strcpy(b, "solve("); strcat(b, s); strcat(b, ")");
-    return focus_steps_able(b, ans);
+  // (DeltaCE) the text the checks read: an equation alone as solve(...), and a whole power as
+  // x^2: the math editor's ^ and x² keys write x^(2), and its steps were never offered (testers)
+  char b[210];
+  const bool rel = !starts(s, "solve(") && strlen(s) < 200 && relation(s);
+  if (rel || (strstr(s, "^(") && strlen(s) < 200)) {
+    char * o = b;
+    if (rel) { strcpy(o, "solve("); o += 6; }
+    const char * skip = 0; // (the power's ")")
+    for (const char * p = s; *p; ++p) {
+      if (p == skip) continue;
+      if (*p == '(' && p > s && p[-1] == '^') {
+        const char * q = p + 1;
+        while (isdigit((unsigned char)*q)) ++q;
+        if (q > p + 1 && *q == ')' && !isdigit((unsigned char)q[1])) { skip = q; continue; } // (x^(2)3: as typed)
+      }
+      *o++ = *p;
+    }
+    if (rel) *o++ = ')';
+    *o = 0;
+    s = b;
   }
   if (starts(s, "solve(")) { int k = ineq_able(s); if (k >= 0) return k; k = more_able(s); if (k >= 0) return k; }
   if (starts(s, "canonical_form(") || starts(s, "propfrac(") || starts(s, "partfrac(")) return one_name(s);
@@ -270,11 +287,11 @@ int focus_steps_able(const char * s, const char * ans) {
 // Labels, names and rules at the margin X; the math in groups (an equation and the lines going
 // on with it, the working of a step), each centered as a block.
 enum { Y0 = 18, X = 14, XR = 306, W = XR - X, LVMIN = 6, LVWRAP = 5 };
-enum { K_HEAD, K_LINE, K_LABEL, K_TITLE, K_FORM, K_WORK, K_EQ, K_BOX, K_ANS, K_TEXT, K_MATH, K_TABLE, K_CHIP };
+enum { K_HEAD, K_LINE, K_LABEL, K_TITLE, K_FORM, K_WORK, K_EQ, K_BOX, K_ANS, K_TEXT, K_MATH, K_TABLE, K_CHIP, K_NUMLINE };
 // (K_TEXT: a text of the analysis, num 0 gray (a label, " or "), 1 ink; K_MATH: its math beside a label;
 // K_TABLE: a synthetic division's table, steps_table's text; K_CHIP: the method, F4 the next one)
 struct item {
-  char * s;      // math or label text (malloc), a title or formula (static), or 0
+  char * s;      // its text (malloc), or 0
   int x, y, w, h, base, eqx; // box; base: the baseline below y; eqx: an equation's = after x, -1
   int kind, lv, num, grp, sec; // num: K_EQ 1, a line going on (= first); K_WORK 2, the second
 };                             // item of its line; K_LABEL 1, "back to"; K_ANS: + C after it
@@ -284,7 +301,7 @@ static int NP, CAPN, PH, GRP, SEC; // items, capacity, page height, the group, t
 static item * put(int kind, char * s, int x, int y, int w, int h, int base, int lv) {
   if (NP == CAPN) {
     item * q = (item *)realloc(P, (CAPN + 16) * sizeof(item));
-    if (!q) { if (kind != K_TITLE && kind != K_FORM) free(s); return 0; }
+    if (!q) { free(s); return 0; }
     P = q; CAPN += 16;
   }
   item & it = P[NP++];
@@ -294,7 +311,7 @@ static item * put(int kind, char * s, int x, int y, int w, int h, int base, int 
   return &it;
 }
 static void clear_page() {
-  for (item * p = P; p < P + NP; ++p) if (p->kind != K_TITLE && p->kind != K_FORM) free(p->s);
+  for (item * p = P; p < P + NP; ++p) free(p->s); // (DeltaCE: the titles too, unpacked; a formula's was never freed)
   free(P); P = 0; NP = CAPN = PH = 0;
 }
 static char * dup(const char * s, int n) {
@@ -469,6 +486,34 @@ static int table_geom(const char * s, int lv, short * cw, short * ra, short * rh
   for (int j = 1; j < nc; ++j) w += cw[j] + (j > 1 ? TG : 0);
   return w;
 }
+// (DeltaCE) an inequality's solution on a number line (delta.cc numline): the pieces shaded, the
+// ends filled (in) or hollow (out), equally spaced as on a sign chart, their values under them
+static void numline_arrow(int x, int y, int dir, int c) { for (int d = 0; d < 5; ++d) ui_fill(x + dir * d, y - 4 + d, 1, 9 - 2 * d, c); }
+static void draw_numline(const item & it, int y, int bg) {
+  const char * s = it.s, * t = strchr(s, '\t');
+  if (!t) return;
+  const int k = t - s - 1, x0 = it.x + 2, x1 = it.x + it.w - 2, ly = y + 12, ac = ui_col(0, UC_ACC), ln = ui_col(0, UC_SUB);
+  const char * e = t + 1;
+  short px[6];
+  for (int i = 0; i < k && i < 6; ++i) px[i] = x0 + 16 + (i + 1) * (x1 - x0 - 32) / (k + 1);
+  ui_fill(x0, ly, x1 - x0, 1, ln);
+  numline_arrow(x0, ly, 1, s[0] == '1' ? ac : ln);
+  numline_arrow(x1, ly, -1, s[k] == '1' ? ac : ln);
+  for (int j = 0; j <= k; ++j)
+    if (s[j] == '1') { const int a = j ? px[j - 1] : x0 + 4, b = j < k ? px[j] : x1 - 4; ui_fill(a, ly - 1, b - a, 3, ac); }
+  const char * l = e + k;
+  mi_layout L;
+  for (int i = 0; i < k; ++i) {
+    if (e[i] == 'c') ui_rrect(0, px[i] - 4, ly - 4, 9, 9, 4, UC_ACC, bg);
+    else ui_rframe(0, px[i] - 4, ly - 4, 9, 9, 4, UC_ACC, bg);
+    if (*l != '\t') continue;
+    const char * q = ++l;
+    while (*q && *q != '\t') ++q;
+    lay(l, q - l, 3, L);
+    ui_math_draw(L, l, 3, px[i] - L.width / 2, ly + 22, 0, UC_INK, bg, UC_ACC);
+    l = q;
+  }
+}
 static void draw_table(const item & it, int y, int bg) {
   short cw[16], ra[4], rh[4], cx[16];
   int nc, nr;
@@ -503,6 +548,7 @@ static void draw_table(const item & it, int y, int bg) {
   ui_fill(cx[nc - 1] - TG / 2, y + rh[0] + rh[1] + 2, 1, rh[2] - 4, ln); // the remainder apart
 }
 
+static bool tut; // (DeltaCE) the problem is one for "Your turn" (focus_tutor.cc): its chip, F1
 // the steps of v as items (ans: the answer, as on the console; plusc: an antiderivative)
 static __attribute__((noinline)) void lay_steps(const char * head, const std::vector<step_t> & v, const char * ans, bool plusc) {
   int y = 10, num = 0, prevd = 0, fe = -1, eqn = 0, k0 = 0; // fe: the part's last equation, its
@@ -513,6 +559,12 @@ static __attribute__((noinline)) void lay_steps(const char * head, const std::ve
   if (steps_methods > 1 && *steps_method_name) { // (DeltaCE) the method, F4 the next: a chip under the problem
     const int w = ui_text_width(&ui_tb9, steps_method_name, -1) + ui_text_width(&ui_tb9, "F4", -1) + 20;
     put(K_CHIP, dup(steps_method_name, strlen(steps_method_name)), X + (W - w) / 2, y - 8, w, 13, 10, 0);
+    y += 14;
+  }
+  else if (tut) { // (DeltaCE) try it first: "Your turn", F1
+    static const char YT[] = "your turn";
+    const int w = ui_text_width(&ui_tb9, YT, -1) + ui_text_width(&ui_tb9, "F1", -1) + 20;
+    if (item * c = put(K_CHIP, dup(YT, sizeof(YT) - 1), X + (W - w) / 2, y - 8, w, 13, 10, 0)) c->num = 1;
     y += 14;
   }
   giac::gen sa;
@@ -534,7 +586,7 @@ static __attribute__((noinline)) void lay_steps(const char * head, const std::ve
       k0 = NP;
       section(lb, !*title, y);
       if (*title) {
-        put(K_TITLE, (char *)title, X, y, 0, 14, 11, 0);
+        put(K_TITLE, dup(title, strlen(title)), X, y, 0, 14, 11, 0); // (steps_title's buffer is the next title's)
         y += 22;
         const char * f = steps_formula(v[i]);
         if (f) y += add_math(f, strlen(f), X, y, W, 5, K_FORM) + 14;
@@ -609,7 +661,7 @@ static __attribute__((noinline)) void lay_steps(const char * head, const std::ve
       ++GRP;
       static const char DNE[] = "does not exist", DIV[] = "diverges", NOS[] = "no solution"; // (a limit's, a series', an equation's text answer)
       const char * tx = starts(ans, DNE) || starts(ans, "no limit") ? DNE : starts(ans, DIV) ? DIV : starts(ans, NOS) ? NOS : 0; // (sin(1/x) at 0: "no limit (it oscillates)")
-      const int h = tx ? (put(K_TITLE, (char *)tx, X + (W - ui_text_width(&ui_tb12, tx, -1)) / 2, y + 14, 0, 16, 13, 0), 16)
+      const int h = tx ? (put(K_TITLE, dup(tx, strlen(tx)), X + (W - ui_text_width(&ui_tb12, tx, -1)) / 2, y + 14, 0, 16, 13, 0), 16)
                        : add_math(ans, strlen(ans), X, y + 14, W - 12 - (plusc ? 44 : 0), 2, K_ANS);
       if (plusc && NP > b + 1) { // + C after the last line
         item & l = P[NP - 1];
@@ -633,14 +685,15 @@ static void draw_item(const item & it, int y, int bg) { // y: its top on the scr
   switch (it.kind) {
   case K_LINE: ui_fill(x, y, it.w, 1, ui_col(0, UC_LINE)); return;
   case K_LABEL: ui_draw_text(&ui_tb9, it.s, -1, x, b, ui_ramp(0, it.num ? UC_SUB : UC_ACC, bg), 0); return;
-  case K_TITLE: ui_draw_text(&ui_tb12, it.s, -1, x, b, ui_ramp(0, UC_INK, bg), 0); return;
+  case K_TITLE: if (it.s) ui_draw_text(&ui_tb12, it.s, -1, x, b, ui_ramp(0, UC_INK, bg), 0); return; // (0: no memory for it)
   case K_TEXT: ui_draw_text(&ui_tr12, it.s, -1, x, b, ui_ramp(0, it.num ? UC_INK : UC_SUB, bg), 0); return;
   case K_BOX: ui_rrect(0, x, y, it.w, it.h, 8, UC_ACCSOFT, bg); return;
   case K_TABLE: draw_table(it, y, bg); return;
+  case K_NUMLINE: draw_numline(it, y, bg); return;
   case K_CHIP: { // (as the console's forms chip)
     ui_rrect(0, x, y, it.w, it.h, 6, UC_ACCSOFT, bg);
     const int w1 = ui_draw_text(&ui_tb9, it.s, -1, x + 6, y + it.base, ui_ramp(0, UC_ACC, UC_ACCSOFT), 0);
-    ui_draw_text(&ui_tb9, "F4", -1, x + 12 + w1, y + it.base, ui_ramp(0, UC_SUB, UC_ACCSOFT), 0);
+    ui_draw_text(&ui_tb9, it.num ? "F1" : "F4", -1, x + 12 + w1, y + it.base, ui_ramp(0, UC_SUB, UC_ACCSOFT), 0);
     return;
   }
   case K_ANS: bg = UC_ACCSOFT; break;
@@ -847,6 +900,7 @@ static __attribute__((noinline)) void lay_report(const std::vector<an_line> & v)
   for (unsigned i = 0; i < v.size() && !oom_hit; ++i) {
     const an_line & l = v[i];
     if (l.kind == AN_HEAD) y += add_math(l.math.c_str(), l.math.size(), X, y, W, 2, K_HEAD) + 14;
+    else if (l.kind == AN_NUMLINE) { put(K_NUMLINE, dup(l.math.c_str(), l.math.size()), X, y, W, 40, 0, 3); y += 44; }
     else if (l.kind == AN_SECTION) section(l.text, 0, y);
     else y = row(l, y) + 9;
   }
@@ -916,19 +970,109 @@ static void move(int dir, int & cur, int & top, int maxtop) {
 }
 
 static int show(const char * why, const char * name, int methods);
+static int dk_; // (DeltaCE) the Δ card's moves: keys 1 to dk_ leave the page with one
+// (DeltaCE) a problem "Your turn" takes (tutor.cc): solve, factor, diff(f,x), an equation alone; not
+// trig equations (their solutions repeat), inequalities (intervals), n-th derivatives; none without
+// the screen (WITH_TUTOR, makefile)
+static bool tut_able(const char * in) {
+#ifndef WITH_TUTOR
+  return false;
+#endif
+  if (!in) return false;
+  if (starts(in, "diff(")) { int d = 0, c = 0; for (const char * p = in; *p; ++p) { d += *p == '(' ? 1 : *p == ')' ? -1 : 0; c += *p == ',' && d == 1; } return c == 1; }
+  if (starts(in, "factor(")) return true;
+  if (strchr(in, '<') || strchr(in, '>') || strstr(in, "sin(") || strstr(in, "cos(") || strstr(in, "tan(")) return false; // (equations)
+  return starts(in, "solve(") || relation(in);
+}
 void focus_steps(const char * in, const char * ans) {
   steps_method = 0;
+  tut = !focus_view && tut_able(in); // (not from the tutor's own "all steps")
   for (;;) { // (DeltaCE) F4: the problem's next method (a division: long, synthetic, factor and cancel)
     focus_status_label("STEPS");
-    if (show(build(in, ans), "STEPS", steps_methods) != KEY_CTRL_F4) break;
+    const int k = show(build(in, ans), "STEPS", steps_methods);
+#ifdef WITH_TUTOR
+    if (k == KEY_CTRL_F1 && tut) { // "Your turn" on this problem
+      if (!focus_tutor(in, 0, "YOUR TURN")) focus_status_msg("Not one for Your turn");
+      break;
+    }
+#endif
+    if (k != KEY_CTRL_F4) break;
     ++steps_method;
   }
   steps_method = 0;
+  tut = false;
 }
 // DeltaCE: a function's analysis (analyze.cc), on the steps' page
 void focus_analyze(const char * in) {
   focus_status_label("ANALYSIS");
   show(build_report(in), "ANALYSIS", 0);
+}
+// (DeltaCE) the Δ key (prgm; delta.cc): what in is, its facts, its next moves (keys 1 to 9, enter
+// the first). The card is the analysis' page: the moves in a row under the head
+static std::vector<dl_move> * dmv_;
+static int dmore_; // (the answer shown: its list of all actions, the last move)
+static __attribute__((noinline)) const char * build_delta(const char * in, const char * last) {
+  const int S = strlen(in), cap = 2 * S + 32 > 256 ? 2 * S + 32 : 256;
+  char * buf = (char *)malloc(cap);
+  wait_y = 0;
+  if (!buf) return "Out of memory";
+  strcpy(buf, in);
+  answer_prepass(buf, cap, true);
+  std::vector<an_line> v;
+  const char * why = 0;
+  giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = false;
+  {
+    giac::gen g(buf, contextptr);
+    if (!giac::interrupted) {
+      waiting(in, "Reading it");
+      giac::control_c_hook = focus_busy_tick;
+      quiet(1);
+      why = delta_of(g, in, last, v, *dmv_, contextptr);
+      quiet(0);
+    }
+  }
+  const bool stopped = giac::interrupted || giac::ctrl_c;
+  giac::control_c_hook = 0;
+  free(buf);
+  if (oom_hit) why = "Out of memory";
+  else if (giac::stack_hit) why = "Too many recursion levels";
+  else if (stopped) why = "Stopped";
+  giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = giac::stack_hit = false;
+  if (!why) {
+    if (dmore_ && !v.empty()) { dl_move m; m.label = "More actions"; m.how = 'm'; dmv_->push_back(m); }
+    if (!dmv_->empty() && !v.empty()) { // NEXT under the head: a move a row, its key as its label
+      static const char * const K[9] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
+      an_line h; h.kind = AN_SECTION; h.sep = 0; h.text = "NEXT";
+      v.insert(v.begin() + 1, h);
+      for (unsigned i = 0; i < dmv_->size() && i < 9; ++i) {
+        an_line r; r.kind = AN_ROW; r.sep = AN_COMMA; r.text = K[i];
+        r.math = '\1'; r.math += (*dmv_)[i].label;
+        v.insert(v.begin() + 2 + i, r);
+      }
+    }
+    lay_report(v);
+    if (oom_hit) { giac::ctrl_c = giac::interrupted = false; why = NP ? 0 : "Out of memory"; }
+  }
+  focus_busy(0);
+  v.clear();
+  if (oom_hit) oom_rearm();
+  return why;
+}
+int focus_delta(const char * in, const char * last, int more, char * cmd, int cap, char * how) {
+  std::vector<dl_move> mv;
+  dmv_ = &mv;
+  dmore_ = more;
+  focus_status_label("FACTS");
+  const char * why = build_delta(in, last);
+  dk_ = why ? 0 : mv.size() < 9 ? mv.size() : 9;
+  const int k = show(why, "FACTS", 0);
+  const int n = dk_;
+  dk_ = 0;
+  const int i = k == KEY_CTRL_EXE ? 0 : k >= KEY_CHAR_1 && k < KEY_CHAR_1 + n ? k - KEY_CHAR_1 : -1;
+  if (i < 0 || i >= (int)mv.size() || (int)mv[i].cmd.size() >= cap) return -1;
+  strcpy(cmd, mv[i].cmd.c_str());
+  *how = mv[i].how;
+  return i;
 }
 // (DeltaCE) the page's keys: up/down read on (a part taller than the screen a screen at a time),
 // left/right a whole part, 2nd up/down the first part and the answer; the status bar says where.
@@ -963,7 +1107,7 @@ static int show(const char * why, const char * name, int methods) {
       }
       paint(top, cur);
       GetKey(&key);
-      if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_EXE || key == KEY_CTRL_OK || (key == KEY_CTRL_F4 && methods > 1)) break;
+      if (key == KEY_CTRL_EXIT || key == KEY_CTRL_AC || key == KEY_CTRL_EXE || key == KEY_CTRL_OK || (key == KEY_CTRL_F4 && methods > 1) || (key == KEY_CTRL_F1 && tut) || (key >= KEY_CHAR_1 && key < KEY_CHAR_1 + dk_)) break;
       if (key == KEY_CTRL_DOWN) move(1, cur, top, maxtop);
       if (key == KEY_CTRL_UP) move(-1, cur, top, maxtop);
       if (key == KEY_CTRL_RIGHT && cur < SEC) top = stop(++cur, maxtop);

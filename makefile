@@ -34,6 +34,9 @@ endif
 # DeltaCE has giac's statistics (mean, median, quartiles, standard deviation, correlation,
 # regressions: WITH_STATS, kmisc.cc) without the spreadsheet they came with (WITH_SHEET); its graph
 # screen draws the data (2026-10-18)
+# The "Your turn" screen (WITH_TUTOR: focus_tutor.cc, the steps page's chip; 6.4 KB) and Practice,
+# its problems (WITH_PRACTICE, needs WITH_TUTOR; 3.9 KB) are out (2026-10-30): with nothing calling
+# it, the checking engine (tutor.cc, 25 KB) is left out by the link too. 35.3 KB for a new feature.
 ifeq ($(STEPS),1)
     FEATURE_DEFS += -DFLOWCE_STEPS -DWITH_STATS
 else

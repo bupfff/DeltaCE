@@ -24,6 +24,7 @@ extern "C" {
 int focus_view=0;
 // the steps screen (focus_steps.cc, -V): the status bar, the busy prompt, the memory reserve
 extern "C" void focus_status_msg(const char * msg){}
+bool focus_tutor(const char *, const char * (*)(), const char *){ return false; } // (DeltaCE: the tutor screen; its checks: -Y)
 void focus_status_label(const char * s){}
 void focus_invalidate(){}
 void focus_busy(int on){}
