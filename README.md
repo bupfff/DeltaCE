@@ -17,37 +17,37 @@
   <img src="docs/deltace_steps.gif" width="48%" alt="DeltaCE's steps: an antiderivative, then enter for its steps: integration by parts, down to the answer">
 </p>
 
-DeltaCE is a computer algebra system for the TI-84 Plus CE, built for algebra and Calc 1 to 3. It
-is a fork of [FlowCE](https://github.com/tommyb3ll/FlowCE) (itself a fork of KhiCAS): everything
-FlowCE Steps does, plus a Δ key that tells you what anything you type is, word problems typed in
-their own words, steps for algebra, a new graph screen, function analysis, statistics, probability,
-units, and a look of its own. Answers are exact: `π²/6`, not `1.64493`; `ln|sec x + tan x| + C`. The decimal value
-sits right under the exact one.
+DeltaCE is a computer algebra system for the TI-84 Plus CE, built for algebra and Calc 1 to 3: exact
+answers (`π²/6`, not `1.64493`), the steps behind them, graphs, statistics and more. A fork of
+[FlowCE](https://github.com/tommyb3ll/FlowCE) (itself a fork of KhiCAS).
 
 **[Install it from the DeltaCE page](https://bupfff.github.io/DeltaCE/)**: plug in the calculator,
 click Install, then press `enter` once on the calculator.
 
+## New in 2.2
+
+| ![The Δ key on x² − 5x + 6: its facts and next moves](docs/screenshots/delta_quadratic.png) | ![A word problem told as a story, then solved](docs/screenshots/phrase_story.png) | ![The answer bar under an answer](docs/screenshots/action_row.png) |
+|:---:|:---:|:---:|
+| **The Δ key** | **Word problems** | **The answer bar** |
+
+- **Δ: "what is this?"** Type anything, press `prgm`. DeltaCE names it and lists what a
+  textbook would ask: a parabola's vertex, a circle's center, a sine wave's period, a number line
+  for an inequality.
+- **Word problems in plain words.** Type "[l] is [3] more than [2w]", then "a rectangle [l] by [w]
+  has perimeter [36]", then "find [w]": **w = 5, l = 13**. 49 phrases: percents, rates,
+  interest, shapes, a thrown ball…
+- **One-row answer bar.** `◀` `▶` flip an answer between its forms (factored, expanded, decimal);
+  `prgm` shows what to do next.
+- **Cleaner answers.** Rationalized denominators, physical constants that give their values, and a
+  stack of bugs fixed. [All the details](https://github.com/bupfff/DeltaCE/releases/tag/v2.2).
+
 ## What it does
 
-- **The Δ key: what is it?** Type anything and press `prgm`. DeltaCE says what it is, in a
-  textbook's words, and gives the facts a textbook asks about it, with what to do next a key away
-  (`1` to `4`). A quadratic: its vertex, axis, discriminant, vertex form, factored form, intercepts.
-  `2sin(3x-π)+1`: amplitude, period, phase shift, midline, range. A circle, an ellipse, a hyperbola
-  or a parabola in x and y: center, radius, vertices, foci, asymptotes, directrix (completing the
-  squares). An equation: its kind and every solution (a trig equation: the general solution and
-  each one in [0, 2π)). An inequality: its solution, interval notation and a number line. A number: prime or not,
-  its factors and divisors; a fraction: its decimal, percent, mixed number. Data: mean, median,
-  mode, quartiles (the TI's way), standard deviations, outliers. A matrix: rank, determinant,
-  inverse, eigenvalues. A system: where the lines meet, or why they don't. On an empty line it reads
-  the last answer; on a line typed while an answer shows, it also checks the two against each
-  other: equal, equal but for a constant (two antiderivatives), or the x where they differ.
-- **Word problems, in their words.** *more* → Word problems (or type a word in the search: `more`,
-  `percent`, `rate`): phrases with boxes, like "the value of [] when [] = []", "the average rate of
-  change of [] from [] = [] to []", "[] at [] % compounded [] times a year for [] years". A story is
-  told a fact a line, "[l] is [3] more than [2w]", "a rectangle [l] by [w] has perimeter [36]", each
-  one shown as its equation, then "find [w]": w = 5, l = 13. Forty-nine phrases, from percents and
-  points to rates, areas and volumes, sequences, interest, chance, and a thrown ball (when it lands,
-  how high it goes).
+- **The Δ key.** `prgm` on anything you type, or on the last answer: what it is and its facts, by
+  kind (functions, equations, inequalities, conics, numbers, data, matrices, systems), with the
+  next moves on `1` to `9`. Typed while an answer shows, it also checks your answer against it.
+- **Word problems.** *more* → Word problems, or type a word in the search (`percent`, `rate`).
+  Fill the boxes with `▶`; a story takes a fact a line, then "find".
 - **The steps.** After an answer, press `enter` to see how to get it, the way a worked example in a
   textbook does: derivatives, integrals, limits, sums and Taylor series (FlowCE Steps), and in
   algebra, linear and quadratic equations (always by the formula: a, b and c, the discriminant,
