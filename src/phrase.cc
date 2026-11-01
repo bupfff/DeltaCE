@@ -262,12 +262,34 @@ bool phrase_expand(char * buf, int cap) {
     std::string r;
     // the line through two points with the same x (typed alike): x = that x, not a division by 0
     const char * tm = !strcmp(PH[i].name, "ph_line") && e[0] == e[2] && !strncmp(a[0], a[2], e[0]) ? "x=%1" : PH[i].tmpl;
+    // a list in a question's box (15 % of [80,90]): the phrase for each of its numbers, a list of
+    // answers (the score needed after scores [..] takes the list itself)
+    int lk = -1;
+    for (int k = 0; k < na && lk < 0 && !PH[i].fact && strcmp(PH[i].name, "ph_needscore"); ++k)
+      if (e[k] > 2 && a[k][0] == '[' && a[k][e[k] - 1] == ']') lk = k;
     if (!tm) find_of(r, std::string(a[0], e[0]));
-    else
-      for (const char * t = tm; *t; ++t) {
-        if (*t == '%' && t[1] >= '1' && t[1] <= '0' + na) { r += '('; r.append(a[t[1] - '1'], e[t[1] - '1']); r += ')'; ++t; }
-        else r += *t;
+    else {
+      const char * la = lk >= 0 ? a[lk] + 1 : 0;
+      const int le = lk >= 0 ? e[lk] - 2 : 0;
+      if (lk >= 0) r += '[';
+      for (int p0 = 0;;) {
+        int p1 = p0;
+        for (int dd = 0; lk >= 0 && p1 < le && (la[p1] != ',' || dd); ++p1) // (its next number)
+          if (la[p1] == '(' || la[p1] == '[') ++dd; else if (la[p1] == ')' || la[p1] == ']') --dd;
+        for (const char * t = tm; *t; ++t) {
+          if (*t == '%' && t[1] >= '1' && t[1] <= '0' + na) {
+            const int k = t[1] - '1';
+            r += '(';
+            if (k == lk) r.append(la + p0, p1 - p0); else r.append(a[k], e[k]);
+            r += ')'; ++t;
+          }
+          else r += *t;
+        }
+        if (lk < 0 || p1 >= le) break;
+        r += ','; p0 = p1 + 1;
       }
+      if (lk >= 0) r += ']';
+    }
     if (PH[i].fact && !phrase_bare) // the equation: ph_fact(left, right)
       for (int k = 0, dd = 0; k < (int)r.size(); ++k) {
         const char c = r[k];

@@ -78,6 +78,8 @@ click Install, then press `enter` once on the calculator.
 - **Word problems.** *more* → Word problems: each one shown as its sentence, in five tabs on
   `F1`-`F5` (% & rate, geometry, multivar, functions, recent); type a word to search them all.
   Fill the boxes with `▶`; a story takes a fact a line (or all on one line, between commas), then "find".
+  A comma right after a number keeps it in its box as a list (15 % of [80, 90]: both answers); `▶`
+  out of the phrase, then a comma, starts the next phrase.
 - **The steps.** After an answer, press `enter` to see how to get it, the way a worked example in a
   textbook does: derivatives, integrals, limits, sums and Taylor series (FlowCE Steps), and in
   algebra, linear and quadratic equations (always by the formula: a, b and c, the discriminant,

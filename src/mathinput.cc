@@ -723,15 +723,18 @@ static void cons(int n, int x, int y, int sm) {
     while (na < 4 && sn[na]) ++na;
     const char * w = mi_phrase ? mi_phrase(S + T[n].c, nl, na) : 0;
     t = 0;
+    bool tail = false; // (words after the last box)
     for (i = 0; i <= na; ++i) {
       if (w) {
-        if (*w) t += dword(w, sm, t, 0) + h;
+        if (*w) { t += dword(w, sm, t, 0) + h; tail = i == na; }
         while (*w) ++w;
         ++w;
       }
       if (i < na) { sl(i, t, 0, sm); t += T[sn[i]].w + h; }
     }
-    cw = t > h ? t - h : t;
+    // ending with a box, the phrase keeps the space after it: the caret's place after the phrase is
+    // then to the right of the box's end, and the right arrow gets there (it moved by x: equal, never)
+    cw = tail && t > h ? t - h : t;
   } break;
   case K_LOGB: { // (DeltaCE) log_b(u): "log", the base small and lowered, then (u)
     const int lgw = lw("log", 3, sm);

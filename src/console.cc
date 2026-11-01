@@ -2777,20 +2777,41 @@ int Console_GetKey(){
          key==KEY_CHAR_SQUARE || key==KEY_CHAR_RECIP || key==KEY_CHAR_STORE))
       Console_Input((const Char *)"ans()");
 #ifdef FLOWCE_STEPS
-    // (DeltaCE) a comma typed at the end of a phrase's last box goes after the phrase, for the next
-    // one ("..., find [w]"): not a box more in this one (ph_more(l,3,2w,) is no phrase). In a box's
-    // brackets ([80,90]) it stays
-    if (key==KEY_CHAR_COMMA && Current_Line==Last_Line && Edit_Line){
-      const char * s=(const char *)Edit_Line;
-      const int c=console_caret();
-      if (c>0 && s[c]==')'){
-        int d=0,o=-1;
-        for (int i=c-1;i>=0 && o<0;--i)
-          if (s[i]==')' || s[i]==']') ++d;
-          else if (s[i]=='(' || s[i]=='[') { if (!d) o=i; else --d; }
-        int b=o;
-        while (b>0 && (isalnum((unsigned char)s[b-1]) || s[b-1]=='_')) --b;
-        if (o>0 && s[o]=='(' && !strncmp(s+b,"ph_",3)) console_set_caret(c+1);
+    // (DeltaCE) a comma typed right after something in a phrase's box keeps it in that box: the box
+    // becomes a list, its brackets put in ([80,] then 90: [80,90]), not a box more in the phrase
+    // (ph_percentof(15,80,) is no phrase). After the phrase (right arrow out of its last box) a
+    // comma separates it from the next phrase as before; in a box's brackets it stays as typed
+    if (key==KEY_CHAR_COMMA && Current_Line==Last_Line && Edit_Line && console_input2d()){
+      char * s=(char *)Edit_Line;
+      const int c=console_caret(),L=strlen(s);
+      int d=0,o=-1;
+      for (int i=c-1;i>=0 && o<0;--i)
+        if (s[i]==')' || s[i]==']') ++d;
+        else if (s[i]=='(' || s[i]=='[') { if (!d) o=i; else --d; }
+      int nb=o;
+      while (nb>0 && (isalnum((unsigned char)s[nb-1]) || s[nb-1]=='_')) --nb;
+      if (c>0 && o>0 && s[o]=='(' && !strncmp(s+nb,"ph_",3) && L+3<EDIT_LINE_MAX){
+        int a=o+1,e=c;
+        for (int i=o+1,dd=0;i<c;++i) // the box's start: after the last comma before the caret
+          if (s[i]=='(' || s[i]=='[') ++dd; else if (s[i]==')' || s[i]==']') --dd; else if (s[i]==',' && !dd) a=i+1;
+        for (int dd=0;e<L;++e) // its end: the next comma or the phrase's closing parenthesis
+          if (s[e]=='(' || s[e]=='[') ++dd; else if ((s[e]==')' || s[e]==']') && dd) --dd; else if (s[e]==')' || (s[e]==',' && !dd)) break;
+        char * t=c>a?(char *)malloc(L+4):0; // (not on the frame: Console_GetKey's is big already)
+        if (t){
+          int k=0;
+          memcpy(t,s,a); k=a; t[k++]='[';
+          memcpy(t+k,s+a,c-a); k+=c-a; t[k++]=',';
+          const int caret=k;
+          memcpy(t+k,s+c,e-c); k+=e-c; t[k++]=']';
+          strcpy(t+k,s+e);
+          strcpy(s,t);
+          free(t);
+          Line[Current_Line].disp_len=Console_GetDispLen(Edit_Line);
+          console_changed=1;
+          console_set_caret(caret);
+          Console_Disp(0);
+          continue;
+        }
       }
     }
 #endif
