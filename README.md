@@ -24,6 +24,23 @@ answers (`π²/6`, not `1.64493`), the steps behind them, graphs, statistics and
 **[Install it from the DeltaCE page](https://bupfff.github.io/DeltaCE/)**: plug in the calculator,
 click Install, then press `enter` once on the calculator.
 
+## New in 2.3
+
+| ![The Δ card of a sinusoid: its sketch with the midline, amplitude and period marked](docs/screenshots/delta_sinusoid.png) | ![The Δ card of two equations: the two lines and where they cross](docs/screenshots/delta_system.png) |
+|:---:|:---:|
+| **Pictures on every Δ card** | **Systems drawn too** |
+| ![The Δ card of 360: its factor tree](docs/screenshots/delta_tree.png) | ![A word problem's answer in words, with its units](docs/screenshots/phrase_story.png) |
+| **Factor trees, fraction bars, box plots** | **Answers in words, with units** |
+
+- **Every Δ card draws its picture:** a graph sketch of any function (asymptotes, a sinusoid's
+  amplitude and period marked), lines, circles, ellipses, hyperbolas, two lines crossing, the unit
+  circle, a box plot, a factor tree, fraction bars, the complex plane.
+- **Δ on part of what you typed:** put the cursor in the denominator and press `prgm`: the card
+  is about that part. Δ also works on any line of the history.
+- **Word problems answer in words:** "width w = 5 cm, length l = 13 cm" (type `36_cm` in a box).
+- **Checked against 1,698 problems** before release, 461 of them word problems: all right.
+- Faster: the app is 29 KB smaller and 1–6% quicker.
+
 ## New in 2.2.1
 
 | ![Word problems: tabs, each problem shown as its sentence, its example filled in](docs/screenshots/word_problems.png) | ![A whole word problem on one line, then solved](docs/screenshots/phrase_story.png) |

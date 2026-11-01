@@ -74,7 +74,12 @@ SCENES = {
     'delta_quadratic': [('k', 'x{sq}-5x+6{prgm}'), ('w', 4000)],
     'delta_circle':   [('k', 'x{sq}+y{sq}-4x+6y=12{prgm}'), ('w', 4000)],
     'delta_inequality': [('v', 'x^2-x-6>0'), ('k', '{prgm}'), ('w', 4000), ('k', '{down}'), ('w', 1000)],
-    'phrase_story':   [('p', 'ph_more(l,3,2w),ph_perimeter(l,w,36),ph_find(w)'), ('w', 2000)],
+    'phrase_story':   [('p', 'ph_more(l,3,2w),ph_perimeter(l,w,36_cm),ph_find(w)'), ('w', 2000)],
+    # 2.3: the Δ card's pictures, Δ on the part at the cursor
+    'delta_sinusoid': [('v', '2sin(3x-pi)+1'), ('k', '{prgm}'), ('w', 3000), ('k', '{down}{down}'), ('w', 800)],
+    'delta_system':   [('v', '[2x+3y=12,x-y=1]'), ('k', '{prgm}'), ('w', 3000), ('k', '{down}'), ('w', 800)],
+    'delta_tree':     [('v', '360'), ('k', '{prgm}'), ('w', 3000), ('k', '{down}{down}'), ('w', 800)],
+    'delta_part':     [('v', '(x+1)/(x^2-4)'), ('k', '{left}{left}{left}{prgm}'), ('w', 3000)],
     'word_problems':  [('k', '{graph}7'), ('w', 2000), ('k', '{window}{down}{down}'), ('w', 800)],
     'steps_system':   [('p', 'solve([2x+3y=12,x-y=1],[x,y])'), ('k', '{enter}'), ('w', 6000)],
     'steps_log':      [('p', 'solve(log(x)+log(x-3)=1,x)'), ('k', '{enter}'), ('w', 8000)],
