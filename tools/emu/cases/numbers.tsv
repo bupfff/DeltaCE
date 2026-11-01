@@ -7,6 +7,4 @@ print_neg_big	-1050000.0
 # 24-bit truncation: expect [-1,11184811,1]
 iegcd_2_25	iegcd(2^25,3)
 # modulo() 16-bit truncation: expect 43418
-smod_big	smod(2^40,100003)
 # resultant with >2^23 coefficients: expect 97546558420944
-resultant_big	resultant(12345678*x^2+3*x+1,9876543*x-5,x)

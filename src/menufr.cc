@@ -538,7 +538,6 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
 #ifdef WITH_QUAD
   {"a2q(A,[vars])", 0, "Matrice vers forme quadratique", "[[1,2],[2,3]]","[[1,2],[2,3]],[x,y]", CAT_CATEGORY_LINALG},
 #endif
-  {"abcuv(a,b,c)", nullptr, "Cherche 2 polynomes u,v tels que a*u+b*v=c","x+1,x^2-2,x", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"abs(x)", nullptr, "Valeur absolue, module ou norme de x", "-3", "[1,2,3]", CAT_CATEGORY_COMPLEXNUM | (CAT_CATEGORY_REAL<<8)},
   {"append", nullptr, "Ajoute un element en fin de liste l","#l.append(x)", nullptr, CAT_CATEGORY_LIST},
   {"approx(x)", nullptr, "Valeur approchee de x.", "pi", nullptr, CAT_CATEGORY_REAL},
@@ -575,12 +574,10 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   {"det(A)", nullptr, "Determinant de la matrice A.", "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX |  (CAT_CATEGORY_LINALG<<8)},
   {"diff(f,var,[n])", nullptr, "Derivee de l'expression f par rapport a var (a l'ordre n, n=1 par defaut), par ex. diff(sin(x),x) ou diff(x^3,x,2). Pour deriver f par rapport a x, utiliser f' (F3). Pour le gradient de f, var est la liste des variables.", "sin(x),x", "sin(x^2),x,3", CAT_CATEGORY_CALCULUS},
   {"dot(a,b)", nullptr, "Produit scalaire de 2 vecteurs.", "[1,2,3,4,5],[0,1,3,4,4]", nullptr, CAT_CATEGORY_LINALG},
-  {"egcd(A,B)", nullptr, "Cherche des polynomes U,V,D tels que A*U+B*V=D=gcd(A,B)","x^2+3x+1,x^2-5x-1", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"egvl(A)", nullptr, "Valeurs propres de la matrice A.", "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX |  (CAT_CATEGORY_LINALG<<8)},
   {"egv(A)", nullptr, "Vecteurs propres de la matrice A.", "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX |  (CAT_CATEGORY_LINALG<<8)},
   {"elif (test)", "elif", "Tests en cascade", nullptr, nullptr, CAT_CATEGORY_PROG},
   //{"end", "end", "Fin de bloc", 0, 0, CAT_CATEGORY_PROG},
-  {"euler(n)",nullptr,"Indicatrice d'Euler: nombre d'entiers < n premiers avec n","25",nullptr,CAT_CATEGORY_ARIT},
   {"eval(f)", nullptr, "Evalue f.", nullptr, nullptr, CAT_CATEGORY_PROGCMD},
   {"evalc(z)", nullptr, "Ecrit z=x+i*y.", "1/(1+i*sqrt(3))", nullptr, CAT_CATEGORY_COMPLEXNUM},
   {"exact(x)", nullptr, "Convertit x en rationnel.", "1.2", nullptr, CAT_CATEGORY_REAL},
@@ -594,9 +591,6 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
 #ifndef WITH_QUAD
   {"fonction f(x)", "fonction", "Definition de fonction (Xcas). Par exemple\nfonction f(x)\n local y;\ny:=x*x;\nreturn y;\nffonction", nullptr, nullptr, CAT_CATEGORY_PROG},
 #endif
-  {"fourier_an(f,x,T,n,a)", nullptr, "Coeffs de Fourier en cosinus de f", "x^2,n","x^2,x,2*pi,n,-pi", CAT_CATEGORY_CALCULUS},
-  {"fourier_bn(f,x,T,n,a)", nullptr, "Coeffs de Fourier en sinus de f", "x^2,n","x^2,x,2*pi,n,-pi", CAT_CATEGORY_CALCULUS},
-  {"fourier_cn(f,x,T,n,a)", nullptr, "Coeffs de Fourier exponentiels de f", "x^2,n","x^2,x,2*pi,n,-pi", CAT_CATEGORY_CALCULUS},
   {"fsolve(equation,x=a[..b])", nullptr, "Resolution approchee de equation pour x dans l'intervalle a..b ou en partant de x=a.","cos(x)=x,x=0..1", "cos(x)-x,x=0.0", CAT_CATEGORY_SOLVE},
 #ifdef WITH_QUAD
   {"gauss(q)", 0, "Reduction d'une forme quadratique", "x^2+x*y+x*z+y^2+z^2,[x,y,z]", 0, CAT_CATEGORY_LINALG},
@@ -607,8 +601,6 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
 #ifdef WITH_PLOT
   {"histogram(list,min,size)", nullptr, "Histogramme d'une liste de donneees, classes commencant a min de taille size.","ranv(100)/100.,0,0.1", nullptr, (CAT_CATEGORY_PLOT<<8)},
 #endif
-  {"iabcuv(a,b,c)", nullptr, "Cherche 2 entiers u,v tels que a*u+b*v=c","23,13,15", nullptr, CAT_CATEGORY_ARIT},
-  {"ichinrem([a,m],[b,n])", nullptr,"Restes chinois entiers de a mod m et b mod n.", "[3,13],[2,7]", nullptr, CAT_CATEGORY_ARIT},
   {"idivis(n)", nullptr, "Liste des diviseurs d'un entier n.", "10", nullptr, CAT_CATEGORY_ARIT},
   {"idn(n)", nullptr, "matrice identite n * n", "4", nullptr, CAT_CATEGORY_MATRIX},
   {"iegcd(a,b)", nullptr, "Determine les entiers u,v,d tels que a*u+b*v=d=gcd(a,b)","23,13", nullptr, CAT_CATEGORY_ARIT},
@@ -684,7 +676,6 @@ const catalogFunc completeCatfr[] = { // list of all functions (including some n
   //{"read(\"filename\")", "read(\"", "Lire un fichier. Voir aussi write", 0, 0, CAT_CATEGORY_PROGCMD},
   {"red", "red", "Option de couleur", "#display=red", nullptr, CAT_CATEGORY_OPTIONS},
   {"rem(p,q,x)", nullptr, "Reste de division euclidienne polynomiale en x", "x^3-1,x^2-1", nullptr, CAT_CATEGORY_POLYNOMIAL},
-  {"resultant(p,q,x)", nullptr, "Resultant en x des polynomes p et q.", "(P:=x^3+p*x+q),P',x", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"rref(A)", nullptr, "Pivot de Gauss", "[[1,2,3],[4,5,6]]", nullptr, CAT_CATEGORY_MATRIX|  (CAT_CATEGORY_LINALG<<8)},
   //{"rsolve(equation,u(n),[init])", 0, "Expression d'une suite donnee par une recurrence.","u(n+1)=2*u(n)+3,u(n),u(0)=1", "([u(n+1)=3*v(n)+u(n),v(n+1)=v(n)+u(n)],[u(n),v(n)],[u(0)=1,v(0)=2]", CAT_CATEGORY_SOLVE},
   {"seq(expr,var,a,b[,pas])", nullptr, "Liste de terme general donne.","j^2,j,1,10", "j^2,j,1,10,2", CAT_CATEGORY_LIST},
@@ -888,7 +879,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 #ifdef WITH_QUAD
   {"a2q(A,[vars])", 0, "Matrix to quadratic form", "[[1,2],[2,3]]","[[1,2],[2,3]],[x,y]", CAT_CATEGORY_LINALG},
 #endif
-  {"abcuv(a,b,c)", nullptr, D("Finds 2 polynomials u,v such that a*u+b*v=c"),"x+1,x^2-2,x", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"abs(x)", nullptr, D("Absolute value or norm of x"), "-3", "[1,2,3]", CAT_CATEGORY_COMPLEXNUM | (CAT_CATEGORY_REAL<<8)},
   {"acos(x)", nullptr, D("Inverse cosine arccos(x), between 0 and pi."), "1/2", nullptr, CAT_CATEGORY_TRIG},
 #ifdef FLOWCE_STEPS
@@ -940,11 +930,9 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"draw_polygon([[x1,y1],...],c)", nullptr, D("Pixelised polygon."), "[[100,50],[30,20],[60,70]],red+filled", nullptr, CAT_CATEGORY_PROGCMD},
   {"draw_rectangle(x,y,w,h,c)", nullptr, D("Rectangle."), "100,50,30,20,red+filled", nullptr, CAT_CATEGORY_PROGCMD},
   {"draw_string(s,x,y,c)", nullptr, D("Draw string s at pixel x,y"), "\"Bonjour\",80,60", nullptr, CAT_CATEGORY_PROGCMD},
-  {"egcd(A,B)", nullptr, D("Find polynomials U,V,D such that A*U+B*V=D=gcd(A,B)"),"x^2+3x+1,x^2-5x-1", nullptr, CAT_CATEGORY_POLYNOMIAL},
   //{"elif test", "elif ", D("Test cascade"), 0, 0, CAT_CATEGORY_PROG},
   {"egv(A)", nullptr, D("Eigenvectors of matrix A."), "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX},
   {"egvl(A)", nullptr, D("Eigenvalues of matrix A."), "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX },
-  {"euler(n)",nullptr,D("Euler indicatrix: number of integers < n coprime with n"),"25",nullptr,CAT_CATEGORY_ARIT},
   {"eval(f)", nullptr, D("Evals f."), nullptr, nullptr, CAT_CATEGORY_PROGCMD},
   {"evalc(z)", nullptr, D("Write z=x+i*y."), "1/(1+i*sqrt(3))", nullptr, CAT_CATEGORY_COMPLEXNUM},
   {"exact(x)", nullptr, D("Converts x to an exact fraction."), "1.2", nullptr, CAT_CATEGORY_REAL},
@@ -956,9 +944,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"filled", "filled", D("Display option"), nullptr, nullptr, CAT_CATEGORY_PROGCMD},
   {"float(x)", nullptr, D("Converts x to a floating point value."), "pi", nullptr, CAT_CATEGORY_REAL},
   {"floor(x)", nullptr, D("Largest integer not greater than x"), "pi", nullptr, CAT_CATEGORY_REAL},
-  {"fourier_an(f,x,T,n,a)", nullptr, D("Cosine Fourier coefficients of f"), "x^2,x,2*pi,n,-pi", nullptr, CAT_CATEGORY_CALCULUS},
-  {"fourier_bn(f,x,T,n,a)", nullptr, D("Sine Fourier coefficients of f"), "x^2,x,2*pi,n,-pi", nullptr, CAT_CATEGORY_CALCULUS},
-  {"fourier_cn(f,x,T,n,a)", nullptr, D("Exponential Fourier coefficients of f"), "x^2,x,2*pi,n,-pi", nullptr, CAT_CATEGORY_CALCULUS},
   //{"from math/... import *", "from math import *", D("Access to math or to random functions ([random]) or turtle with English commandnames [turtle]. Math import is not required in KhiCAS"), "#from random import *", "#from turtle import *", CAT_CATEGORY_PROG},
   {"fsolve(equation,x=a..b)", nullptr, D("Approx equation solving in interval a..b."),"cos(x)=x,x=0..1", "cos(x)-x,x=0.0", CAT_CATEGORY_SOLVE},
   // {"function f(x):...", "function f(x) local y;   ffunction:;", D("Function definition."), "#function f(x) local y; y:=x^2; return y; ffunction:;", 0, CAT_CATEGORY_PROG},
@@ -971,13 +956,10 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 #ifdef WITH_PLOT
   {"histogram(list,min,size)", nullptr, D("Histogram of data in list, classes begin at min of size size."),"ranv(100)/100.,0,0.1", nullptr, CAT_CATEGORY_PLOT},
 #endif
-  {"iabcuv(a,b,c)", nullptr, D("Find 2 integers u,v such that a*u+b*v=c"),"23,13,15", nullptr, CAT_CATEGORY_ARIT},
-  {"ichinrem([a,m],[b,n])", nullptr,D("Integer chinese remainder of a mod m and b mod n."), "[3,13],[2,7]", nullptr, CAT_CATEGORY_ARIT},
    {"idivis(n)", nullptr, D("Returns the list of divisors of an integer n."), "10", nullptr, CAT_CATEGORY_ARIT},
   {"idn(n)", nullptr, D("Identity matrix of order n"), "4", nullptr, CAT_CATEGORY_MATRIX},
   {"iegcd(a,b)", nullptr, D("Find integers u,v,d such that a*u+b*v=d=gcd(a,b)"),"23,13", nullptr, CAT_CATEGORY_ARIT},
   {"ifactor(n)", nullptr, D("Factorization of an integer (not too large!). Shortcut n=>*"), nullptr, nullptr, CAT_CATEGORY_ARIT},
-  {"ilaplace(f,s,x)", nullptr, D("Inverse Laplace transform of f"), "s/(s^2+1),s,x", nullptr, CAT_CATEGORY_CALCULUS},
   {"im(z)", nullptr, D("Imaginary part."), "1+i", nullptr, CAT_CATEGORY_COMPLEXNUM},
   {"implicitdiff(eq,x,y)", nullptr, D("dy/dx for y a function of x given by an equation (implicit differentiation). Its steps on the steps screen."), "x^2+y^2=25,x,y", "x^3+y^3=6*x*y,x,y", CAT_CATEGORY_CALCULUS}, // (DeltaCE)
   {"inf", "inf", D("Plus infinity. -inf for minus infinity and infinity for unsigned/complex infinity."), "oo", nullptr, CAT_CATEGORY_CALCULUS},
@@ -990,7 +972,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"isprime(n)", nullptr, D("Returns 1 if n is prime, 0 otherwise."), "11", "10", CAT_CATEGORY_ARIT},
   //{"jordan(A)", 0, "Jordan normal form of matrix A, returns P and D such that P^-1*A*P=D", "[[1,2],[3,4]]", "[[1,1,-1,2,-1],[2,0,1,-4,-1],[0,1,1,1,1],[0,1,2,0,1],[0,0,-3,3,-1]]", CAT_CATEGORY_MATRIX},
   //{"laguerre(n,a,x)", 0, "n-ieme Laguerre polynomial (default a=0).", "10", 0, CAT_CATEGORY_POLYNOMIAL},
-  {"laplace(f,x,s)", nullptr, D("Laplace transform of f"),"sin(x),x,s", nullptr, CAT_CATEGORY_CALCULUS},
   {"lcm(a,b,...)", nullptr, D("Least common multiple."), "23,13", "x^2-1,x^3-1", CAT_CATEGORY_ARIT | (CAT_CATEGORY_POLYNOMIAL << 8)},
   {"lcoeff(p,x)", nullptr, D("Leading coefficient of polynomial p in x."), "x^4-1", nullptr, CAT_CATEGORY_POLYNOMIAL},
   //{"legendre(n)", 0, "n-the Legendre polynomial.", "10", "10,t", CAT_CATEGORY_POLYNOMIAL},
@@ -1004,7 +985,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"ln(x)", nullptr, D("Natural logarithm (base e)."), "e^2", nullptr, CAT_CATEGORY_REAL},
   {"log(x,[b])", nullptr, D("Logarithm in base 10, or in base b: log(8,2) is 3."), "100", "8,2", CAT_CATEGORY_REAL},
   {"logarithmic_regression(X,Y)", nullptr, D("Best fit y = a*ln(x) + b through the points (X[i], Y[i]): returns a, b."), "[1,2,3,4],[1,3,4,5]", nullptr, CAT_CATEGORY_LIST},
-  {"lu(A)", nullptr, D("LU decomposition LU of matrix A, P*A=L*U"), "[[1,2],[3,4]]", nullptr, CAT_CATEGORY_MATRIX},
   {"magenta", "magenta", D("Display option"), "#display=magenta", nullptr, CAT_CATEGORY_OPTIONS},
   {"map(f,l)", nullptr, D("Maps f on element of list l."),"lambda x:x*x,[1,2,3]", nullptr, CAT_CATEGORY_LIST},
   {"matpow(A,n)", nullptr, D("Returns matrix A^n"), "[[1,2],[3,4]],n","#assume(n>=1);matpow([[0,2],[0,4]],n)",  CAT_CATEGORY_MATRIX},
@@ -1051,7 +1031,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"re(z)", nullptr, D("Real part."), "1+i", nullptr, CAT_CATEGORY_COMPLEXNUM},
   {"red", "red", D("Display option"), "#display=red", nullptr, CAT_CATEGORY_OPTIONS},
   {"rem(p,q,x)", nullptr, D("Remainder of synthetic division of polynomials p and q (variable x)"), nullptr, nullptr, CAT_CATEGORY_POLYNOMIAL},
-  {"resultant(p,q,x)", nullptr, D("Resultant in x of polynomials p and q."), "#P:=x^3+p*x+q;resultant(P,P',x);", nullptr, CAT_CATEGORY_POLYNOMIAL},
   //{"rsolve(equation,u(n),[init])", 0, "Solve a recurrence relation.","u(n+1)=2*u(n)+3,u(n),u(0)=1", "([u(n+1)=3*v(n)+u(n),v(n+1)=v(n)+u(n)],[u(n),v(n)],[u(0)=1,v(0)=2]", CAT_CATEGORY_SOLVE},
   {"sec(x)", nullptr, D("Secant 1/cos(x)."), "pi/3", nullptr, CAT_CATEGORY_TRIG},
   {"seq(expr,var,a,b)", nullptr, D("Generates a list from an expression."),"j^2,j,1,10", nullptr, CAT_CATEGORY_PROGCMD},
@@ -1076,8 +1055,6 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
   {"tan(x)", nullptr, D("Tangent."), "pi/4", nullptr, CAT_CATEGORY_TRIG},
   {"tanh(x)", nullptr, D("Hyperbolic tangent."), "0", nullptr, CAT_CATEGORY_TRIG},
   {"taylor(f,x=a,n,[polynom])", nullptr, D("Taylor expansion of f of x at a order n, add parameter polynom to remove remainder term."),"sin(x),x=0,5", "sin(x),x=0,5,polynom", CAT_CATEGORY_CALCULUS},
-  {"tchebyshev1(n)", nullptr, D("Tchebyshev polynomial 1st kind: cos(n*x)=T_n(cos(x))"), "10", nullptr, CAT_CATEGORY_POLYNOMIAL},
-  {"tchebyshev2(n)", nullptr, D("Tchebyshev polynomial 2nd kind: sin((n+1)*x)=sin(x)*U_n(cos(x))"), "10", nullptr, CAT_CATEGORY_POLYNOMIAL},
   {"tcollect(expr)", nullptr, D("Linearize and collect trig functions."),"sin(x)+cos(x)", nullptr, CAT_CATEGORY_TRIG},
   {"texpand(expr)", nullptr, D("Expand trigonometric, exp and ln functions."),"sin(3x)", nullptr, CAT_CATEGORY_TRIG},
   {"time(cmd)", nullptr, D("Time to run a command or set the clock"),"int(1/(x^4+1),x)","8,0", CAT_CATEGORY_PROG},
