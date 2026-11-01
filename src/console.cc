@@ -2776,6 +2776,24 @@ int Console_GetKey(){
         (key==KEY_CHAR_PLUS || key==KEY_CHAR_MINUS || key==KEY_CHAR_MULT || key==KEY_CHAR_DIV || key==KEY_CHAR_POW ||
          key==KEY_CHAR_SQUARE || key==KEY_CHAR_RECIP || key==KEY_CHAR_STORE))
       Console_Input((const Char *)"ans()");
+#ifdef FLOWCE_STEPS
+    // (DeltaCE) a comma typed at the end of a phrase's last box goes after the phrase, for the next
+    // one ("..., find [w]"): not a box more in this one (ph_more(l,3,2w,) is no phrase). In a box's
+    // brackets ([80,90]) it stays
+    if (key==KEY_CHAR_COMMA && Current_Line==Last_Line && Edit_Line){
+      const char * s=(const char *)Edit_Line;
+      const int c=console_caret();
+      if (c>0 && s[c]==')'){
+        int d=0,o=-1;
+        for (int i=c-1;i>=0 && o<0;--i)
+          if (s[i]==')' || s[i]==']') ++d;
+          else if (s[i]=='(' || s[i]=='[') { if (!d) o=i; else --d; }
+        int b=o;
+        while (b>0 && (isalnum((unsigned char)s[b-1]) || s[b-1]=='_')) --b;
+        if (o>0 && s[o]=='(' && !strncmp(s+b,"ph_",3)) console_set_caret(c+1);
+      }
+    }
+#endif
     if (console_input2d()){
       int mk=0;
       if (key==KEY_CHAR_DIV || key==KEY_CHAR_LPAR || key==KEY_CHAR_RPAR || key==KEY_CHAR_COMMA ||
