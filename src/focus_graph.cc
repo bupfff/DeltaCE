@@ -194,6 +194,19 @@ static NOINL float run_prog(const prog & p, const gen & g, float x, float yv = 0
   }
   return sp == st ? *st : NAN;
 }
+// (DeltaCE) n values of f(x) for x from a to b, compiled as the curves are (the Δ card's sketch,
+// delta.cc); false when f does not compile (then the card draws none)
+bool focus_graph_sample(const gen & f, const gen & x, float a, float b, int n, float * y) {
+  prog * p = new prog;
+  gen xv = x, * sx = X_, * sy = Yv_;
+  X_ = &xv; Yv_ = 0;
+  p->n = p->depth = 0;
+  const bool ok = p && comp(*p, f, 0);
+  if (ok) { p->ok = 1; for (int i = 0; i < n; ++i) y[i] = run_prog(*p, f, a + (b - a) * i / (n - 1)); }
+  X_ = sx; Yv_ = sy;
+  delete p;
+  return ok;
+}
 static NOINL float val(int i, float x) { return fin(VX[i]) ? NAN : run_prog(P_[i], F_[i], x); } // f_i at x (a vertical line: none)
 
 // ---------------------------------------------------------------- the view

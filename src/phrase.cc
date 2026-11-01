@@ -114,7 +114,9 @@ static const char * const ROLES[][2] = {
   {"ph_perimeter", "length\0width\0perimeter"}, {"ph_rectarea", "length\0width\0area"},
   {"ph_drt", "distance\0rate\0time"}, {"ph_cost", "number\0price\0cost"},
   {"ph_older", "older age\0years\0younger age"}, {"ph_consecutive", "count\0first\0sum"},
-  {"ph_worth", "number\0price\0number\0price"}, {"ph_mix", "amount\0percent\0amount\0percent"}};
+  {"ph_worth", "number\0price\0number\0price"}, {"ph_mix", "amount\0percent\0amount\0percent"},
+  {"ph_sum", "first number\0second number\0sum"}, {"ph_difference", "first number\0second number\0difference"},
+  {"ph_product", "first number\0second number\0product"}};
 static char rv[8][4];
 static const char * rr[8];
 static int rn;
@@ -129,8 +131,8 @@ static void record_roles(const char * name, const char * const * a, const int * 
       if (!id) continue;
       int i = 0;
       while (i < rn && (strncmp(rv[i], a[k], e[k]) || rv[i][e[k]])) ++i;
-      if (i == rn && rn < 8) ++rn;
-      if (i < rn) { memcpy(rv[i], a[k], e[k]); rv[i][e[k]] = 0; rr[i] = r; }
+      if (i < rn || rn == 8) continue; // (the first role a letter gets stays: 'number' over 'first number')
+      memcpy(rv[rn], a[k], e[k]); rv[rn][e[k]] = 0; rr[rn++] = r;
     }
   }
 }

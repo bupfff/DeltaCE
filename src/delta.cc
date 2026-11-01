@@ -212,6 +212,25 @@ static NOINL std::string pic(char kind,const char * fs,int n){ // (its numbers: 
   for (int i=0;i<n;++i){ m+='\t'; m+=dec(fx(fs),5); fs+=strlen(fs)+1; }
   return m;
 }
+static NOINL void pnum(std::string & m,const gen & g){ m+='\t'; m+=dec(ev(g),5); }
+// a function's sketch (s): its window, then 49 values, each a float's 8 hex digits (exact, NaN where
+// undefined): [-6, 6], two turns either side for trig, from -1 for logs and roots
+#ifndef HOSTGIAC
+bool focus_graph_sample(const gen & f,const gen & x,float a,float b,int n,float * y); // focus_graph.cc
+static NOINL void hexf(std::string & m,float v){ unsigned long u; memcpy(&u,&v,4); for (int s=28;s>=0;s-=4) m+="0123456789abcdef"[(u>>s)&15]; }
+static NOINL void sketch(const gen & f,const gen & x){
+  float y[49];
+  const bool trig=contains(f,at_sin) || contains(f,at_cos) || contains(f,at_tan);
+  const float a=trig?-6.2832f:contains(f,at_ln) || contains(f,at_sqrt) || contains(f,at_log10)?-1.f:-6.f,b=a<-2?-a:9.f;
+  if (!focus_graph_sample(f,x,a,b,49,y)) return;
+  std::string m("s");
+  hexf(m,a); hexf(m,b);
+  for (int i=0;i<49;++i) hexf(m,y[i]);
+  line(AN_PIC,0,m);
+}
+#else
+static void sketch(const gen &,const gen &){}
+#endif
 static NOINL void picpt(std::string & m,const char * h,const char * k){ m+='\t'; m+=pt(fx(h),fx(k)); line(AN_PIC,0,m); }
 static NOINL std::string approx(const gen & g){ std::string m("\n\1\xe2\x89\x88\n"); m+=dec(g); return m; } // ≈ 7.6
 // q as a percent: whole, else its decimal (7/3: 233.3333%)
@@ -287,13 +306,16 @@ static NOINL void complex_number(const gen & v){
   fact("Conjugate","conj(qz)");
   const int sa=sgn(re(v,CTX)),sb=sgn(im(v,CTX));
   words("Quadrant",sb==0?"on the real axis":sa==0?"on the imaginary axis":sa>0?(sb>0?"I":"IV"):(sb>0?"II":"III"));
+  std::string m("z"); pnum(m,re(v,CTX)); pnum(m,im(v,CTX)); m+='\t'; m+=P(v); // (on the complex plane)
+  line(AN_PIC,0,m);
 }
 
 // ---------------------------------------------------------------- functions of one letter
 static NOINL void end_behavior(const gen & lead,int n){
   const int s=sgn(lead),l=n%2?-s:s;
-  words("As x \xe2\x86\x92 \xe2\x88\x9e",s>0?"f(x) \xe2\x86\x92 \xe2\x88\x9e":"f(x) \xe2\x86\x92 \xe2\x88\x92\xe2\x88\x9e");
-  words("As x \xe2\x86\x92 \xe2\x88\x92\xe2\x88\x9e",l>0?"f(x) \xe2\x86\x92 \xe2\x88\x9e":"f(x) \xe2\x86\x92 \xe2\x88\x92\xe2\x88\x9e");
+  // (in the textbook's words: the card's text faces have no arrow nor infinity)
+  words("Left end",l>0?"rises":"falls");
+  words("Right end",s>0?"rises":"falls");
 }
 // factored form, when giac factors f over the rationals (a product it was not typed as)
 static NOINL void factored(const gen & f){
@@ -492,6 +514,7 @@ static NOINL void function_of(const gen & typed,const gen & f0,const gen & x){
     line(AN_ROW,"Vertex",pt(h,at(f,x,h)));
   }
   else say("A function of x.");
+  if (n!=2 && n!=0) sketch(f,x);
   if (stop()) return;
   if (n>=0) poly_sections(f,x,n);
   else if (n<=-2) rational_sections(typed,f,x);
@@ -803,6 +826,7 @@ static NOINL void curve(const gen & eq,const gen & x,const gen & y){
       const int s=sgn(fx("qd"));
       let("qn",ev(l/g*(s<0 || (s==0 && sgn(fx("qe"))<0)?-1:1)));
       facts(T_line2);
+      sketch(fx("-(qd*qx+qf)/qe"),x);
     }
     mv("Graph","",eq,"",'g');
     mv("Solve for y","solve(",eq,",y)",'s');
@@ -828,6 +852,7 @@ static NOINL void curve(const gen & eq,const gen & x,const gen & y){
         const bool hor=sa>0; // opens left and right
         say(hor?"A hyperbola opening left and right.":"A hyperbola opening up and down.");
         facts(hor?T_hyph:T_hypv); facts(T_asym);
+        std::string m=pic('h',hor?"qh\0qk\0sqrt(qu)\0sqrt(-qv)\0001":"qh\0qk\0sqrt(qv)\0sqrt(-qu)\0000",5); picpt(m,"qh","qk");
       }
       mv("Graph","",eq,"",'g');
       return;
@@ -878,6 +903,15 @@ static NOINL void system_of(const gen & g,const vecteur & X){
     std::string m;
     for (unsigned i=0;i<w.size() && i<X.size();++i) if (w[i]!=X[i]) item(m,eqs(X[i],w[i]));
     line(AN_ROW,"Solution",m);
+    if (two && !free){ // the two lines and where they cross (l: a b c of a x + b y = c each, the point)
+      std::string p("l");
+      for (int i=0;i<2;++i){
+        const gen f=ev(v[i]._SYMBptr->feuille[0]-v[i]._SYMBptr->feuille[1]);
+        pnum(p,derive(f,X[0],CTX)); pnum(p,derive(f,X[1],CTX)); pnum(p,-subst(f,X,makevecteur(0,0),false,CTX));
+      }
+      pnum(p,w[0]); pnum(p,w[1]); p+='\t'; p+=pt(w[0],w[1]);
+      line(AN_PIC,0,p);
+    }
   }
   else if (s.type==_VECT){
     say(lin?"A linear system.":"A system of equations.");

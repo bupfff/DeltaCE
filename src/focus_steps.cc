@@ -524,12 +524,14 @@ static void plabel(const char * l, int x, int y, int center, int bg) { // the ma
   lay(l, q - l, 3, L);
   ui_math_draw(L, l, 3, center ? x - L.width / 2 : x, y + (L.asc - L.desc) / 2, 0, UC_INK, bg, UC_ACC);
 }
-static int pic_xy[2 * 49]; // (a curve's points: on the stack, the frame's far slots took 9 bytes an access)
+static int pic_xy[2 * 49]; // (a curve's points, a sketch's values sorted: on the stack, the frame's
+static float pic_v[100];   // far slots took 9 bytes an access)
 static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
   double v[8];
   int n = 0;
   const char * p = it.s + 1;
-  const int need = it.s[0] == 'b' ? 5 : it.s[0] == 'p' ? 3 : it.s[0] == 'e' ? 4 : 0; // (then the labels)
+  const char K = it.s[0];
+  const int need = K == 'b' ? 5 : K == 'p' ? 3 : K == 'e' ? 4 : K == 'h' ? 5 : K == 'l' ? 8 : K == 'z' ? 2 : 0; // (then the labels)
   for (; *p == '\t' && n < need; p = pfield(p)) v[n++] = strtod(p + 1, 0);
   const unsigned char * ac = ui_ramp(0, UC_ACC, bg), * sb = ui_ramp(0, UC_SUB, bg);
   const int ln = ui_col(0, UC_LINE), BW = 150, BH = 72, bx = it.x + (it.w - BW) / 2, by = y + 4, cx = it.x + it.w / 2, cy = y + 42;
@@ -563,6 +565,41 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
       if (X[i] - last >= 30) { plabel(p + 1, X[i], m + 30, 1, bg); last = X[i]; }
     return;
   }
+  if (K == 's') { // a function's sketch: its values over the window, y from their middle 80% (an asymptote's
+    // ends leave it), the curve broken where it is undefined or leaves the window far
+    float * Y = pic_v, * S = pic_v + 51;
+    int m = 0;
+    for (int i = 0; i < 51 && p[8 * i]; ++i) { unsigned long u = 0; for (int j = 0; j < 8; ++j) { const char c = p[8 * i + j]; u = u << 4 | (c <= '9' ? c - '0' : c - 'a' + 10); } memcpy(Y + i, &u, 4); }
+    for (int i = 2; i < 51; ++i) if (Y[i] == Y[i]) { int j = m++; while (j && S[j - 1] > Y[i]) { S[j] = S[j - 1]; --j; } S[j] = Y[i]; }
+    if (m < 2) return;
+    float lo = S[m / 10], hi = S[m - 1 - m / 10];
+    const float sp = hi > lo ? hi - lo : 1;
+    lo -= sp / 4; hi += sp / 4;
+    if (lo > 0 && lo < sp) lo = 0;
+    if (hi < 0 && -hi < sp) hi = 0;
+    const float x0 = Y[0], x1 = Y[1];
+    const int c0 = ui_cx0, c1 = ui_cy0, c2 = ui_cx1, c3 = ui_cy1;
+    if (lo <= 0 && hi >= 0) ui_fill(bx, by + BH - (int)(-lo / (hi - lo) * BH), BW + 1, 1, ln);
+    if (x0 <= 0 && x1 >= 0) ui_fill(bx + (int)(-x0 / (x1 - x0) * BW), by, 1, BH + 1, ln);
+    ui_clip(bx, by, bx + BW + 1, by + BH + 1);
+    for (int i = 3; i < 51; ++i) {
+      const float a = Y[i - 1], b = Y[i];
+      if (a != a || b != b || a < lo - 2 * sp || a > hi + 2 * sp || b < lo - 2 * sp || b > hi + 2 * sp) continue;
+      ui_seg16(16 * bx + 16 * BW * (i - 3) / 48, 16 * (by + BH) - (int)(16 * BH * (a - lo) / (hi - lo)),
+               16 * bx + 16 * BW * (i - 2) / 48, 16 * (by + BH) - (int)(16 * BH * (b - lo) / (hi - lo)), 28, ac);
+    }
+    ui_clip(c0, c1, c2, c3);
+    return;
+  }
+  if (K == 'z' && n == 2) { // the complex plane: the axes, the number as a point and its arrow from 0
+    const double r = 1.3 * fmax(fmax(fabs(v[0]), fabs(v[1])), 1), sc = BH / 2 / r;
+    const int zx = cx + (int)(v[0] * sc), zy = cy - (int)(v[1] * sc);
+    ui_fill(cx - BW / 2, cy, BW + 1, 1, ln); ui_fill(cx, by, 1, BH + 1, ln);
+    ui_seg16(16 * cx, 16 * cy, 16 * zx, 16 * zy, 24, ac);
+    ui_rrect(0, zx - 3, zy - 3, 7, 7, 3, UC_ACC, bg);
+    if (*p == '\t') plabel(p + 1, zx + 7, zy - 6, 0, bg);
+    return;
+  }
   // a parabola y = a(x-h)^2+k (to its zeros and past, or 2/sqrt|a| each side), or an ellipse: a window
   // around it with the axes when they are in it, the vertex or center as a point and its label
   double x0, x1, y0, y1;
@@ -574,8 +611,9 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
     if (y0 > 0) y0 = 0;
     if (y1 < 0) y1 = 0;
   }
-  else if (!par && n == 4 && v[2] > 0 && v[3] > 0) {
-    const double sc = fmin(BW / (2.6 * v[2]), BH / (2.6 * v[3])), hw = BW / 2 / sc, hh = BH / 2 / sc;
+  else if (K == 'l' && n == 8) { x0 = v[6] - 6; x1 = v[6] + 6; y0 = v[7] - 6.0 * BH / BW; y1 = v[7] + 6.0 * BH / BW; }
+  else if ((K == 'e' && n == 4 || K == 'h' && n == 5) && v[2] > 0 && v[3] > 0) {
+    const double sc = K == 'h' ? BH / (5.0 * fmax(v[2], v[3])) : fmin(BW / (2.6 * v[2]), BH / (2.6 * v[3])), hw = BW / 2 / sc, hh = BH / 2 / sc;
     x0 = v[0] - hw; x1 = v[0] + hw; y0 = v[1] - hh; y1 = v[1] + hh;
   }
   else return;
@@ -584,6 +622,36 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
 #define PY(Y) (by + BH - (int)(((Y) - y0) / (y1 - y0) * BH))
   if (y0 <= 0 && y1 >= 0) ui_fill(bx, PY(0), BW + 1, 1, ln);
   if (x0 <= 0 && x1 >= 0) ui_fill(PX(0), by, 1, BH + 1, ln);
+  if (K == 'l' || K == 'h') { // two lines (a x + b y = c) or a hyperbola's branches and asymptotes, in the window
+    const int c0 = ui_cx0, c1 = ui_cy0, c2 = ui_cx1, c3 = ui_cy1;
+    ui_clip(bx, by, bx + BW + 1, by + BH + 1);
+    for (int j = 0; j < 2; ++j) {
+      double ax, ay, bx2, by2;
+      if (K == 'l') {
+        const double a = v[3 * j], b = v[3 * j + 1], c = v[3 * j + 2];
+        if (fabs(b) > 1e-9) { ax = x0; ay = (c - a * x0) / b; bx2 = x1; by2 = (c - a * x1) / b; }
+        else { ax = bx2 = c / a; ay = y0; by2 = y1; }
+      }
+      else { // the asymptotes through the center, slopes +-b/a (vertical: +-a/b)
+        const double m = (v[4] > 0.5 ? v[3] / v[2] : v[2] / v[3]) * (j ? -1 : 1), d = x1 - x0;
+        ax = v[0] - d; ay = v[1] - m * d; bx2 = v[0] + d; by2 = v[1] + m * d;
+      }
+      ui_seg16(16 * PX(ax), 16 * PY(ay), 16 * PX(bx2), 16 * PY(by2), K == 'l' ? 28 : 16, K == 'l' ? ac : sb);
+      if (K == 'h') { // a branch: center +- a cosh t along the axis, b sinh t across
+        for (int i = 0; i <= 24; ++i) {
+          const double t = (i - 12) / 6.0, ch = (exp(t) + exp(-t)) / 2 * (j ? -1 : 1), sh = (exp(t) - exp(-t)) / 2;
+          const double X = v[4] > 0.5 ? v[0] + v[2] * ch : v[0] + v[3] * sh, Yy = v[4] > 0.5 ? v[1] + v[3] * sh : v[1] + v[2] * ch;
+          xy[2 * i] = 16 * PX(X); xy[2 * i + 1] = 16 * PY(Yy);
+        }
+        ui_poly16(xy, 25, 28, ac);
+      }
+    }
+    ui_clip(c0, c1, c2, c3);
+    const int px = PX(K == 'l' ? v[6] : v[0]), py = PY(K == 'l' ? v[7] : v[1]);
+    ui_rrect(0, px - 3, py - 3, 7, 7, 3, UC_INK, bg);
+    if (*p == '\t') plabel(p + 1, px + 7, py - 8, 0, bg);
+    return;
+  }
   for (int i = 0; i <= 48; ++i) {
     double X, Y;
     if (par) { X = x0 + (x1 - x0) * i / 48; Y = v[0] * (X - v[1]) * (X - v[1]) + v[2]; }
