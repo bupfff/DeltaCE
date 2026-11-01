@@ -13,8 +13,11 @@ const char * phrase_words(const char * name, int nlen, int na);
 bool phrase_expand(char * buf, int cap);
 // line (as typed) states a fact of a story (its phrase is an equation)
 bool phrase_is_fact(const char * line);
-// line asks for the story's unknowns (find)
+// line asks for the story's unknowns (a find in it; its other parts may be facts)
 bool phrase_is_find(const char * line);
+// phrase i (from 0): its name, its number of arguments, its tab in Word problems (1-4, 0: none)
+// and its example's arguments ("15,80"); 0 past the last
+const char * phrase_at(int i, int * na, int * group, const char ** ex);
 // the story's facts, in giac ("l=2*w+3,2*l+2*w=36"), for the next find: the console sets it from
 // its history before the line is put into giac (0: none)
 extern const char * phrase_story;

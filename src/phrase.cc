@@ -10,67 +10,91 @@
 #include <string.h>
 #include "phrase.h"
 using namespace giac;
+void answer_prepass(char * buf, int cap, bool focus); // answer.cc
 extern giac::context * contextptr;
 
 const char * phrase_story;
 int phrase_bare;
 // fact: 0 a question, 1 a story's fact, 2 find, 3 a question answered by an equation, 4 the wrapper
-struct phr { const char * name; unsigned char na, fact; const char * words, * tmpl; };
+// group: its tab in Word problems (1-4, focus_catalog.cc; 0 none), ex: its example's arguments
+struct phr { const char * name; unsigned char na, fact, group; const char * words, * tmpl, * ex; };
 static const phr PH[] = {
-  // questions
-  {"ph_value", 3, 0, "the value of\0when\0=\0", "subst(%1,%2=%3)"},
-  {"ph_when", 2, 0, "when is\0=\0", "solve(%1=%2)"},
-  {"ph_solvefor", 2, 0, "solve\0for\0", "solve(%1,%2)"},
-  {"ph_zeros", 1, 0, "the zeros of\0", "solve(%1=0)"},
-  {"ph_rate", 3, 0, "the rate of change of\0at\0=\0", "subst(diff(%1,%2),%2=%3)"},
-  {"ph_avgrate", 4, 0, "the average rate of change of\0from\0=\0to\0", "(subst(%1,%2=%4)-subst(%1,%2=%3))/(%4-%3)"},
-  {"ph_tangent", 3, 3, "the tangent line to\0at\0=\0", "y=subst(diff(%1,%2),%2=%3)*(%2-%3)+subst(%1,%2=%3)"},
-  {"ph_area", 4, 0, "the area under\0from\0=\0to\0", "integrate(%1,%2,%3,%4)"},
-  {"ph_slope", 4, 0, "the slope through (\0,\0) and (\0,\0)", "(%4-%2)/(%3-%1)"},
-  {"ph_line", 4, 3, "the line through (\0,\0) and (\0,\0)", "y=(%4-%2)/(%3-%1)*(x-%1)+%2"},
-  {"ph_distance", 4, 0, "the distance from (\0,\0) to (\0,\0)", "sqrt((%3-%1)^2+(%4-%2)^2)"},
-  {"ph_midpoint", 4, 0, "the midpoint of (\0,\0) and (\0,\0)", "[(%1+%3)/2,(%2+%4)/2]"},
-  {"ph_hypotenuse", 2, 0, "the hypotenuse with legs\0and\0", "sqrt(%1^2+%2^2)"},
-  {"ph_percentof", 2, 0, "\0% of\0", "%1/100*%2"},
-  {"ph_whatpercent", 2, 0, "what percent of\0is\0?", "100*%2/%1"},
-  {"ph_increased", 2, 0, "\0increased by\0%", "%1*(1+%2/100)"},
-  {"ph_decreased", 2, 0, "\0decreased by\0%", "%1*(1-%2/100)"},
-  {"ph_interest", 4, 0, "\0at\0% compounded\0times a year for\0years", "round(evalf(%1*(1+%2/100/%3)^(%3*%4)),2)"},
-  {"ph_atleastone", 2, 0, "the chance of at least one success in\0tries, each\0", "1-(1-%2)^%1"},
-  // (2026-10-31) motion (the time it lands: the root after 0; g = 9.8 exact, solve refused -4.9),
-  // shapes, sequences, money, rates
-  {"ph_lands", 2, 0, "a ball thrown up at\0m/s from a height of\0m lands after", "evalf(max(solve(-49/10*t^2+%1*t+%2=0,t)))"},
-  {"ph_landsft", 2, 0, "a ball thrown up at\0ft/s from a height of\0ft lands after", "max(solve(-16*t^2+%1*t+%2=0,t))"},
-  {"ph_maxheight", 2, 0, "the highest a ball thrown up at\0m/s from a height of\0m goes", "evalf(%2+5*%1^2/98)"},
-  {"ph_circlearea", 1, 0, "the area of a circle of radius\0", "pi*%1^2"},
-  {"ph_circumference", 1, 0, "the circumference of a circle of radius\0", "2*pi*%1"},
-  {"ph_cylinder", 2, 0, "the volume of a cylinder of radius\0and height\0", "pi*%1^2*%2"},
-  {"ph_sphere", 1, 0, "the volume of a sphere of radius\0", "4*pi*%1^3/3"},
-  {"ph_cone", 2, 0, "the volume of a cone of radius\0and height\0", "pi*%1^2*%2/3"},
-  {"ph_triangle", 2, 0, "the area of a triangle with base\0and height\0", "%1*%2/2"},
-  {"ph_leg", 2, 0, "the other leg of a right triangle with hypotenuse\0and leg\0", "sqrt(%1^2-%2^2)"},
-  {"ph_thirdangle", 2, 0, "the third angle of a triangle with angles\0and\0", "180-%1-%2"},
-  {"ph_arithmetic", 3, 0, "term\0of the arithmetic sequence starting at\0adding\0each time", "%2+(%1-1)*%3"},
-  {"ph_geometric", 3, 0, "term\0of the geometric sequence starting at\0times\0each time", "%2*%3^(%1-1)"},
-  {"ph_simpleinterest", 3, 0, "the simple interest on\0at\0% for\0years", "%1*%2/100*%3"},
-  {"ph_together", 2, 0, "working together, one taking\0hours and one\0hours, take", "1/(1/%1+1/%2)"},
-  {"ph_proportion", 3, 0, "if\0goes with\0then\0goes with", "%3*%2/%1"},
-  {"ph_unitrate", 2, 0, "the unit rate of\0for\0", "%1/%2"},
-  // a story's facts
-  {"ph_is", 2, 1, "\0is\0", "%1=%2"},
-  {"ph_more", 3, 1, "\0is\0more than\0", "%1=%3+%2"},
-  {"ph_less", 3, 1, "\0is\0less than\0", "%1=%3-%2"},
-  {"ph_times", 3, 1, "\0is\0times\0", "%1=%2*%3"},
-  {"ph_percentis", 3, 1, "\0is\0% of\0", "%1=%2/100*%3"},
-  {"ph_sum", 3, 1, "the sum of\0and\0is\0", "%1+%2=%3"},
-  {"ph_difference", 3, 1, "the difference of\0and\0is\0", "%1-%2=%3"},
-  {"ph_product", 3, 1, "the product of\0and\0is\0", "%1*%2=%3"},
-  {"ph_perimeter", 3, 1, "a rectangle\0by\0has perimeter\0", "2*%1+2*%2=%3"},
-  {"ph_rectarea", 3, 1, "a rectangle\0by\0has area\0", "%1*%2=%3"},
-  {"ph_drt", 3, 1, "distance\0= rate\0times time\0", "%1=%2*%3"},
-  {"ph_consecutive", 3, 1, "the sum of\0consecutive integers from\0is\0", "%1*%2+%1*(%1-1)/2=%3"},
-  {"ph_find", 1, 2, "find\0", 0},
-  {"ph_fact", 2, 4, "\0=\0", 0}, // (an equation, neither stored nor solved: drawn as one)
+  // % & rate
+  {"ph_percentof", 2, 0, 1, "\0% of\0", "%1/100*%2", "15,80"},
+  {"ph_whatpercent", 2, 0, 1, "what percent of\0is\0?", "100*%2/%1", "80,12"},
+  {"ph_increased", 2, 0, 1, "\0increased by\0%", "%1*(1+%2/100)", "80,15"},
+  {"ph_decreased", 2, 0, 1, "\0decreased by\0%", "%1*(1-%2/100)", "80,15"},
+  {"ph_sale", 2, 0, 1, "the sale price of\0at\0% off", "%1*(1-%2/100)", "80,25"},
+  {"ph_tax", 2, 0, 1, "\0plus\0% tax", "%1*(1+%2/100)", "40,8"},
+  {"ph_change", 2, 0, 1, "the percent change from\0to\0", "100*(%2-%1)/%1", "50,65"},
+  {"ph_interest", 4, 0, 1, "\0at\0% compounded\0times a year for\0years", "round(evalf(%1*(1+%2/100/%3)^(%3*%4)),2)", "1000,5,12,10"},
+  {"ph_simpleinterest", 3, 0, 1, "the simple interest on\0at\0% for\0years", "%1*%2/100*%3", "1000,5,3"},
+  {"ph_atleastone", 2, 0, 1, "the chance of at least one success in\0tries, each\0", "1-(1-%2)^%1", "4,1/6"},
+  {"ph_halflife", 3, 0, 1, "what is left of\0with a half-life of\0after\0", "%1*(1/2)^(%3/%2)", "100,5,15"},
+  {"ph_together", 2, 0, 1, "working together, one taking\0hours and one\0hours, take", "1/(1/%1+1/%2)", "3,6"},
+  {"ph_proportion", 3, 0, 1, "if\0goes with\0then\0goes with", "%3*%2/%1", "3,12,5"},
+  {"ph_unitrate", 2, 0, 1, "the unit rate of\0for\0", "%1/%2", "12,4"},
+  {"ph_needscore", 2, 0, 1, "the score needed to average\0after scores\0", "%1*(size(%2)+1)-sum(%2)", "85,[80,90]"},
+  // geometry (and right-triangle trig)
+  {"ph_slope", 4, 0, 2, "the slope through (\0,\0) and (\0,\0)", "(%4-%2)/(%3-%1)", "1,2,3,8"},
+  {"ph_line", 4, 3, 2, "the line through (\0,\0) and (\0,\0)", "y=(%4-%2)/(%3-%1)*(x-%1)+%2", "1,2,3,8"},
+  {"ph_distance", 4, 0, 2, "the distance from (\0,\0) to (\0,\0)", "sqrt((%3-%1)^2+(%4-%2)^2)", "0,0,3,4"},
+  {"ph_midpoint", 4, 0, 2, "the midpoint of (\0,\0) and (\0,\0)", "[(%1+%3)/2,(%2+%4)/2]", "1,2,3,8"},
+  {"ph_hypotenuse", 2, 0, 2, "the hypotenuse with legs\0and\0", "sqrt(%1^2+%2^2)", "3,4"},
+  {"ph_leg", 2, 0, 2, "the other leg of a right triangle with hypotenuse\0and leg\0", "sqrt(%1^2-%2^2)", "5,3"},
+  {"ph_thirdangle", 2, 0, 2, "the third angle of a triangle with angles\0and\0", "180-%1-%2", "50,60"},
+  {"ph_rightangle", 2, 0, 2, "the angle opposite side\0next to side\0(degrees)", "evalf(atan(%1/%2)*180/pi)", "3,4"},
+  {"ph_lawcos", 3, 0, 2, "the third side of sides\0and\0with\0degrees between", "sqrt(%1^2+%2^2-2*%1*%2*cos(%3*pi/180))", "5,7,60"},
+  {"ph_elevation", 2, 0, 2, "the height at an angle of elevation of\0degrees from\0away", "%2*tan(%1*pi/180)", "30,50"},
+  {"ph_circlearea", 1, 0, 2, "the area of a circle of radius\0", "pi*%1^2", "3"},
+  {"ph_circumference", 1, 0, 2, "the circumference of a circle of radius\0", "2*pi*%1", "3"},
+  {"ph_sector", 2, 0, 2, "the area of a sector of radius\0and angle\0degrees", "pi*%1^2*%2/360", "6,60"},
+  {"ph_arclength", 2, 0, 2, "the arc length of radius\0and angle\0degrees", "pi*%1*%2/180", "6,60"},
+  {"ph_rectperim", 2, 0, 2, "the perimeter of a rectangle\0by\0", "2*%1+2*%2", "5,3"},
+  {"ph_trapezoid", 3, 0, 2, "the area of a trapezoid with bases\0and\0and height\0", "(%1+%2)*%3/2", "3,5,4"},
+  {"ph_triangle", 2, 0, 2, "the area of a triangle with base\0and height\0", "%1*%2/2", "6,4"},
+  {"ph_interior", 1, 0, 2, "each angle of a regular polygon with\0sides", "180*(%1-2)/%1", "6"},
+  {"ph_box", 3, 0, 2, "the volume of a box\0by\0by\0", "%1*%2*%3", "2,3,4"},
+  {"ph_cylinder", 2, 0, 2, "the volume of a cylinder of radius\0and height\0", "pi*%1^2*%2", "2,5"},
+  {"ph_sphere", 1, 0, 2, "the volume of a sphere of radius\0", "4*pi*%1^3/3", "3"},
+  {"ph_cone", 2, 0, 2, "the volume of a cone of radius\0and height\0", "pi*%1^2*%2/3", "3,4"},
+  // multivar: a story's facts, then find
+  {"ph_find", 1, 2, 3, "find\0", 0, "w"},
+  {"ph_solvefor", 2, 0, 3, "solve\0for\0", "solve(%1,%2)", "A=l*w,w"},
+  {"ph_is", 2, 1, 3, "\0is\0", "%1=%2", "t,36"},
+  {"ph_more", 3, 1, 3, "\0is\0more than\0", "%1=%3+%2", "l,3,2w"},
+  {"ph_less", 3, 1, 3, "\0is\0less than\0", "%1=%3-%2", "a,5,b"},
+  {"ph_older", 3, 1, 3, "\0is\0years older than\0", "%1=%3+%2", "m,4,s"},
+  {"ph_times", 3, 1, 3, "\0is\0times\0", "%1=%2*%3", "a,3,b"},
+  {"ph_percentis", 3, 1, 3, "\0is\0% of\0", "%1=%2/100*%3", "s,20,p"},
+  {"ph_sum", 3, 1, 3, "the sum of\0and\0is\0", "%1+%2=%3", "x,y,25"},
+  {"ph_difference", 3, 1, 3, "the difference of\0and\0is\0", "%1-%2=%3", "x,y,7"},
+  {"ph_product", 3, 1, 3, "the product of\0and\0is\0", "%1*%2=%3", "x,y,12"},
+  {"ph_cost", 3, 1, 3, "\0items at\0each cost\0", "%1*%2=%3", "n,3,36"},
+  {"ph_worth", 4, 0, 3, "\0at\0each and\0at\0each", "%1*%2+%3*%4", "q,0.25,d,0.1"},
+  {"ph_mix", 4, 0, 3, "the percent of\0at\0% mixed with\0at\0%", "(%1*%2+%3*%4)/(%1+%3)", "2,10,3,40"},
+  {"ph_perimeter", 3, 1, 3, "a rectangle\0by\0has perimeter\0", "2*%1+2*%2=%3", "l,w,36"},
+  {"ph_rectarea", 3, 1, 3, "a rectangle\0by\0has area\0", "%1*%2=%3", "l,w,40"},
+  {"ph_drt", 3, 1, 3, "distance\0= rate\0times time\0", "%1=%2*%3", "150,r,3"},
+  {"ph_consecutive", 3, 1, 3, "the sum of\0consecutive integers from\0is\0", "%1*%2+%1*(%1-1)/2=%3", "3,n,72"},
+  // functions
+  {"ph_value", 3, 0, 4, "the value of\0when\0=\0", "subst(%1,%2=%3)", "x^2-5x+6,x,3"},
+  {"ph_when", 2, 0, 4, "when is\0=\0", "solve(%1=%2)", "2x+3,11"},
+  {"ph_zeros", 1, 0, 4, "the zeros of\0", "solve(%1=0)", "x^2-4"},
+  {"ph_meets", 2, 0, 4, "where\0meets\0", "solve(%1=%2)", "x^2,2x+3"},
+  {"ph_rate", 3, 0, 4, "the rate of change of\0at\0=\0", "subst(diff(%1,%2),%2=%3)", "x^3,x,2"},
+  {"ph_avgrate", 4, 0, 4, "the average rate of change of\0from\0=\0to\0", "(subst(%1,%2=%4)-subst(%1,%2=%3))/(%4-%3)", "x^2,x,1,3"},
+  {"ph_tangent", 3, 3, 4, "the tangent line to\0at\0=\0", "y=subst(diff(%1,%2),%2=%3)*(%2-%3)+subst(%1,%2=%3)", "x^2,x,3"},
+  {"ph_area", 4, 0, 4, "the area under\0from\0=\0to\0", "integrate(%1,%2,%3,%4)", "x^2,x,0,3"},
+  {"ph_avgvalue", 4, 0, 4, "the average value of\0from\0=\0to\0", "integrate(%1,%2,%3,%4)/(%4-%3)", "x^2,x,0,3"},
+  {"ph_limit", 3, 0, 4, "the limit of\0as\0goes to\0", "limit(%1,%2,%3)", "sin(x)/x,x,0"},
+  {"ph_doubling", 3, 0, 4, "a population of\0doubling every\0after\0", "%1*2^(%3/%2)", "500,3,12"},
+  {"ph_lands", 2, 0, 4, "a ball thrown up at\0m/s from a height of\0m lands after", "evalf(max(solve(-49/10*t^2+%1*t+%2=0,t)))", "10,2"},
+  {"ph_landsft", 2, 0, 4, "a ball thrown up at\0ft/s from a height of\0ft lands after", "max(solve(-16*t^2+%1*t+%2=0,t))", "64,0"},
+  {"ph_maxheight", 2, 0, 4, "the highest a ball thrown up at\0m/s from a height of\0m goes", "evalf(%2+5*%1^2/98)", "10,2"},
+  {"ph_arithmetic", 3, 0, 4, "term\0of the arithmetic sequence starting at\0adding\0each time", "%2+(%1-1)*%3", "10,3,4"},
+  {"ph_geometric", 3, 0, 4, "term\0of the geometric sequence starting at\0times\0each time", "%2*%3^(%1-1)", "5,2,3"},
+  {"ph_fact", 2, 4, 0, "\0=\0", 0, 0}, // (an equation, neither stored nor solved: drawn as one)
 };
 enum { NPH = sizeof(PH) / sizeof(PH[0]) };
 
@@ -84,19 +108,62 @@ const char * phrase_words(const char * name, int nlen, int na) {
   return i < 0 ? 0 : PH[i].words;
 }
 static bool namec(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
-// the kind (fact 1, find 2) of the first phrase in line, -1: none
-static int first_kind(const char * line) {
+const char * phrase_at(int i, int * na, int * group, const char ** ex) {
+  if (i < 0 || i >= NPH) return 0;
+  *na = PH[i].na; *group = PH[i].group; *ex = PH[i].ex;
+  return PH[i].name;
+}
+// the kind (fact 1, find 2) of the first phrase in line, -1: none; with find set, 2 if a find is
+// anywhere in it
+static int first_kind(const char * line, bool find = false) {
   for (const char * p = strstr(line, "ph_"); p; p = strstr(p + 1, "ph_")) {
     if (p > line && namec(p[-1])) continue;
     int n = 0;
     while (namec(p[n])) ++n;
     const int i = lookup(p, n, -1);
-    if (i >= 0) return PH[i].fact;
+    if (i >= 0 && (!find || PH[i].fact == 2)) return PH[i].fact;
   }
   return -1;
 }
 bool phrase_is_fact(const char * line) { return first_kind(line) == 1; }
-bool phrase_is_find(const char * line) { return first_kind(line) == 2; }
+bool phrase_is_find(const char * line) { return first_kind(line, true) == 2; }
+
+// a line that tells a story and asks at once ("[l] is [3] more than [2w], ..., find [w]"): its
+// facts (the parts between commas whose phrase is a fact) join the story told before, put into
+// giac as the history's facts are (bare, with their implicit products); the rest stays
+static void combine(char * buf, int cap) {
+  static std::string * story; // (no static constructor in the app)
+  std::string rest;
+  if (!story && !(story = new std::string)) return;
+  *story = phrase_story ? phrase_story : "";
+  bool any = false;
+  for (int i = 0, d = 0, b = 0;; ++i) {
+    const char c = buf[i];
+    if (c == '(' || c == '[' || c == '{') ++d;
+    else if ((c == ')' || c == ']' || c == '}') && d) --d;
+    else if (!c || (c == ',' && !d)) {
+      const std::string part(buf + b, i - b);
+      const int pc = 2 * part.size() + 64;
+      char * t = first_kind(part.c_str()) == 1 ? (char *)malloc(pc) : 0;
+      if (t) {
+        strcpy(t, part.c_str());
+        phrase_bare = 1;
+        answer_prepass(t, pc, true);
+        phrase_bare = 0;
+        if (!story->empty()) *story += ',';
+        *story += t;
+        free(t);
+        any = true;
+      }
+      else { if (!rest.empty()) rest += ','; rest += part.c_str(); }
+      if (!c) break;
+      b = i + 1;
+    }
+  }
+  if (!any || (int)rest.size() >= cap) return;
+  phrase_story = story->c_str();
+  strcpy(buf, rest.c_str());
+}
 
 // find(v): [v, the story's other letters] = their values
 static void find_of(std::string & out, const std::string & v) {
@@ -116,6 +183,8 @@ static void find_of(std::string & out, const std::string & v) {
 }
 bool phrase_expand(char * buf, int cap) {
   bool any = false;
+  const char * told = phrase_story; // (a line's own facts join it for this line only)
+  if (!phrase_bare && phrase_is_find(buf)) combine(buf, cap);
   for (int guard = 0; guard < 24; ++guard) {
     // the last phrase in buf: the innermost (a phrase in another's box comes after its start)
     char * p = 0;
@@ -144,7 +213,7 @@ bool phrase_expand(char * buf, int cap) {
     if (i < 0) break;
     std::string r;
     // the line through two points with the same x (typed alike): x = that x, not a division by 0
-    const char * tm = i == 9 /* ph_line */ && e[0] == e[2] && !strncmp(a[0], a[2], e[0]) ? "x=%1" : PH[i].tmpl;
+    const char * tm = !strcmp(PH[i].name, "ph_line") && e[0] == e[2] && !strncmp(a[0], a[2], e[0]) ? "x=%1" : PH[i].tmpl;
     if (!tm) find_of(r, std::string(a[0], e[0]));
     else
       for (const char * t = tm; *t; ++t) {
@@ -163,6 +232,7 @@ bool phrase_expand(char * buf, int cap) {
     memcpy(buf + at, r.c_str(), r.size());
     any = true;
   }
+  phrase_story = told;
   return any;
 }
 #endif

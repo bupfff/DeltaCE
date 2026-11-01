@@ -35,6 +35,7 @@ struct cat_state {
   short * idx;             // the matches in order (indices in C)
   unsigned char * cls;     // per entry: its match class 0-2, 3 = none
   int nc, ni, tab, sel, top, ql, exlv, only; // only: the one category listed (0: all)
+  char * pool;             // (DeltaCE) Word problems: the text of its entries (C is theirs)
   char q[QMAX + 1], ex[96]; // the query (lowercase); the selected entry's example
   mi_layout L;             // ... laid out at level exlv (-1: none)
   // what the screen shows: the field's query and count (sn < 0: no card yet), the scrollbar
@@ -391,7 +392,7 @@ static void footer_draw() { // the selected entry: signature, "enter insert", ex
   const catalogFunc & c = s.C[s.idx[s.sel]];
   int hw = ui_text_width(&ui_tb9, "enter  insert", -1);
   ui_draw_text(&ui_tb9, "enter  insert", -1, 308 - hw, SY, ramp(UC_SUB, UC_BG), 0);
-  text_cut(&ui_tb10, c.name, -1, 12, SY, 296 - hw - 10, ramp(UC_INK, UC_BG));
+  text_cut(&ui_tb10, s.only ? "e.g." : c.name, -1, 12, SY, 296 - hw - 10, ramp(UC_INK, UC_BG)); // (a phrase: its row shows it)
   if (s.exlv < 0) return;
   int y0 = ui_cy0, y1 = ui_cy1; // the band's rows; a tall example stays under the signature
   ui_clip(0, y0 > EY ? y0 : EY, 312, y1);
@@ -528,15 +529,56 @@ static void update() {
 }
 
 // ------------------------------------------------------------------ the search
+#ifdef FLOWCE_STEPS
+// (DeltaCE) Word problems' entries, made from the phrases (phrase.cc): their words with a _ for
+// each blank as the name (what letters search), the call with its boxes empty, the example
+static void phrase_entries(cat_state & s) {
+  int na, g, n = 0, sz = 0;
+  const char * ex, * nm;
+  for (int i = 0; (nm = phrase_at(i, &na, &g, &ex)); ++i)
+    if (g) { ++n; sz += 2 * strlen(nm) + strlen(ex) + 3 * na + 112; } // (the words: under 100)
+  catalogFunc * C = new catalogFunc[n];
+  char * p = s.pool = (char *)malloc(sz);
+  s.C = C; s.nc = 0;
+  if (!p) return;
+  for (int i = 0; (nm = phrase_at(i, &na, &g, &ex)); ++i) {
+    if (!g) continue;
+    catalogFunc & c = C[s.nc++];
+    const int L = strlen(nm);
+    c.desc = c.example2 = 0;
+    c.category = CAT_CATEGORY_PHRASE | PH_GROUP(g);
+    c.name = p;
+    const char * w = phrase_words(nm, L, na);
+    for (int k = 0; k <= na; ++k, w += strlen(w) + 1) { // (no space first: such names are left out)
+      strcpy(p, w); p += strlen(w);
+      if (k < na) { strcpy(p, " _ " + (p == c.name)); p += 3 - (p == c.name); }
+    }
+    *p++ = 0;
+    c.insert = p;
+    memcpy(p, nm, L); p += L; *p++ = '(';
+    for (int k = 1; k < na; ++k) *p++ = ',';
+    *p++ = ')'; *p++ = 0;
+    c.example = p;
+    memcpy(p, nm, L); p += L; *p++ = '(';
+    strcpy(p, ex); p += strlen(ex);
+    *p++ = ')'; *p++ = 0;
+  }
+}
+#endif
 int focus_catalog_only;
 int focus_catalog(const char * query, char * out, int outsize) {
   S = new cat_state;
   cat_state & s = *S;
+  s.only = focus_catalog_only; focus_catalog_only = 0;
+  s.pool = 0;
+#ifdef FLOWCE_STEPS
+  if (s.only) phrase_entries(s);
+  else
+#endif
   s.C = catalog_entries(s.nc);
   s.idx = new short[s.nc];
   s.cls = new unsigned char[s.nc];
   s.tab = s.ql = 0;
-  s.only = focus_catalog_only; focus_catalog_only = 0;
   for (; query && *query && s.ql < QMAX; ++query) s.q[s.ql++] = low(*query);
   s.q[s.ql] = 0;
   s.sn = -1; s.sb = -2; s.sf = -2; // nothing on screen yet
@@ -590,6 +632,7 @@ int focus_catalog(const char * query, char * out, int outsize) {
       if (ns >= s.top + ROWS) s.top = ns - ROWS + 1;
     }
   }
+  if (s.only) { delete[] s.C; free(s.pool); }
   delete[] s.idx;
   delete[] s.cls;
   delete S;
