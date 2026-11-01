@@ -531,7 +531,7 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
   int n = 0;
   const char * p = it.s + 1;
   const char K = it.s[0];
-  const int need = K == 'b' ? 5 : K == 'p' ? 3 : K == 'e' ? 4 : K == 'h' ? 5 : K == 'l' ? 8 : K == 'z' ? 2 : K == 'q' ? 2 : 0; // (then the labels)
+  const int need = K == 'b' ? 5 : K == 'p' ? 3 : K == 'e' ? 4 : K == 'h' ? 5 : K == 'l' ? 8 : K == 'z' ? 2 : K == 'q' ? 2 : K == 'm' ? 4 : 0; // (then the labels)
   for (; *p == '\t' && n < need; p = pfield(p)) v[n++] = strtod(p + 1, 0);
   const unsigned char * ac = ui_ramp(0, UC_ACC, bg), * sb = ui_ramp(0, UC_SUB, bg);
   const int ln = ui_col(0, UC_LINE), BW = 150, BH = 72, bx = it.x + (it.w - BW) / 2, by = y + 4, cx = it.x + it.w / 2, cy = y + 42;
@@ -640,6 +640,27 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
     ui_seg16(16 * cx, 16 * cy, 16 * zx, 16 * zy, 24, ac);
     ui_rrect(0, zx - 3, zy - 3, 7, 7, 3, UC_ACC, bg);
     if (*p == '\t') plabel(p + 1, zx + 7, zy - 6, 0, bg);
+    return;
+  }
+  if (K == 'm' && n == 4) { // a 2x2 matrix: the unit square (thin) taken to the parallelogram of its
+    // columns (area |det|), the columns as arrows from 0, their ends labeled; one scale, to fit
+    const double X[4] = {0, v[0], v[0] + v[1], v[1]}, Y[4] = {0, v[2], v[2] + v[3], v[3]};
+    double x0 = 0, x1 = 1, y0 = 0, y1 = 1;
+    for (int i = 1; i < 4; ++i) { x0 = fmin(x0, X[i]); x1 = fmax(x1, X[i]); y0 = fmin(y0, Y[i]); y1 = fmax(y1, Y[i]); }
+    const double sc = fmin((BW - 40) / (x1 - x0), (BH - 16) / (y1 - y0));
+    const int ox = cx - (int)((x0 + x1) / 2 * sc), oy = cy + (int)((y0 + y1) / 2 * sc);
+    ui_fill(bx, oy, BW + 1, 1, ln); ui_fill(ox, by, 1, BH + 1, ln);
+    for (int i = 0; i < 5; ++i) { xy[2 * i] = 16 * ox + (int)(16 * sc * (i == 1 || i == 2)); xy[2 * i + 1] = 16 * oy - (int)(16 * sc * (i == 2 || i == 3)); }
+    ui_poly16(xy, 5, 16, sb);
+    for (int i = 0; i < 5; ++i) { xy[2 * i] = 16 * ox + (int)(16 * sc * X[i & 3]); xy[2 * i + 1] = 16 * oy - (int)(16 * sc * Y[i & 3]); }
+    ui_poly16(xy, 5, 16, ac);
+    for (int j = 1; j < 4; j += 2, p = pfield(p)) {
+      const int tx = ox + (int)(sc * X[j]), ty = oy - (int)(sc * Y[j]);
+      ui_seg16(16 * ox, 16 * oy, 16 * tx, 16 * ty, 32, ac);
+      ui_rrect(0, tx - 3, ty - 3, 7, 7, 3, UC_ACC, bg);
+      const double dx = X[j] - X[2] / 2, dy = Y[j] - Y[2] / 2; // (out from the parallelogram's center)
+      if (*p == '\t') plabel(p + 1, tx + (dx < 0 ? -30 : 30), ty + (dy < 0 ? 12 : -12), 1, bg);
+    }
     return;
   }
   // a parabola y = a(x-h)^2+k (to its zeros and past, or 2/sqrt|a| each side), or an ellipse: a window

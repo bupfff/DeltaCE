@@ -206,7 +206,8 @@ static NOINL std::string dec(const gen & g,int nd=4){
 // a picture on the card (focus_steps.cc draws it): its kind, then its numbers (decimals) and
 // labels (math), a tab before each. u: the unit circle, angle and label pairs; b: a box plot,
 // min Q1 median Q3 max then their labels; p: a parabola y=a(x-h)^2+k, a h k then the vertex's
-// label; e: an ellipse (a circle), h k rx ry then the center's label
+// label; e: an ellipse (a circle), h k rx ry then the center's label; m: a 2x2 matrix, a b c d then
+// its columns' labels
 static NOINL std::string pic(char kind,const char * fs,int n){ // (its numbers: n formulas)
   std::string m(1,kind);
   for (int i=0;i<n;++i){ m+='\t'; m+=dec(fx(fs),5); fs+=strlen(fs)+1; }
@@ -966,6 +967,15 @@ static NOINL void matrix_of(const gen & M){
         line(AN_ROW,"Eigenvalues",s);
       }
       if (!is_zero(d)) fact("Inverse","inv(qm)");
+    }
+    double t;
+    bool re=m==2;
+    for (unsigned k=0;k<4 && re;++k) re=num(r[k>>1][k&1],t);
+    if (re){ // the unit square taken to the parallelogram of its columns (its area: |det|)
+      std::string p("m");
+      for (unsigned k=0;k<4;++k) pnum(p,r[k>>1][k&1]);
+      p+='\t'; p+=pt(r[0][0],r[1][0]); p+='\t'; p+=pt(r[0][1],r[1][1]);
+      line(AN_PIC,0,p);
     }
     if (!is_zero(d)) mv("Inverse","inv(",M,")",'r');
   }
