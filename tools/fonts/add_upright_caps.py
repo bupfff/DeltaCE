@@ -6,6 +6,9 @@ to italic). The capitals of unit symbols only (N, J, W, Pa, V, A, K, Hz, MeV, Bt
 Wb, T, F, C, Rankine; all 26 were 11 KB): the others stay italic. Only the new glyphs are rasterized (with mkfonts.py's own functions and settings): the
 existing ones stay byte for byte as generated (FreeType versions rasterize slightly differently).
   python3 tools/fonts/add_upright_caps.py
+Other upright characters the same way, given as an argument: '%' (DeltaCE 2.3.2: the words of the
+percent phrases, 15 % of 80, are drawn with these faces; mkfonts.py's MATH_UP leaves % out).
+  python3 tools/fonts/add_upright_caps.py %
 """
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,7 +16,7 @@ import mkfonts as M
 
 ROOT = M.ROOT
 P = os.path.join(ROOT, 'src', 'ui_fontdata.c')
-CAPS = list('ABCFHJKMNOPRSTVW')
+CAPS = list(sys.argv[1] if len(sys.argv) > 1 else 'ABCFHJKMNOPRSTVW')
 s = open(P).read()
 newindex = None
 for size in M.MATH_SIZES:
@@ -23,10 +26,11 @@ for size in M.MATH_SIZES:
     bits = [int(x) for x in re.findall(r'\d+', bm.group(2))]
     glyphs = [tuple(int(v) for v in g) for g in re.findall(r'\{(-?\d+),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(-?\d+),(-?\d+)\}', gm.group(2))]
     assert len(bits) == int(bm.group(1)) and len(glyphs) == int(gm.group(1)), name
-    if any(g[0] == ord('N') for g in glyphs):
-        print(name, 'has capitals already'); continue
+    new = [ch for ch in CAPS if all(g[0] != ord(ch) for g in glyphs)]
+    if not new:
+        print(name, 'has them already'); continue
     f = M.font('STIXTwoText-VF.ttf', size, 400)
-    for ch in CAPS:
+    for ch in new:
         adv, ox, oy, w, h, pix = M.raster(f, ch)
         data = M.encode(pix)
         glyphs.append((ord(ch), len(bits), adv, w, h, ox, oy))

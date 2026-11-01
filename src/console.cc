@@ -2610,6 +2610,18 @@ static int console_delta(){
   delta_steps=how=='s';
   return Console_NewLine(LINE_TYPE_INPUT,1);
 }
+// the innermost bracket open at c in s (-1: none), *nb where the name before it starts (a phrase's
+// ph_ name: the bracket is the phrase's)
+static int console_opener(const char * s,int c,int * nb){
+  int d=0,o=-1;
+  for (int i=c-1;i>=0 && o<0;--i)
+    if (s[i]==')' || s[i]==']') ++d;
+    else if (s[i]=='(' || s[i]=='[') { if (!d) o=i; else --d; }
+  int b=o;
+  while (b>0 && (isalnum((unsigned char)s[b-1]) || s[b-1]=='_')) --b;
+  *nb=b;
+  return o;
+}
 #endif
 static const char * const console_yesno[]={"Clear history","Cancel"};
 int Console_GetKey(){
@@ -2784,12 +2796,8 @@ int Console_GetKey(){
     if (key==KEY_CHAR_COMMA && Current_Line==Last_Line && Edit_Line && console_input2d()){
       char * s=(char *)Edit_Line;
       const int c=console_caret(),L=strlen(s);
-      int d=0,o=-1;
-      for (int i=c-1;i>=0 && o<0;--i)
-        if (s[i]==')' || s[i]==']') ++d;
-        else if (s[i]=='(' || s[i]=='[') { if (!d) o=i; else --d; }
-      int nb=o;
-      while (nb>0 && (isalnum((unsigned char)s[nb-1]) || s[nb-1]=='_')) --nb;
+      int nb;
+      const int o=console_opener(s,c,&nb);
       if (c>0 && o>0 && s[o]=='(' && !strncmp(s+nb,"ph_",3) && L+3<EDIT_LINE_MAX){
         int a=o+1,e=c;
         for (int i=o+1,dd=0;i<c;++i) // the box's start: after the last comma before the caret
@@ -3432,14 +3440,52 @@ int Console_GetKey(){
         Console_Disp(0);
         continue;
       }
+      const char cl=p>0?s[p-1]:0,op=cl==')'?'(':cl==']'?'[':0;
       int depth=0;
-      for (int i=0;i<p-1;++i)
-        depth+=s[i]=='('?1:s[i]==')'?-1:0;
-      if (p>0 && s[p-1]==')' && depth>0){ // sin(x)| -> sin(x|): into the group, as into an exponent
+      for (int i=0;op && i<p-1;++i)
+        depth+=s[i]==op?1:s[i]==cl?-1:0;
+      if (depth>0){ // sin(x)| -> sin(x|), [1,2]| -> [1,2|]: into the group, as into an exponent
         console_set_caret(p-1);           // (deleting the ) left sin(x unclosed); a stray ) goes
         Console_Disp(0);
         continue;
       }
+#ifdef FLOWCE_STEPS
+      { // (DeltaCE) a phrase's box made a list by a comma (above) shrinks back as it grew: the comma
+        // before an empty item goes, the brackets too when one item is left ([80,|] -> 80|); at the
+        // list's start an empty item goes ([|,90] -> |90) and a list of several stays whole, the
+        // caret leaves it (its items unwrapped are boxes more: ph_percentof(15,80,90) is no phrase).
+        // The score needed after scores [..] takes a list: its brackets stay
+        int nb,o=console_opener(s,p,&nb);
+        const int q=o>0 && s[o]=='[' && (s[o-1]=='(' || s[o-1]==',')?console_opener(s,o,&nb):-1;
+        int e=o,n=0,at=-1; // the list's ], its commas, the char deleted
+        if (q>=0 && s[q]=='(' && !strncmp(s+nb,"ph_",3)){
+          const bool keep=!strncmp(s+nb,"ph_needscore(",13);
+          for (int dd=0;s[e];++e)
+            if (s[e]=='(' || s[e]=='[') ++dd;
+            else if ((s[e]==')' || s[e]==']') && !--dd) break;
+            else if (s[e]==',' && dd==1) ++n;
+          if (s[e]!=']') {} // (unclosed)
+          else if (p>o+1 && s[p-1]==',' && (s[p]==',' || p==e)) at=--p; // [80,|] [80,|,90]
+          else if (p==o+1 && s[p]==',') at=p;                         // [|,90]
+          else if (p==o+1 && s[p]!=']' && (n || keep)) o=-1;          // [|80,90]: before it
+          if (at>=0){
+            memmove(s+at,s+at+1,strlen(s+at));
+            if (!--n && !keep){ // one item: no list
+              memmove(s+e-1,s+e,strlen(s+e)+1);
+              memmove(s+o,s+o+1,strlen(s+o));
+              --p;
+            }
+            Line[Current_Line].disp_len=Console_GetDispLen(Edit_Line);
+            console_changed=1;
+          }
+          if (at>=0 || o<0){
+            console_set_caret(o<0?p-1:p);
+            Console_Disp(0);
+            continue;
+          }
+        }
+      }
+#endif
       if (me_backspace(s,&p)){ // at the start of a slot: unwraps a call, a fraction, an exponent
         Line[Current_Line].disp_len=Console_GetDispLen(Edit_Line);
         console_changed=1;
