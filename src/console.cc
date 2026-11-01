@@ -2593,6 +2593,17 @@ static int console_delta(){
   else {
     const int l=Current_Line<Last_Line?Current_Line:focus_result_line();
     if (l>=0 && Line[l].str) in=(const char *)Line[l].str;
+    // (DeltaCE) a solve's answer (x=-3±sqrt(13), x=...): the card of the equation it came from; read
+    // alone, its equations were a system (x can't be two numbers at once: "No solution")
+    bool sols=l>0 && Line[l].type==LINE_TYPE_OUTPUT && isalpha((unsigned char)in[0]);
+    for (int i=0,d=0,b=1;sols && i<(int)in.size();++i){
+      const char c=in[i];
+      if (c=='(' || c=='[') ++d; else if ((c==')' || c==']') && d) --d;
+      else if (!d && c==',') b=1;
+      else if (b && c!=' '){ int j=i; while (j<(int)in.size() && isalnum((unsigned char)in[j])) ++j; sols=j>i && in[j]=='=' && in[j+1]!='='; b=0; }
+    }
+    for (int k=l-1;sols && k>=0;--k)
+      if (Line[k].type==LINE_TYPE_INPUT){ if (Line[k].str) in=(const char *)Line[k].str; break; }
     more=Current_Line==Last_Line && console_action_answer(cmd,16);
   }
   if (in.empty()){ focus_status_msg("Type something, then prgm"); return -1; }

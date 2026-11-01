@@ -46,6 +46,7 @@ static NOINL void move(const char * label,const std::string & cmd,char how){ dl_
 static NOINL void mv(const char * label,const char * pre,const gen & g,const char * post,char how){
   std::string c(pre); c+=P(ev(g)); c+=post; move(label,c,how);
 }
+std::string answer_pm(const gen & x,const vecteur & v,const char * sep); // answer.cc
 static NOINL std::string eqs(const gen & a,const gen & b){ std::string s=P(a); s+='='; s+=P(b); return s; } // a=b
 static NOINL std::string Pi(const gen & g){ return g==plus_inf?std::string("oo"):g==minus_inf?std::string("-oo"):P(g); } // oo: the renderer's infinity
 static NOINL std::string pt(const gen & a,const gen & b){ std::string s("("); s+=P(a); s+=','; s+=P(b); s+=')'; return s; }
@@ -226,6 +227,16 @@ static NOINL void sketch(const gen & f,const gen & x){
   float a=trig?-6.2832f:contains(f,at_ln) || contains(f,at_sqrt) || contains(f,at_log10)?-1.f:-6.f,b=a<-2?-a:9.f;
   if (sk_T>0){ a=-1.5f*sk_T; b=-a; } // (a sinusoid: three periods)
   if (!focus_graph_sample(f,x,a,b,49,y)) return;
+  if (lvar(f).size()==1 && !trig){ // a polynomial: where its zeros and turns are (x^3-3x: [-1.7, 1.7]),
+    int i0=48,i1=0;                 // with room around them; [-6, 6] flattened them
+    for (int i=1;i<48;++i)
+      if (y[i]*y[i+1]<=0 || (y[i]-y[i-1])*(y[i+1]-y[i])<=0){ if (i<i0) i0=i; if (i+1>i1) i1=i+1; }
+    if (i1>i0 && i1-i0<30){
+      const float s=(b-a)/48,c=a+s*(i0+i1)/2,h=s*(i1-i0)*0.65f+s;
+      a=c-h; b=c+h;
+      if (!focus_graph_sample(f,x,a,b,49,y)) return;
+    }
+  }
   std::string m("s");
   hexf(m,a); hexf(m,b);
   for (int i=0;i<49;++i) hexf(m,y[i]);
@@ -649,7 +660,6 @@ static NOINL bool trig_solutions(const gen & eq,const gen & x){
   rel_moves(eq,x);
   return true;
 }
-static const char * const T_csol[]={"Complex solutions","|qx=(-qb+i*sqrt(4*qa*qc-qb^2))/(2*qa);qx=(-qb-i*sqrt(4*qa*qc-qb^2))/(2*qa)",0};
 static NOINL void equation1(const gen & eq,const gen & x){
   const gen L=eq._SYMBptr->feuille[0],R=eq._SYMBptr->feuille[1],f=ev(L-R);
   sec("FACTS");
@@ -666,18 +676,51 @@ static NOINL void equation1(const gen & eq,const gen & x){
   if (n==2){ let("qa",co(f,x,2)); let("qb",co(f,x,1)); let("qc",co(f,x,0)); }
   if (s.type==_VECT){
     const unsigned k=s._VECTptr->size();
-    std::string m;
-    for (unsigned i=0;i<k;++i) item(m,eqs(x,(*s._VECTptr)[i]));
+    std::string m=answer_pm(x,*s._VECTptr,"\n"); // (x=-3±sqrt(13))
+    if (m.empty()) for (unsigned i=0;i<k;++i) item(m,eqs(x,(*s._VECTptr)[i]));
     if (!k){
       say(n==2?"No real solution: its solutions are complex.":"No real solution.");
-      if (n==2) facts(T_csol);
+      if (n==2){ // x=-1±2i
+        vecteur c;
+        c.push_back(fx("(-qb-i*sqrt(4*qa*qc-qb^2))/(2*qa)")); c.push_back(fx("(-qb+i*sqrt(4*qa*qc-qb^2))/(2*qa)"));
+        line(AN_ROW,"Complex solutions",answer_pm(x,c,"\n")); // (a conjugate pair: always one)
+      }
     }
     else {
-      say(k==1?"One solution.":k==2?"Two solutions.":"Several solutions.");
+      static const char * const H[]={"One solution.","Two solutions.","Three solutions.","Four solutions.","Several solutions."};
+      say(H[k<5?k-1:4]);
       line(AN_ROW,k==1?"Solution":"Solutions",m,AN_OR);
     }
   }
   if (n==2) facts(T_quad2);
+  if (n==3){ // its factors over the rationals (factor took roots: (x+sqrt(7)+3)...)
+    let("qg",f);
+    const gen F=fx("collect(qg)");
+    if (F.is_symb_of_sommet(at_prod) || F.is_symb_of_sommet(at_pow)){ std::string t=P(F); t+="=0"; line(AN_ROW,"Factored",t); }
+  }
+  if (n==4){ // quadratic in form: a u^2+B u+e in u = x^2+2wx, w = b/(4a), B = c-4aw^2, when d = 2wB
+    // (x^4-7x^2+14 in u = x^2, (x^2+6x+1)(x^2+6x-3) = 5 in u = x^2+6x); its factors from u's when
+    // rational. From its coefficients: expand, subst and collect took 5 s on the calculator
+    let("qa",co(f,x,4)); let("qb",co(f,x,3)); let("qc",co(f,x,2)); let("qd",co(f,x,1)); let("qe",co(f,x,0));
+    let("qw",fx("qb/(4*qa)")); let("qB",fx("qc-4*qa*qw^2"));
+    if (is_zero(fx("qd-2*qw*qB"))){
+      say("Quadratic in form.");
+      fact("Let","u=qx^2+2*qw*qx");
+      fact("In u","qa*u^2+qB*u+qe=0");
+      let("qD",fx("qB^2-4*qa*qe"));
+      if (sgn(fx("qD"))<0) say("No real u: so no real x.");
+      else {
+        const gen U=gen("u",CTX);
+        vecteur us; us.push_back(fx("(-qB-sqrt(qD))/(2*qa)")); us.push_back(fx("(-qB+sqrt(qD))/(2*qa)"));
+        std::string m=answer_pm(U,us,"\n");
+        const bool pm=!m.empty();
+        bool q=true; // (u's rational: (x^2+6x+2)(x^2+6x-4))
+        for (unsigned i=0;i<2;++i){ if (!pm) item(m,eqs(U,us[i])); q=q && (us[i].type==_INT_ || us[i].type==_ZINT || us[i].type==_FRAC); }
+        line(AN_ROW,"So",m,AN_OR);
+        if (q){ let("qo",us[0]); let("qt",us[1]); std::string t=P(fx("ratnormal(qa*(qx^2+2*qw*qx-qo))*ratnormal(qx^2+2*qw*qx-qt)")); t+="=0"; line(AN_ROW,"Factored",t); }
+      }
+    }
+  }
   if (n==-2 || rat){ // the values the denominators exclude (as typed: (x^2-4)/(x-2) excludes 2)
     vecteur dv; dens(L,x,dv); dens(R,x,dv);
     gen den=1;

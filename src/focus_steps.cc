@@ -522,7 +522,9 @@ static void plabel(const char * l, int x, int y, int center, int bg) { // the ma
   while (*q && *q != '\t') ++q;
   mi_layout L;
   lay(l, q - l, 3, L);
-  ui_math_draw(L, l, 3, center ? x - L.width / 2 : x, y + (L.asc - L.desc) / 2, 0, UC_INK, bg, UC_ACC);
+  const int X = center ? x - L.width / 2 : x, Y = y + (L.asc - L.desc) / 2;
+  ui_fill(X - 2, Y - L.asc, L.width + 4, L.asc + L.desc, ui_col(0, bg)); // (a halo: no line through it)
+  ui_math_draw(L, l, 3, X, Y, 0, UC_INK, bg, UC_ACC);
 }
 static int pic_xy[2 * 49]; // (a curve's points, a sketch's values sorted: on the stack, the frame's
 static float pic_v[104];   // far slots took 9 bytes an access)
@@ -534,7 +536,9 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
   const int need = K == 'b' ? 5 : K == 'p' ? 3 : K == 'e' ? 4 : K == 'h' ? 5 : K == 'l' ? 8 : K == 'z' ? 2 : K == 'q' ? 2 : K == 'm' ? 4 : 0; // (then the labels)
   for (; *p == '\t' && n < need; p = pfield(p)) v[n++] = strtod(p + 1, 0);
   const unsigned char * ac = ui_ramp(0, UC_ACC, bg), * sb = ui_ramp(0, UC_SUB, bg);
-  const int ln = ui_col(0, UC_LINE), BW = 150, BH = 72, bx = it.x + (it.w - BW) / 2, by = y + 4, cx = it.x + it.w / 2, cy = y + 42;
+  // a graph's window is larger (220 x 100: the card's pictures were small) and its axes visible
+  const bool big = strchr("pehlzsm", K) != 0;
+  const int ln = ui_col(0, UC_SUB), BW = big ? 220 : 150, BH = big ? 100 : 72, bx = it.x + (it.w - BW) / 2, by = y + 4, cx = it.x + it.w / 2, cy = by + BH / 2 + 2;
   int * xy = pic_xy;
   if (it.s[0] == 'u') { // the unit circle, the angles' radii and points, their labels outside
     const int R = 30;
@@ -673,10 +677,12 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
     y0 = k < ye ? k : ye; y1 = k < ye ? ye : k;
     if (y0 > 0) y0 = 0;
     if (y1 < 0) y1 = 0;
+    const double pad = (y1 - y0) * 0.3; // (the vertex and its label off the edge: the next row had it)
+    y0 -= pad; y1 += pad;
   }
   else if (K == 'l' && n == 8) { x0 = v[6] - 6; x1 = v[6] + 6; y0 = v[7] - 6.0 * BH / BW; y1 = v[7] + 6.0 * BH / BW; }
   else if ((K == 'e' && n == 4 || K == 'h' && n == 5) && v[2] > 0 && v[3] > 0) {
-    const double sc = K == 'h' ? BH / (5.0 * fmax(v[2], v[3])) : fmin(BW / (2.6 * v[2]), BH / (2.6 * v[3])), hw = BW / 2 / sc, hh = BH / 2 / sc;
+    const double sc = K == 'h' ? fmax(26 / v[2], BH / (5.0 * fmax(v[2], v[3]))) : fmin(BW / (2.6 * v[2]), BH / (2.6 * v[3])), hw = BW / 2 / sc, hh = BH / 2 / sc; // (a hyperbola: its branches 26 px from the center at least)
     x0 = v[0] - hw; x1 = v[0] + hw; y0 = v[1] - hh; y1 = v[1] + hh;
   }
   else return;
@@ -712,7 +718,7 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
     ui_clip(c0, c1, c2, c3);
     const int px = PX(K == 'l' ? v[6] : v[0]), py = PY(K == 'l' ? v[7] : v[1]);
     ui_rrect(0, px - 3, py - 3, 7, 7, 3, UC_INK, bg);
-    if (*p == '\t') plabel(p + 1, px + 7, py - 8, 0, bg);
+    if (*p == '\t') plabel(p + 1, K == 'h' ? px : px + 7, K == 'h' ? py + 14 : py - 8, K == 'h', bg); // (a center: under it)
     return;
   }
   for (int i = 0; i <= 48; ++i) {
@@ -724,7 +730,7 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
   ui_poly16(xy, 49, 28, ac);
   const int px = PX(v[par]), py = PY(v[par + 1]); // (the vertex h, k; the center)
   ui_rrect(0, px - 3, py - 3, 7, 7, 3, UC_INK, bg);
-  if (*p == '\t') plabel(p + 1, px + 7, par && v[0] < 0 ? py + 10 : py - 8, 0, bg);
+  if (*p == '\t') plabel(p + 1, px, par && v[0] < 0 ? py - 12 : py + 14, 1, bg); // (outside a vertex, under a center)
 #undef PX
 #undef PY
 }
@@ -1116,7 +1122,7 @@ static __attribute__((noinline)) void lay_report(const std::vector<an_line> & v)
     const an_line & l = v[i];
     if (l.kind == AN_HEAD) y += add_math(l.math.c_str(), l.math.size(), X, y, W, 2, K_HEAD) + 14;
     else if (l.kind == AN_NUMLINE) { put(K_NUMLINE, dup(l.math.c_str(), l.math.size()), X, y, W, 40, 0, 3); y += 44; }
-    else if (l.kind == AN_PIC) { put(K_PIC, dup(l.math.c_str(), l.math.size()), X, y, W, 84, 0, 3); y += 88; }
+    else if (l.kind == AN_PIC) { const int h = strchr("pehlzsm", l.math[0]) ? 108 : 84; put(K_PIC, dup(l.math.c_str(), l.math.size()), X, y, W, h, 0, 3); y += h + 4; }
     else if (l.kind == AN_SECTION) section(l.text, 0, y);
     else y = row(l, y) + 9;
   }

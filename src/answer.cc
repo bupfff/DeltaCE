@@ -2943,6 +2943,7 @@ static __attribute__((noinline)) void form_compute(answer_forms & F,int k){
   F.form[k]=r;
 }
 
+static std::string pm_both(const char * buf); // (below)
 void answer_forms_start(answer_forms & F,const std::string & orig,bool number){
   using namespace giac;
   F.orig=orig;
@@ -2950,7 +2951,7 @@ void answer_forms_start(answer_forms & F,const std::string & orig,bool number){
   // took 69 s for a sum)
   const bool open=strstr(orig.c_str(),"sum(") || strstr(orig.c_str(),"integrate(") || strstr(orig.c_str(),"limit(");
   // evaluated: ratnormal of the parsed text printed ((x^2)-1)/(x^3+x)
-  F.g=open?gen(0):eval(gen(orig,contextptr),1,contextptr);
+  F.g=open?gen(0):eval(gen(strstr(orig.c_str(),"\xc2\xb1")?pm_both(orig.c_str()):orig,contextptr),1,contextptr); // (DeltaCE: x=±sqrt(2))
   F.number=number;
   F.trig=!number && (contains(F.g,at_sin) || contains(F.g,at_cos) || contains(F.g,at_tan));
   F.order=number?o_number:F.trig?o_trig:o_plain;
@@ -3574,7 +3575,71 @@ static __attribute__((noinline)) void unit_convert(char * buf,int cap){
   strcpy(buf,s.c_str());
 }
 #endif
+// (DeltaCE) solutions a-b and a+b (b with a root or i, a rational: x=-3-sqrt(13), x=-3+sqrt(13); or a 0) as one,
+// x=-3±sqrt(13), as textbooks write them; (1±sqrt(5))/2 over their denominator. The others as they
+// are, each x=value, sep between them. "" when none pairs (delta.cc's card too)
+std::string answer_pm(const giac::gen & x,const giac::vecteur & v,const char * sep){
+  using namespace giac;
+  const unsigned n=v.size();
+  if (n<2 || n>8) return "";
+  char used[8]={0};
+  std::string r;
+  bool any=false;
+  for (unsigned i=0;i<n;++i){
+    if (used[i]) continue;
+    unsigned j=i+1;
+    gen s,d;
+    for (;j<n;++j){
+      if (used[j]) continue;
+      s=ratnormal((v[i]+v[j])/2,contextptr); d=ratnormal((v[j]-v[i])/2,contextptr);
+      if ((s.type==_INT_ || s.type==_ZINT || s.type==_FRAC) && ((d.type!=_INT_ && d.type!=_ZINT && d.type!=_FRAC) || (is_zero(s) && !is_zero(d)))) break; // (x=±3 too)
+    }
+    if (!r.empty()) r+=sep;
+    r+=x.print(contextptr); r+='=';
+    if (j==n){ r+=v[i].print(contextptr); continue; }
+    used[j]=1; any=true;
+    const gen e=evalf(d,1,contextptr);
+    if ((e.type==_DOUBLE_ && e._DOUBLE_val<0) || (e.type==_CPLX && e._CPLXptr[1].type==_DOUBLE_ && e._CPLXptr[1]._DOUBLE_val<0)) d=-d;
+    const gen q=_denom(s,contextptr);
+    const bool over=!is_one(q) && q==_denom(d,contextptr); // ((1±sqrt(5))/2)
+    gen a=over?ratnormal(s*q,contextptr):s,b=over?ratnormal(d*q,contextptr):d;
+    if (over) r+='(';
+    if (!is_zero(a)) r+=a.print(contextptr);
+    r+="\xc2\xb1";
+    const bool sum=b.is_symb_of_sommet(at_plus);
+    if (sum) r+='(';
+    r+=b.print(contextptr);
+    if (sum) r+=')';
+    if (over){ r+=")/"; r+=q.print(contextptr); }
+  }
+  return any?r:std::string();
+}
+// a line with ± (an answer copied, its forms: x=-3±sqrt(13)): each part with one, its - and its +
+// (x=-3-sqrt(13),x=-3+sqrt(13)), giac's
+static std::string pm_both(const char * buf){
+  std::string r;
+  for (int i=0,d=0,b=0;;++i){
+    const char c=buf[i];
+    if (c=='(' || c=='[') ++d; else if ((c==')' || c==']') && d) --d;
+    if (c && (c!=',' || d)) continue;
+    std::string p(buf+b,i-b);
+    const size_t k=p.find("\xc2\xb1");
+    if (!r.empty()) r+=',';
+    if (k==std::string::npos) r+=p;
+    else {
+      std::string m(p.c_str(),k),q(p.c_str(),k);
+      m+='-';
+      if (k && p[k-1]!='=' && p[k-1]!='(') q+='+'; // (x=±sqrt(2): x=sqrt(2); giac read x=+sqrt(2) as x='+')
+      m+=p.c_str()+k+2; q+=p.c_str()+k+2;
+      r+=m; r+=','; r+=q;
+    }
+    if (!c) break;
+    b=i+1;
+  }
+  return r;
+}
 void answer_prepass(char * buf,int cap,bool focus){
+  if (strstr(buf,"\xc2\xb1")){ const std::string r=pm_both(buf); if ((int)r.size()<cap) strcpy(buf,r.c_str()); }
 #if defined FLOWCE_STEPS || defined HOSTGIAC
   phrase_expand(buf,cap); // (DeltaCE) the phrases into giac, first: their boxes get the passes below
 #endif
@@ -4214,6 +4279,15 @@ std::string answer_print(const giac::gen & g,const giac::gen & graw,const answer
   plain_decimal(g,printed);
   if (a.var.type==_IDNT || a.vars.type==_VECT){ // solutions: x=-sqrt(2),x=sqrt(2), not
     strip_equation_parens(printed);              // x=(-sqrt(2)),x=(sqrt(2))
+    if (a.var.type==_IDNT && g.type==_VECT){ // (DeltaCE) x=-3±sqrt(13)
+      vecteur v;
+      for (unsigned i=0;i<g._VECTptr->size();++i){
+        const gen & e=(*g._VECTptr)[i];
+        if (e.is_symb_of_sommet(at_equal) && e._SYMBptr->feuille[0]==a.var) v.push_back(e._SYMBptr->feuille[1]);
+      }
+      const std::string pm=v.size()==g._VECTptr->size()?answer_pm(a.var,v,", "):std::string();
+      if (!pm.empty()) printed=pm;
+    }
     chain_inequalities(printed);
   }
   bool poly=true; // (DeltaCE: a polynomial's letters only; expanding ln, atan and radicals took 20 s on the calculator, integrate(2/(x^4+5),x))
