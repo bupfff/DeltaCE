@@ -287,7 +287,7 @@ int focus_steps_able(const char * s, const char * ans) {
 // Labels, names and rules at the margin X; the math in groups (an equation and the lines going
 // on with it, the working of a step), each centered as a block.
 enum { Y0 = 18, X = 14, XR = 306, W = XR - X, LVMIN = 6, LVWRAP = 5 };
-enum { K_HEAD, K_LINE, K_LABEL, K_TITLE, K_FORM, K_WORK, K_EQ, K_BOX, K_ANS, K_TEXT, K_MATH, K_TABLE, K_CHIP, K_NUMLINE };
+enum { K_HEAD, K_LINE, K_LABEL, K_TITLE, K_FORM, K_WORK, K_EQ, K_BOX, K_ANS, K_TEXT, K_MATH, K_TABLE, K_CHIP, K_NUMLINE, K_PIC };
 // (K_TEXT: a text of the analysis, num 0 gray (a label, " or "), 1 ink; K_MATH: its math beside a label;
 // K_TABLE: a synthetic division's table, steps_table's text; K_CHIP: the method, F4 the next one)
 struct item {
@@ -514,6 +514,89 @@ static void draw_numline(const item & it, int y, int bg) {
     l = q;
   }
 }
+// (DeltaCE) a picture on the Δ card (delta.cc pic): the unit circle with the solutions' angles,
+// a box plot, a parabola or an ellipse in a small window with its vertex or center labeled
+static const char * pfield(const char * p) { do ++p; while (*p && *p != '\t'); return p; } // the next field's tab
+static void plabel(const char * l, int x, int y, int center, int bg) { // the math up to the next tab, centered or from x
+  const char * q = l;
+  while (*q && *q != '\t') ++q;
+  mi_layout L;
+  lay(l, q - l, 3, L);
+  ui_math_draw(L, l, 3, center ? x - L.width / 2 : x, y + (L.asc - L.desc) / 2, 0, UC_INK, bg, UC_ACC);
+}
+static int pic_xy[2 * 49]; // (a curve's points: on the stack, the frame's far slots took 9 bytes an access)
+static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
+  double v[8];
+  int n = 0;
+  const char * p = it.s + 1;
+  const int need = it.s[0] == 'b' ? 5 : it.s[0] == 'p' ? 3 : it.s[0] == 'e' ? 4 : 0; // (then the labels)
+  for (; *p == '\t' && n < need; p = pfield(p)) v[n++] = strtod(p + 1, 0);
+  const unsigned char * ac = ui_ramp(0, UC_ACC, bg), * sb = ui_ramp(0, UC_SUB, bg);
+  const int ln = ui_col(0, UC_LINE), BW = 150, BH = 72, bx = it.x + (it.w - BW) / 2, by = y + 4, cx = it.x + it.w / 2, cy = y + 42;
+  int * xy = pic_xy;
+  if (it.s[0] == 'u') { // the unit circle, the angles' radii and points, their labels outside
+    const int R = 30;
+    ui_fill(cx - R - 8, cy, 2 * R + 17, 1, ln);
+    ui_fill(cx, cy - R - 8, 1, 2 * R + 17, ln);
+    for (int i = 0; i <= 48; ++i) { xy[2 * i] = (int)(16 * (cx + R * cos(i * M_PI / 24))); xy[2 * i + 1] = (int)(16 * (cy - R * sin(i * M_PI / 24))); }
+    ui_poly16(xy, 49, 16, sb);
+    for (; *p == '\t'; p = pfield(pfield(p))) {
+      const double t = strtod(p + 1, 0), c = cos(t), s = sin(t);
+      const int px = cx + (int)(R * c), py = cy - (int)(R * s);
+      ui_seg16(16 * cx, 16 * cy, 16 * px, 16 * py, 24, ac);
+      ui_rrect(0, px - 3, py - 3, 7, 7, 3, UC_ACC, bg);
+      const char * l = pfield(p);
+      if (*l == '\t') plabel(l + 1, cx + (int)((R + 22) * c), cy - (int)((R + 14) * s), 1, bg);
+    }
+    return;
+  }
+  if (it.s[0] == 'b' && n == 5 && v[4] > v[0]) { // whiskers, the box from Q1 to Q3, the median; the five values under them
+    int X[5], last = -100;
+    for (int i = 0; i < 5; ++i) X[i] = it.x + 24 + (int)((v[i] - v[0]) / (v[4] - v[0]) * (it.w - 48));
+    const int m = y + 26;
+    ui_fill(X[0], m, X[1] - X[0], 1, ln); ui_fill(X[3], m, X[4] - X[3] + 1, 1, ln);
+    ui_fill(X[0], m - 6, 1, 13, ln); ui_fill(X[4], m - 6, 1, 13, ln);
+    ui_rrect(0, X[1], m - 11, X[3] - X[1] + 1, 23, 2, UC_ACCSOFT, bg);
+    ui_rframe(0, X[1], m - 11, X[3] - X[1] + 1, 23, 2, UC_ACC, bg);
+    ui_fill(X[2], m - 11, 2, 23, ui_col(0, UC_ACC));
+    for (int i = 0; i < 5 && *p == '\t'; ++i, p = pfield(p))
+      if (X[i] - last >= 30) { plabel(p + 1, X[i], m + 30, 1, bg); last = X[i]; }
+    return;
+  }
+  // a parabola y = a(x-h)^2+k (to its zeros and past, or 2/sqrt|a| each side), or an ellipse: a window
+  // around it with the axes when they are in it, the vertex or center as a point and its label
+  double x0, x1, y0, y1;
+  const bool par = it.s[0] == 'p';
+  if (par && n == 3 && v[0] != 0) {
+    const double a = v[0], h = v[1], k = v[2], s = a * k < 0 ? 1.6 * sqrt(-k / a) : 2 / sqrt(fabs(a)), ye = a * s * s + k;
+    x0 = h - s; x1 = h + s;
+    y0 = k < ye ? k : ye; y1 = k < ye ? ye : k;
+    if (y0 > 0) y0 = 0;
+    if (y1 < 0) y1 = 0;
+  }
+  else if (!par && n == 4 && v[2] > 0 && v[3] > 0) {
+    const double sc = fmin(BW / (2.6 * v[2]), BH / (2.6 * v[3])), hw = BW / 2 / sc, hh = BH / 2 / sc;
+    x0 = v[0] - hw; x1 = v[0] + hw; y0 = v[1] - hh; y1 = v[1] + hh;
+  }
+  else return;
+  if (y1 <= y0) y1 = y0 + 1;
+#define PX(X) (bx + (int)(((X) - x0) / (x1 - x0) * BW))
+#define PY(Y) (by + BH - (int)(((Y) - y0) / (y1 - y0) * BH))
+  if (y0 <= 0 && y1 >= 0) ui_fill(bx, PY(0), BW + 1, 1, ln);
+  if (x0 <= 0 && x1 >= 0) ui_fill(PX(0), by, 1, BH + 1, ln);
+  for (int i = 0; i <= 48; ++i) {
+    double X, Y;
+    if (par) { X = x0 + (x1 - x0) * i / 48; Y = v[0] * (X - v[1]) * (X - v[1]) + v[2]; }
+    else { X = v[0] + v[2] * cos(i * M_PI / 24); Y = v[1] + v[3] * sin(i * M_PI / 24); }
+    xy[2 * i] = 16 * bx + (int)(16 * (X - x0) / (x1 - x0) * BW); xy[2 * i + 1] = 16 * (by + BH) - (int)(16 * (Y - y0) / (y1 - y0) * BH);
+  }
+  ui_poly16(xy, 49, 28, ac);
+  const int px = PX(v[par]), py = PY(v[par + 1]); // (the vertex h, k; the center)
+  ui_rrect(0, px - 3, py - 3, 7, 7, 3, UC_INK, bg);
+  if (*p == '\t') plabel(p + 1, px + 7, par && v[0] < 0 ? py + 10 : py - 8, 0, bg);
+#undef PX
+#undef PY
+}
 static void draw_table(const item & it, int y, int bg) {
   short cw[16], ra[4], rh[4], cx[16];
   int nc, nr;
@@ -690,6 +773,7 @@ static void draw_item(const item & it, int y, int bg) { // y: its top on the scr
   case K_BOX: ui_rrect(0, x, y, it.w, it.h, 8, UC_ACCSOFT, bg); return;
   case K_TABLE: draw_table(it, y, bg); return;
   case K_NUMLINE: draw_numline(it, y, bg); return;
+  case K_PIC: draw_pic(it, y, bg); return;
   case K_CHIP: { // (as the console's forms chip)
     ui_rrect(0, x, y, it.w, it.h, 6, UC_ACCSOFT, bg);
     const int w1 = ui_draw_text(&ui_tb9, it.s, -1, x + 6, y + it.base, ui_ramp(0, UC_ACC, UC_ACCSOFT), 0);
@@ -901,6 +985,7 @@ static __attribute__((noinline)) void lay_report(const std::vector<an_line> & v)
     const an_line & l = v[i];
     if (l.kind == AN_HEAD) y += add_math(l.math.c_str(), l.math.size(), X, y, W, 2, K_HEAD) + 14;
     else if (l.kind == AN_NUMLINE) { put(K_NUMLINE, dup(l.math.c_str(), l.math.size()), X, y, W, 40, 0, 3); y += 44; }
+    else if (l.kind == AN_PIC) { put(K_PIC, dup(l.math.c_str(), l.math.size()), X, y, W, 84, 0, 3); y += 88; }
     else if (l.kind == AN_SECTION) section(l.text, 0, y);
     else y = row(l, y) + 9;
   }

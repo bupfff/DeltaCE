@@ -1177,6 +1177,7 @@ void do_run(const char * s){
   char * story=0;
   struct freer story_freed={0};
   if (phrase_is_find(s)){
+    phrase_roles_clear(); // (the story's facts give its letters their roles again)
     int len=0;
     bool first=true;
     for (int l=Last_Line-1;l>=0;--l){

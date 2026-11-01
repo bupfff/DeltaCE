@@ -23,4 +23,6 @@ const char * phrase_at(int i, int * na, int * group, const char ** ex);
 extern const char * phrase_story;
 // nonzero: an equation is put into giac bare, not in ph_fact(...) (a story's facts, for find)
 extern int phrase_bare;
+// the roles of a story's letters are forgotten (the console, before it gathers a story's facts)
+void phrase_roles_clear();
 #endif

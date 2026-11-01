@@ -81,11 +81,13 @@ LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -inline-threshold=-10
 # (2,561,255 B vs 2,712,385); inline thresholds -10 and -20 save 56 and 76 KB more but cost
 # 4.7% and 9.6% of time (calls to small helpers such as unary_function_ptr::operator==).
 # DeltaCE 1.2: threshold 0 saves 29 KB at no measurable cost (the quick suite's median time 1.00,
-# the same answers); -5 saves 36 KB but costs 4%.
+# the same answers); -5 saves 36 KB but costs 4%. DeltaCE 2.2.1 (2026-11-01): -10 saves 29 KB more
+# than 0 and the 728 problems take 1.3% LESS time (the flash cache holds more of the code); the
+# graph, typing and the session the same: -10.
 CEDEV_MAJOR := $(firstword $(subst ., ,$(patsubst v%,%,$(shell cedev-config --version 2>/dev/null))))
 ifeq ($(shell [ "0$(CEDEV_MAJOR)" -ge 15 ] && echo y),y)
 CXXFLAGS += -include src/toolchain_compat.h
-LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -z80-frame-bias-policy=auto -mllvm -inline-threshold=0
+LTOFLAGS = $(CFLAGS) -Xclang -fmerge-functions -mllvm -z80-frame-bias-policy=auto -mllvm -inline-threshold=-10
 endif
 
 # giac's files inline as little as the LTO step (a small helper stays a call on the eZ80): 24 KB

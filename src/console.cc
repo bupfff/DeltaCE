@@ -2552,15 +2552,43 @@ static int console_answer_actions(){
 // (focus_delta, delta.cc); a move picked is entered as a line (its graph: plot(...)), a move with
 // steps opens them once its answer shows (delta_steps: an enter for Console_GetKey). -1: no line
 static int delta_steps;
+// the part of the line s the caret c is in: the innermost brackets around it (in a call of several
+// arguments, its argument); all of s when only closing brackets follow the caret (it was just
+// typed) or it is in none. Its length, its start in *at
+static int delta_part(const char * s,int c,int * at){
+  const int n=strlen(s);
+  int k=c,d=0,o=-1,e;
+  *at=0;
+  while (k>=0 && k<n && (s[k]==')' || s[k]==']')) ++k;
+  if (c<0 || k>=n) return n;
+  for (int i=c-1;i>=0 && o<0;--i)
+    if (s[i]==')' || s[i]==']') ++d;
+    else if (s[i]=='(' || s[i]=='[') { if (!d) o=i; else --d; }
+  if (o<0) return n;
+  for (e=o+1,d=0;e<n;++e)
+    if (s[e]=='(' || s[e]=='[') ++d;
+    else if (s[e]==')' || s[e]==']') { if (!d) break; --d; }
+  int a=o+1,b=e;
+  for (int i=o+1,dd=0;i<e;++i)
+    if (s[i]=='(' || s[i]=='[') ++dd;
+    else if (s[i]==')' || s[i]==']') --dd;
+    else if (s[i]==',' && !dd) { if (i<c) a=i+1; else { b=i; break; } }
+  if (b<=a) return n;
+  *at=a;
+  return b-a;
+}
 static int console_delta(){
   std::string in;
   const char * last=0; // (the answer shown, when a line is typed: compared with it)
   char cmd[512],how=0;
   int more=0; // (on the answer shown, an expression in its letter: also the list of all its actions)
   if (Current_Line==Last_Line && Edit_Line && Edit_Line[0]){
-    in=(const char *)Edit_Line;
+    int at;
+    const char * e=(const char *)Edit_Line;
+    const int n=delta_part(e,console_caret(),&at);
+    in.assign(e+at,n);
     const int rl=focus_result_line();
-    if (rl>=0 && Line[rl].str) last=(const char *)Line[rl].str;
+    if (rl>=0 && Line[rl].str && n==(int)strlen(e)) last=(const char *)Line[rl].str; // (the whole line only)
   }
   else {
     const int l=Current_Line<Last_Line?Current_Line:focus_result_line();

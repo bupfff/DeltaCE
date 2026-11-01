@@ -3145,6 +3145,9 @@ static bool radicals_product(const giac::gen & g){ // a product with two square 
     n+=it->is_symb_of_sommet(at_pow) && it->_SYMBptr->feuille.type==_VECT && it->_SYMBptr->feuille[1]==fraction(1,2);
   return n>=2;
 }
+#if defined FLOWCE_STEPS || defined HOSTGIAC
+bool phrase_answer(const giac::gen & g,std::string & msg); // phrase.cc
+#endif
 static giac::gen textbook_answer(giac::gen g){
   using namespace giac;
   const bool number=lidnt(g).empty() || evalf(g,1,contextptr).type==_DOUBLE_ || evalf(g,1,contextptr).type==_CPLX;
@@ -3990,6 +3993,9 @@ void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen
     msg="undefined (a division by 0)";
   if (msg.empty() && is_undef(g) && g.type!=_STRNG && g.type!=_VECT && !a.typed_limit && !a.typed_sum) // (DeltaCE) 0/0: giac's undef (not its errors)
     msg="undefined";
+#if defined FLOWCE_STEPS || defined HOSTGIAC
+  if (msg.empty()) phrase_answer(g,msg); // (DeltaCE) a story's find in words: width w = 5, ...
+#endif
   if (msg.empty() && (g==plus_inf || g==minus_inf) && a.gin.is_symb_of_sommet(at_sum)) // a series
     msg=g==plus_inf?"diverges (to +infinity)":"diverges (to -infinity)"; // that diverges says so
   if (!msg.empty()) // "diverges": g is not shown (evalf below re-ran giac's sum of it: 40 s)

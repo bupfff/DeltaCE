@@ -9,7 +9,7 @@
 // A line of the report: a section (text: its title), or a row: its label (text) and its math, the
 // items (giac syntax; text after \1) separated by '\n', drawn joined by sep (", ", " or ", " ");
 // no math: the label alone, as a sentence.
-enum { AN_SECTION, AN_ROW, AN_HEAD, AN_NUMLINE }; // (DeltaCE: AN_NUMLINE, delta.cc's number line: its math as numline_of encodes it)
+enum { AN_SECTION, AN_ROW, AN_HEAD, AN_NUMLINE, AN_PIC }; // (DeltaCE: AN_NUMLINE, delta.cc's number line: its math as numline_of encodes it)
 enum { AN_COMMA, AN_OR, AN_SPACE };
 struct an_line { unsigned char kind, sep; const char * text; std::string math; };
 

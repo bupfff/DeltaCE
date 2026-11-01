@@ -108,6 +108,32 @@ const char * phrase_words(const char * name, int nlen, int na) {
   return i < 0 ? 0 : PH[i].words;
 }
 static bool namec(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
+// what the letters in a story's facts stand for (find answers in words: "width w = 5"): the roles
+// of the phrases' blanks, recorded as their facts are put into giac
+static const char * const ROLES[][2] = {
+  {"ph_perimeter", "length\0width\0perimeter"}, {"ph_rectarea", "length\0width\0area"},
+  {"ph_drt", "distance\0rate\0time"}, {"ph_cost", "number\0price\0cost"},
+  {"ph_older", "older age\0years\0younger age"}, {"ph_consecutive", "count\0first\0sum"},
+  {"ph_worth", "number\0price\0number\0price"}, {"ph_mix", "amount\0percent\0amount\0percent"}};
+static char rv[8][4];
+static const char * rr[8];
+static int rn;
+void phrase_roles_clear() { rn = 0; }
+static void record_roles(const char * name, const char * const * a, const int * e, int na) {
+  for (unsigned j = 0; j < sizeof(ROLES) / sizeof(ROLES[0]); ++j) {
+    if (strcmp(ROLES[j][0], name)) continue;
+    const char * r = ROLES[j][1];
+    for (int k = 0; k < na; ++k, r += strlen(r) + 1) {
+      bool id = e[k] >= 1 && e[k] <= 3 && ((a[k][0] | 32) >= 'a' && (a[k][0] | 32) <= 'z');
+      for (int c = 1; id && c < e[k]; ++c) id = namec(a[k][c]);
+      if (!id) continue;
+      int i = 0;
+      while (i < rn && (strncmp(rv[i], a[k], e[k]) || rv[i][e[k]])) ++i;
+      if (i == rn && rn < 8) ++rn;
+      if (i < rn) { memcpy(rv[i], a[k], e[k]); rv[i][e[k]] = 0; rr[i] = r; }
+    }
+  }
+}
 const char * phrase_at(int i, int * na, int * group, const char ** ex) {
   if (i < 0 || i >= NPH) return 0;
   *na = PH[i].na; *group = PH[i].group; *ex = PH[i].ex;
@@ -211,6 +237,7 @@ bool phrase_expand(char * buf, int cap) {
     if (p[j] != ')' || na > 4) break;
     const int i = lookup(p, n, na);
     if (i < 0) break;
+    record_roles(PH[i].name, a, e, na);
     std::string r;
     // the line through two points with the same x (typed alike): x = that x, not a division by 0
     const char * tm = !strcmp(PH[i].name, "ph_line") && e[0] == e[2] && !strncmp(a[0], a[2], e[0]) ? "x=%1" : PH[i].tmpl;
@@ -234,5 +261,27 @@ bool phrase_expand(char * buf, int cap) {
   }
   phrase_story = told;
   return any;
+}
+// a find's answer, [w, l] = [5, 13] (ph_fact of two lists), in words when its letters have
+// roles: "width w = 5, length l = 13"
+bool phrase_answer(const gen & g, std::string & msg) {
+  if (!rn || !g.is_symb_of_sommet(at_of)) return false;
+  const gen & f = g._SYMBptr->feuille;
+  if (f.type != _VECT || f._VECTptr->size() != 2 || f[0].print(contextptr) != "ph_fact") return false;
+  const gen & a = f[1];
+  if (a.type != _VECT || a._VECTptr->size() != 2 || a[0].type != _VECT || a[1].type != _VECT || a[0]._VECTptr->size() != a[1]._VECTptr->size()) return false;
+  std::string m;
+  bool named = false;
+  for (unsigned i = 0; i < a[0]._VECTptr->size(); ++i) {
+    const std::string v = a[0][i].print(contextptr);
+    if (i) m += ", ";
+    for (int k = 0; k < rn; ++k)
+      if (v == rv[k]) { m += rr[k]; m += ' '; named = true; break; }
+    gen x = a[1][i]; // (10.0 from 0.25 and 0.1: 10)
+    if (x.type == _DOUBLE_ && x._DOUBLE_val == (int)x._DOUBLE_val) x = (int)x._DOUBLE_val;
+    m += v.c_str(); m += " = "; m += x.print(contextptr).c_str();
+  }
+  if (named) msg = m;
+  return named;
 }
 #endif

@@ -203,6 +203,16 @@ static NOINL std::string dec(const gen & g,int nd=4){
   if (neg && s!="0") s.insert(0,"-");
   return s;
 }
+// a picture on the card (focus_steps.cc draws it): its kind, then its numbers (decimals) and
+// labels (math), a tab before each. u: the unit circle, angle and label pairs; b: a box plot,
+// min Q1 median Q3 max then their labels; p: a parabola y=a(x-h)^2+k, a h k then the vertex's
+// label; e: an ellipse (a circle), h k rx ry then the center's label
+static NOINL std::string pic(char kind,const char * fs,int n){ // (its numbers: n formulas)
+  std::string m(1,kind);
+  for (int i=0;i<n;++i){ m+='\t'; m+=dec(fx(fs),5); fs+=strlen(fs)+1; }
+  return m;
+}
+static NOINL void picpt(std::string & m,const char * h,const char * k){ m+='\t'; m+=pt(fx(h),fx(k)); line(AN_PIC,0,m); }
 static NOINL std::string approx(const gen & g){ std::string m("\n\1\xe2\x89\x88\n"); m+=dec(g); return m; } // ≈ 7.6
 // q as a percent: whole, else its decimal (7/3: 233.3333%)
 static NOINL void percent(const gen & q){
@@ -414,6 +424,7 @@ static NOINL void function_of(const gen & typed,const gen & f0,const gen & x){
     let("qk",fx(k)); // (inside a sum giac leaves 6-25/4 as it is)
     words("Real zeros",d>0?"two":d==0?"one (a double zero)":"none");
     facts(T_quad3);
+    { std::string m=pic('p',"qa\0-qb/(2*qa)\0qk",3); picpt(m,"-qb/(2*qa)","qk"); }
     factored(f);
   }
   else if (n>2){
@@ -586,6 +597,11 @@ static NOINL bool trig_solutions(const gen & eq,const gen & x){
   line(AN_ROW,"General solution",g,AN_OR);
   say("k is any integer.");
   line(AN_ROW,"In [0, 2\xcf\x80)",m,AN_OR);
+  if (!d.empty() && d.size()<=6){
+    std::string u("u");
+    for (unsigned i=0;i<d.size();++i){ u+='\t'; u+=dec(gen(d[i]),5); u+='\t'; u+=pitext(in[i]); }
+    line(AN_PIC,0,u);
+  }
   rel_moves(eq,x);
   return true;
 }
@@ -806,6 +822,7 @@ static NOINL void curve(const gen & eq,const gen & x,const gen & y){
         say(hor?"An ellipse, wider than tall.":"An ellipse, taller than wide.");
         facts(T_ell); facts(hor?T_ellh:T_ellv);
       }
+      if (sa>0 && sc>0){ std::string m=pic('e',"qh\0qk\0sqrt(qu)\0sqrt(qv)",4); picpt(m,"qh","qk"); }
       else if (sa==0 || sc==0) say("Two crossing lines (a degenerate conic).");
       else {
         const bool hor=sa>0; // opens left and right
@@ -930,6 +947,13 @@ static NOINL void data_of(const gen & L){
   row("Maximum",v[n-1]);
   row("Range",ev(v[n-1]-v[0]));
   row("IQR",iqr);
+  if (n>1){
+    let("qq",q1); let("qr",q3); let("qs",med(v,0,n));
+    std::string m=pic('b',"min(ql)\0qq\0qs\0qr\0max(ql)",5);
+    const gen B[5]={v[0],q1,fx("qs"),q3,v[n-1]};
+    for (int i=0;i<5;++i){ m+='\t'; m+=P(B[i]); }
+    line(AN_PIC,0,m);
+  }
   if (n>1){
     line(AN_ROW,"Sample SD, s",dec(fx("stddev(ql)*sqrt(qn/(qn-1))")));
     line(AN_ROW,"Population SD, \xcf\x83",dec(fx("stddev(ql)")));
