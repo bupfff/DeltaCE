@@ -3453,13 +3453,11 @@ int Console_GetKey(){
       { // (DeltaCE) a phrase's box made a list by a comma (above) shrinks back as it grew: the comma
         // before an empty item goes, the brackets too when one item is left ([80,|] -> 80|); at the
         // list's start an empty item goes ([|,90] -> |90) and a list of several stays whole, the
-        // caret leaves it (its items unwrapped are boxes more: ph_percentof(15,80,90) is no phrase).
-        // The score needed after scores [..] takes a list: its brackets stay
+        // caret leaves it (its items unwrapped are boxes more: ph_percentof(15,80,90) is no phrase)
         int nb,o=console_opener(s,p,&nb);
         const int q=o>0 && s[o]=='[' && (s[o-1]=='(' || s[o-1]==',')?console_opener(s,o,&nb):-1;
         int e=o,n=0,at=-1; // the list's ], its commas, the char deleted
         if (q>=0 && s[q]=='(' && !strncmp(s+nb,"ph_",3)){
-          const bool keep=!strncmp(s+nb,"ph_needscore(",13);
           for (int dd=0;s[e];++e)
             if (s[e]=='(' || s[e]=='[') ++dd;
             else if ((s[e]==')' || s[e]==']') && !--dd) break;
@@ -3467,10 +3465,10 @@ int Console_GetKey(){
           if (s[e]!=']') {} // (unclosed)
           else if (p>o+1 && s[p-1]==',' && (s[p]==',' || p==e)) at=--p; // [80,|] [80,|,90]
           else if (p==o+1 && s[p]==',') at=p;                         // [|,90]
-          else if (p==o+1 && s[p]!=']' && (n || keep)) o=-1;          // [|80,90]: before it
+          else if (p==o+1 && s[p]!=']' && n) o=-1;                    // [|80,90]: before it
           if (at>=0){
             memmove(s+at,s+at+1,strlen(s+at));
-            if (!--n && !keep){ // one item: no list
+            if (!--n){ // one item: no list
               memmove(s+e-1,s+e,strlen(s+e)+1);
               memmove(s+o,s+o+1,strlen(s+o));
               --p;

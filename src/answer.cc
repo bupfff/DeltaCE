@@ -3146,7 +3146,7 @@ static bool radicals_product(const giac::gen & g){ // a product with two square 
   return n>=2;
 }
 #if defined FLOWCE_STEPS || defined HOSTGIAC
-bool phrase_answer(const giac::gen & g,std::string & msg); // phrase.cc
+bool phrase_answer(giac::gen & g,std::string & msg); // phrase.cc
 #endif
 static giac::gen textbook_answer(giac::gen g){
   using namespace giac;
@@ -3934,6 +3934,42 @@ static bool si_compound(const giac::gen & g){
   }
   return op;
 }
+// a unit's value in SI and its kind: 1_min is 60, kind s; false: no unit giac knows (phrase.cc too)
+bool unit_si(const giac::gen & q,giac::gen & si,giac::gen & kind){
+  using namespace giac;
+  const gen m=mksa_reduce(q,contextptr);
+  if (!m.is_symb_of_sommet(at_unit) || m._SYMBptr->feuille.type!=_VECT || m._SYMBptr->feuille._VECTptr->size()!=2) return false;
+  si=exact(m._SYMBptr->feuille[0],contextptr);
+  kind=m._SYMBptr->feuille[1];
+  return true;
+}
+// a unit above and below cancels (giac keeps it): 150_mi/(50_mi/_h) is 3_h, not 3_(mi*h/mi), and
+// two of one kind are one (60_mi/_h*30_min: the min in h, 30_mi); else nothing changes (usimplify
+// would make SI: 10800_s). A list's, each
+static void unit_tidy(giac::gen & g){
+  using namespace giac;
+  if (g.type==_VECT){
+    vecteur v=*g._VECTptr;
+    for (unsigned i=0;i<v.size();++i) unit_tidy(v[i]);
+    g=gen(v,g.subtype);
+    return;
+  }
+  if (!g.is_symb_of_sommet(at_unit) || g._SYMBptr->feuille.type!=_VECT || g._SYMBptr->feuille._VECTptr->size()!=2) return;
+  const gen & f=g._SYMBptr->feuille;
+  gen u=exact(f[1],contextptr),si,k,sj,kj; // (its powers are decimals: mi^-1.0)
+  const vecteur v=lidnt(u);
+  for (unsigned i=0;i<v.size();++i)
+    if (unit_si(symbolic(at_unit,makesequence(1,v[i])),si,k))
+      for (unsigned j=i+1;j<v.size();++j)
+        if (unit_si(symbolic(at_unit,makesequence(1,v[j])),sj,kj) && kj==k) u=subst(u,v[j],sj/si*v[i],false,contextptr);
+  u=ratnormal(u,contextptr);
+  const vecteur w=lidnt(u);
+  if (w.size()>=v.size()) return;
+  const gen c=subst(u,w,vecteur(w.size(),1),false,contextptr); // its number (mi/60: 1/60)
+  const gen x=f[0]*c;
+  u=ratnormal(u/c,contextptr);
+  g=is_one(u)?x:symbolic(at_unit,makesequence(x,u));
+}
 static bool has_constant(const giac::gen & g){
   const std::string t=g.print(contextptr);
   for (unsigned i=1;i<t.size();++i)
@@ -3944,6 +3980,7 @@ static bool has_constant(const giac::gen & g){
 void answer_after(giac::gen & g,const answer_ctx & a,std::string & msg,giac::gen & graw){
   using namespace giac;
 #ifdef WITH_UNITS
+  unit_tidy(g);
   // (DeltaCE) its constants' values, the unit simplified: 10_kg*_g_ is 98.0665_N, _c_ 2.99792e8_(m/s)
   if (g.type!=_STRNG && has_constant(g)){
     const gen v=_usimplify(mksa_reduce(g,contextptr),contextptr);
