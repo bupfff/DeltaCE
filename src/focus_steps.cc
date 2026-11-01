@@ -525,13 +525,13 @@ static void plabel(const char * l, int x, int y, int center, int bg) { // the ma
   ui_math_draw(L, l, 3, center ? x - L.width / 2 : x, y + (L.asc - L.desc) / 2, 0, UC_INK, bg, UC_ACC);
 }
 static int pic_xy[2 * 49]; // (a curve's points, a sketch's values sorted: on the stack, the frame's
-static float pic_v[100];   // far slots took 9 bytes an access)
+static float pic_v[104];   // far slots took 9 bytes an access)
 static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
   double v[8];
   int n = 0;
   const char * p = it.s + 1;
   const char K = it.s[0];
-  const int need = K == 'b' ? 5 : K == 'p' ? 3 : K == 'e' ? 4 : K == 'h' ? 5 : K == 'l' ? 8 : K == 'z' ? 2 : 0; // (then the labels)
+  const int need = K == 'b' ? 5 : K == 'p' ? 3 : K == 'e' ? 4 : K == 'h' ? 5 : K == 'l' ? 8 : K == 'z' ? 2 : K == 'q' ? 2 : 0; // (then the labels)
   for (; *p == '\t' && n < need; p = pfield(p)) v[n++] = strtod(p + 1, 0);
   const unsigned char * ac = ui_ramp(0, UC_ACC, bg), * sb = ui_ramp(0, UC_SUB, bg);
   const int ln = ui_col(0, UC_LINE), BW = 150, BH = 72, bx = it.x + (it.w - BW) / 2, by = y + 4, cx = it.x + it.w / 2, cy = y + 42;
@@ -567,9 +567,10 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
   }
   if (K == 's') { // a function's sketch: its values over the window, y from their middle 80% (an asymptote's
     // ends leave it), the curve broken where it is undefined or leaves the window far
-    float * Y = pic_v, * S = pic_v + 51;
+    float * Y = pic_v, * S = pic_v + 52;
     int m = 0;
-    for (int i = 0; i < 51 && p[8 * i]; ++i) { unsigned long u = 0; for (int j = 0; j < 8; ++j) { const char c = p[8 * i + j]; u = u << 4 | (c <= '9' ? c - '0' : c - 'a' + 10); } memcpy(Y + i, &u, 4); }
+    int nv = 0;
+    for (int i = 0; i < 52 && p[8 * i]; ++i, ++nv) { unsigned long u = 0; for (int j = 0; j < 8; ++j) { const char c = p[8 * i + j]; u = u << 4 | (c <= '9' ? c - '0' : c - 'a' + 10); } memcpy(Y + i, &u, 4); }
     for (int i = 2; i < 51; ++i) if (Y[i] == Y[i]) { int j = m++; while (j && S[j - 1] > Y[i]) { S[j] = S[j - 1]; --j; } S[j] = Y[i]; }
     if (m < 2) return;
     float lo = S[m / 10], hi = S[m - 1 - m / 10];
@@ -588,7 +589,48 @@ static __attribute__((noinline)) void draw_pic(const item & it, int y, int bg) {
       ui_seg16(16 * bx + 16 * BW * (i - 3) / 48, 16 * (by + BH) - (int)(16 * BH * (a - lo) / (hi - lo)),
                16 * bx + 16 * BW * (i - 2) / 48, 16 * (by + BH) - (int)(16 * BH * (b - lo) / (hi - lo)), 28, ac);
     }
+    if (nv == 52 && Y[51] > 0) { // a sinusoid: the midline dashed; the amplitude up from it at a peak, a period from there
+      int im = 2;
+      for (int i = 3; i < 51; ++i) if (Y[i] == Y[i] && Y[i] > Y[im]) im = i;
+      const float top = Y[im], mid = (S[0] + S[m - 1]) / 2, sx = BW / (x1 - x0);
+      const int my = by + BH - (int)(BH * (mid - lo) / (hi - lo)), ty = by + BH - (int)(BH * (top - lo) / (hi - lo));
+      int px = bx + BW * (im - 2) / 48, qx = px + (int)(Y[51] * sx);
+      if (qx > bx + BW) { qx = px; px -= (int)(Y[51] * sx); }
+      for (int x = bx; x < bx + BW; x += 6) ui_fill(x, my, 3, 1, ui_col(0, UC_SUB));
+      ui_fill(px, ty, 1, my - ty + 1, ui_col(0, UC_INK));
+      ui_draw_text(&ui_tr9, "A", -1, px + 3, (ty + my) / 2 + 4, ui_ramp(0, UC_INK, bg), 0);
+      if (px >= bx) {
+        ui_fill(px, ty - 4, qx - px + 1, 1, ui_col(0, UC_INK));
+        ui_fill(px, ty - 6, 1, 5, ui_col(0, UC_INK)); ui_fill(qx, ty - 6, 1, 5, ui_col(0, UC_INK));
+        ui_draw_text(&ui_tr9, "period", -1, (px + qx) / 2 - 14, ty - 7, ui_ramp(0, UC_INK, bg), 0);
+      }
+    }
     ui_clip(c0, c1, c2, c3);
+    return;
+  }
+  if (K == 'q' && n == 2 && v[1] >= 1) { // a fraction as bars of v[1] parts, v[0] of them shaded
+    const int q = (int)v[1], k = (int)((v[0] + q - 1) / q), cw = 228 / q, W = cw * q, x0 = it.x + (it.w - W) / 2;
+    for (int b = 0, done = 0; b < k && b < 3; ++b)
+      for (int j = 0; j < q; ++j, ++done)
+        ui_fill(x0 + j * cw, y + 10 + b * 22, cw - 1, 16, ui_col(0, done < (int)v[0] ? UC_ACC : UC_BG)); // (the card is tinted: empty parts white)
+    return;
+  }
+  if (K == 'f') { // a factor tree: n, then each prime down to the left (accented) and what is left to the right
+    int X = cx - 50, Y0 = y + 11;
+    const char * q = p;
+    if (*q != '\t') return;
+    for (int r = 0; *q == '\t'; ++r) {
+      const char * e = pfield(q);
+      char t[12];
+      int L = e - q - 1;
+      if (L > 11) L = 11;
+      memcpy(t, q + 1, L); t[L] = 0;
+      const int isp = r % 2, row = (r + 1) / 2, tx = isp ? X + 24 * (row - 1) - 16 : X + 24 * row, ty = Y0 + 14 * row;
+      if (r) ui_seg16(16 * (X + 24 * (row - 1)) + (isp ? -40 : 40), 16 * (ty - 12), 16 * tx + (isp ? 40 : -40), 16 * (ty - 9), 16, sb);
+      const bool last = !*e;
+      ui_draw_text(&ui_tb10, t, -1, tx - ui_text_width(&ui_tb10, t, -1) / 2, ty, ui_ramp(0, isp || last ? UC_ACC : UC_INK, bg), 0);
+      q = e;
+    }
     return;
   }
   if (K == 'z' && n == 2) { // the complex plane: the axes, the number as a point and its arrow from 0

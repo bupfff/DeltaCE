@@ -44,7 +44,7 @@ static const phr PH[] = {
   {"ph_leg", 2, 0, 2, "the other leg of a right triangle with hypotenuse\0and leg\0", "sqrt(%1^2-%2^2)", "5,3"},
   {"ph_thirdangle", 2, 0, 2, "the third angle of a triangle with angles\0and\0", "180-%1-%2", "50,60"},
   {"ph_rightangle", 2, 0, 2, "the angle opposite side\0next to side\0(degrees)", "evalf(atan(%1/%2)*180/pi)", "3,4"},
-  {"ph_lawcos", 3, 0, 2, "the third side of sides\0and\0with\0degrees between", "sqrt(%1^2+%2^2-2*%1*%2*cos(%3*pi/180))", "5,7,60"},
+  {"ph_lawcos", 3, 0, 2, "the third side of sides\0and\0with\0degrees between", "evalf(sqrt(%1^2+%2^2-2*%1*%2*cos(%3*pi/180)))", "5,7,60"},
   {"ph_elevation", 2, 0, 2, "the height at an angle of elevation of\0degrees from\0away", "%2*tan(%1*pi/180)", "30,50"},
   {"ph_circlearea", 1, 0, 2, "the area of a circle of radius\0", "pi*%1^2", "3"},
   {"ph_circumference", 1, 0, 2, "the circumference of a circle of radius\0", "2*pi*%1", "3"},
@@ -117,7 +117,7 @@ static const char * const ROLES[][2] = {
   {"ph_worth", "number\0price\0number\0price"}, {"ph_mix", "amount\0percent\0amount\0percent"},
   {"ph_sum", "first number\0second number\0sum"}, {"ph_difference", "first number\0second number\0difference"},
   {"ph_product", "first number\0second number\0product"}};
-static char rv[8][4];
+static char rv[8][4], ru[8][14]; // (ru: its unit, from a box of its fact: 36_cm; an area's cm^2: cm)
 static const char * rr[8];
 static int rn;
 void phrase_roles_clear() { rn = 0; }
@@ -125,6 +125,16 @@ static void record_roles(const char * name, const char * const * a, const int * 
   for (unsigned j = 0; j < sizeof(ROLES) / sizeof(ROLES[0]); ++j) {
     if (strcmp(ROLES[j][0], name)) continue;
     const char * r = ROLES[j][1];
+    char u[14] = "";
+    for (int k = 0; k < na && !*u && strcmp(name, "ph_drt"); ++k) // (a distance, a rate, a time: units of their own)
+      for (int c = 0; c < e[k]; ++c)
+        if (a[k][c] == '_' && c + 1 < e[k] && (a[k][c + 1] | 32) >= 'a' && (a[k][c + 1] | 32) <= 'z') {
+          int L = e[k] - c;
+          if (L > 2 && a[k][c + L - 2] == '^') L -= 2; // (cm^2: cm)
+          if (L > 13) L = 13;
+          memcpy(u, a[k] + c, L); u[L] = 0;
+          break;
+        }
     for (int k = 0; k < na; ++k, r += strlen(r) + 1) {
       bool id = e[k] >= 1 && e[k] <= 3 && ((a[k][0] | 32) >= 'a' && (a[k][0] | 32) <= 'z');
       for (int c = 1; id && c < e[k]; ++c) id = namec(a[k][c]);
@@ -132,7 +142,7 @@ static void record_roles(const char * name, const char * const * a, const int * 
       int i = 0;
       while (i < rn && (strncmp(rv[i], a[k], e[k]) || rv[i][e[k]])) ++i;
       if (i < rn || rn == 8) continue; // (the first role a letter gets stays: 'number' over 'first number')
-      memcpy(rv[rn], a[k], e[k]); rv[rn][e[k]] = 0; rr[rn++] = r;
+      memcpy(rv[rn], a[k], e[k]); rv[rn][e[k]] = 0; strcpy(ru[rn], u); rr[rn++] = r;
     }
   }
 }
@@ -196,7 +206,16 @@ static void combine(char * buf, int cap) {
 // find(v): [v, the story's other letters] = their values
 static void find_of(std::string & out, const std::string & v) {
   if (!phrase_story || !*phrase_story) { out = "\"Tell the story first, a fact a line\""; return; }
-  std::string st("["); st += phrase_story; st += ']';
+  std::string st("["); // (its units out, each a 1: 36_cm is 36)
+  for (const char * p = phrase_story; *p; ++p)
+    if (*p == '_' && ((p[1] | 32) >= 'a' && (p[1] | 32) <= 'z')) { // (36_cm: 36*1)
+      const char c = st[st.size() - 1];
+      if (namec(c) || c == ')') st += '*';
+      st += '1';
+      while (namec(p[1])) ++p;
+    }
+    else st += *p;
+  st += ']';
   gen g(st, contextptr);
   vecteur ids = lidnt(g);
   std::string vars("[");
@@ -276,14 +295,17 @@ bool phrase_answer(const gen & g, std::string & msg) {
   bool named = false;
   for (unsigned i = 0; i < a[0]._VECTptr->size(); ++i) {
     const std::string v = a[0][i].print(contextptr);
+    const char * un = "";
     if (i) m += ", ";
     for (int k = 0; k < rn; ++k)
-      if (v == rv[k]) { m += rr[k]; m += ' '; named = true; break; }
+      if (v == rv[k]) { m += rr[k]; m += ' '; un = ru[k]; named = true; break; }
     gen x = a[1][i]; // (10.0 from 0.25 and 0.1: 10)
     if (x.type == _DOUBLE_ && x._DOUBLE_val == (int)x._DOUBLE_val) x = (int)x._DOUBLE_val;
     m += v.c_str(); m += " = "; m += x.print(contextptr).c_str();
+    if (*un) { m += ' '; for (; *un; ++un) if (*un != '_') m += *un; } // (km/h, not _km/_h)
   }
   if (named) msg = m;
+  rn = 0; // (used: the next story gives its letters their roles)
   return named;
 }
 #endif

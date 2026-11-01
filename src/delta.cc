@@ -213,6 +213,7 @@ static NOINL std::string pic(char kind,const char * fs,int n){ // (its numbers: 
   return m;
 }
 static NOINL void pnum(std::string & m,const gen & g){ m+='\t'; m+=dec(ev(g),5); }
+static float sk_T; // a sinusoid's period: the sketch marks it and the amplitude
 // a function's sketch (s): its window, then 49 values, each a float's 8 hex digits (exact, NaN where
 // undefined): [-6, 6], two turns either side for trig, from -1 for logs and roots
 #ifndef HOSTGIAC
@@ -221,11 +222,14 @@ static NOINL void hexf(std::string & m,float v){ unsigned long u; memcpy(&u,&v,4
 static NOINL void sketch(const gen & f,const gen & x){
   float y[49];
   const bool trig=contains(f,at_sin) || contains(f,at_cos) || contains(f,at_tan);
-  const float a=trig?-6.2832f:contains(f,at_ln) || contains(f,at_sqrt) || contains(f,at_log10)?-1.f:-6.f,b=a<-2?-a:9.f;
+  float a=trig?-6.2832f:contains(f,at_ln) || contains(f,at_sqrt) || contains(f,at_log10)?-1.f:-6.f,b=a<-2?-a:9.f;
+  if (sk_T>0){ a=-1.5f*sk_T; b=-a; } // (a sinusoid: three periods)
   if (!focus_graph_sample(f,x,a,b,49,y)) return;
   std::string m("s");
   hexf(m,a); hexf(m,b);
   for (int i=0;i<49;++i) hexf(m,y[i]);
+  if (sk_T>0) hexf(m,sk_T);
+  sk_T=0;
   line(AN_PIC,0,m);
 }
 #else
@@ -254,6 +258,18 @@ static NOINL void integer(const gen & n){
     const vecteur fs=is_op(pf,at_prod) && pf._SYMBptr->feuille.type==_VECT?*pf._SYMBptr->feuille._VECTptr:vecteur(1,pf);
     for (unsigned i=0;i<fs.size();++i) c=c*(is_op(fs[i],at_pow)?fs[i]._SYMBptr->feuille[1]+1:gen(2));
     row("Number of divisors",d.type==_VECT?gen(int(d._VECTptr->size())):ev(c));
+    vecteur pr; // its factor tree (f: n, then each prime and what is left), at most 6 primes
+    for (unsigned i=0;i<fs.size();++i){
+      const bool pw=is_op(fs[i],at_pow);
+      const gen b=pw?fs[i]._SYMBptr->feuille[0]:fs[i],e=pw?fs[i]._SYMBptr->feuille[1]:gen(1);
+      for (int k=0;e.type==_INT_ && k<e.val && pr.size()<7;++k) pr.push_back(b);
+    }
+    if (!prime && pr.size()<=6 && P(a).size()<=9){
+      std::string m("f\t"); m+=P(a);
+      gen r=a;
+      for (unsigned i=0;i+1<pr.size();++i){ r=ev(r/pr[i]); m+='\t'; m+=P(pr[i]); m+='\t'; m+=P(r); }
+      line(AN_PIC,0,m);
+    }
     if (d.type==_VECT){
       if (d._VECTptr->size()<=24){
         std::string m;
@@ -283,6 +299,10 @@ static NOINL void rational(const gen & typed,const gen & q){
   }
   let("qq",q);
   fact("Reciprocal","1/qq");
+  if (d.type==_INT_ && d.val<=24 && is_greater(3,abs(q,CTX),CTX)){ // its bars (q: |p| of d parts shaded)
+    std::string m("q"); pnum(m,abs(p,CTX)); pnum(m,d);
+    line(AN_PIC,0,m);
+  }
 }
 static NOINL void real_number(const gen & typed,const gen & v){
   if (P(typed).find('.')!=std::string::npos){ // a decimal: its fraction
@@ -470,7 +490,7 @@ static NOINL void function_of(const gen & typed,const gen & f0,const gen & x){
       sinus=!tn;
       let("qa",A); let("qb",B); let("qc",at(arg,x,0)); let("qd",D);
       say(tn?"A tangent function.":"A sinusoid: y = A sin(Bx + C) + D.");
-      if (!tn) fact("Amplitude","abs(qa)");
+      if (!tn){ fact("Amplitude","abs(qa)"); double t; if (num(fx("2*pi/abs(qb)"),t)) sk_T=(float)t; }
       fact("Period",tn?"~pi/abs(qb)":"~2*pi/abs(qb)");
       const gen ps=fx("~-qc/qb");
       if (!is_zero(ps)){ std::string m=P(ps); m+="\n\1"; m+=sgn(ps)>0?"to the right":"to the left"; line(AN_ROW,"Phase shift",m,AN_SPACE); }
