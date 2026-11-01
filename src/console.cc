@@ -1539,6 +1539,12 @@ static __attribute__((noinline)) bool console_insert_cont(int i){
   return true;
 }
 // history result l gets a new text drawn on rows rows (F4 forms, main.cc); false if it can't
+// (DeltaCE) an input line of the history has s (Word problems: the Recent tab, focus_catalog.cc)
+bool console_history_has(const char * s){
+  for (int l=0;l<Last_Line;++l)
+    if (Line[l].type==LINE_TYPE_INPUT && Line[l].str && strstr((const char *)Line[l].str,s)) return true;
+  return false;
+}
 bool console_replace_result(int l,const char * text,int rows){
   int cur=0;
   while (l+1+cur<Last_Line && Line[l+1+cur].type==LINE_TYPE_CONT)

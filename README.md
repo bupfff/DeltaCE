@@ -46,7 +46,8 @@ click Install, then press `enter` once on the calculator.
 - **The Δ key.** `prgm` on anything you type, or on the last answer: what it is and its facts, by
   kind (functions, equations, inequalities, conics, numbers, data, matrices, systems), with the
   next moves on `1` to `9`. Typed while an answer shows, it also checks your answer against it.
-- **Word problems.** *more* → Word problems, or type a word in the search (`percent`, `rate`).
+- **Word problems.** *more* → Word problems: each one shown as its sentence, in five tabs on
+  `F1`-`F5` (% & rate, geometry, multivar, functions, recent); type a word to search them all.
   Fill the boxes with `▶`; a story takes a fact a line, then "find".
 - **The steps.** After an answer, press `enter` to see how to get it, the way a worked example in a
   textbook does: derivatives, integrals, limits, sums and Taylor series (FlowCE Steps), and in
@@ -178,7 +179,7 @@ The bundle's INST is patched to run on OS 5.8.4 (the original stops with *"Unkno
 |---|---|
 | F1 to F5 | menus: algebra, calculus, trig, symbols, more (with `2nd` or `alpha`: more menus) |
 | `prgm` | Δ: what the line (or the last answer) is, its facts; `1` to `9` the next moves, `enter` the first |
-| *more* → Word problems | the phrases; `enter` puts one on the line, `▶` goes to its next box |
+| *more* → Word problems | the phrases, as sentences: `F1`-`F5` their tabs, letters search; `enter` puts one on the line, `▶` goes to its next box |
 | `enter` after an answer | its steps (calculus, equations, inequalities, factoring, divisions, F4's forms) |
 | F4 on the steps page | another method, when there is one (a division: long, synthetic, factor and cancel) |
 | `◀` `▶` after an answer | its other forms, back and forth (as `F4`) |

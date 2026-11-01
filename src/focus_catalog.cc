@@ -16,6 +16,10 @@
 #include "ui_font.h"
 #include "ui_fontdata.h"
 #include "ui_math.h"
+#ifdef FLOWCE_STEPS
+#include "phrase.h"
+#endif
+bool console_history_has(const char * s); // console.cc
 
 #define ELL "\xe2\x80\xa6" // the ellipsis, U+2026
 // timing probe (focus.cc, tools/emu/phases.py): 60 filter, 61 example layout, 62 search field,
@@ -43,6 +47,8 @@ struct cat_state {
 static cat_state * S;
 
 static const char * const TABS[5] = {"all", "algebra", "calculus", "trig", "numbers"};
+// (DeltaCE) Word problems' tabs: the phrases of PH_GROUP 1-4 (menufr.cc), then those in the history
+static const char * const TABP[5] = {"% & rate", "geometry", "multivar", "functions", "recent"};
 static const unsigned char TCAT[4][3] = { // the categories of tabs F2-F5 (menuGUI.h)
   {CAT_CATEGORY_ALGEBRA, CAT_CATEGORY_POLYNOMIAL, CAT_CATEGORY_SOLVE}, {CAT_CATEGORY_CALCULUS, 0, 0},
   {CAT_CATEGORY_TRIG, 0, 0}, {CAT_CATEGORY_ARIT, CAT_CATEGORY_REAL, CAT_CATEGORY_COMPLEXNUM}};
@@ -217,8 +223,19 @@ static int classify(const catalogFunc * c) {
 #ifndef WITH_TABVAR
   if (!strncmp(nm, "tabvar", 6)) return 3; // not in this build (makefile FEATURE_DEFS)
 #endif
-  if (s.only && (c->category & 0xff) != s.only) return 3; // (DeltaCE: Word problems)
-  if (s.tab) { // any of its 3 category bytes in the tab's categories
+  if (s.only) { // (DeltaCE) Word problems: the tab's phrases (recent: those in the history); a query: all
+    if ((c->category & 0xff) != s.only) return 3;
+    if (!s.ql) {
+      char b[24];
+      const char * p = strchr(c->insert, '(');
+      const int n = p ? p - c->insert + 1 : 0;
+      if (s.tab < 4) return (c->category >> 8 & 0xff) == 0x41 + s.tab ? 0 : 3;
+      if (!n || n > 23) return 3;
+      memcpy(b, c->insert, n); b[n] = 0;
+      return console_history_has(b) ? 0 : 3;
+    }
+  }
+  else if (s.tab) { // any of its 3 category bytes in the tab's categories
     const unsigned char * t = TCAT[s.tab - 1], * b = (const unsigned char *)&c->category;
     int k = 0;
     for (; k < 3; ++k)
@@ -324,7 +341,7 @@ static void field_text() { // the query and caret (or the placeholder), the coun
   ui_fill(30, CY + 1, 275, CH - 2, col(UC_CARD));
   int x = 32, base = CY + 15;
   if (s.ql) x += ui_draw_text(&ui_tb12, s.q, -1, x, base, ramp(UC_INK, UC_CARD), 0) + 1;
-  else ui_draw_text(&ui_tr12, "Search commands", -1, x + 1, base, ramp(UC_SUB, UC_CARD), 0);
+  else ui_draw_text(&ui_tr12, s.only ? "Search word problems" : "Search commands", -1, x + 1, base, ramp(UC_SUB, UC_CARD), 0);
   ui_fill(x, CY + 5, 2, CH - 9, col(UC_ACC));
   char m[20], d[8];
   int k = 0, j = 0, n = s.ni;
@@ -341,6 +358,27 @@ static void row_draw(int r) { // row r of the view: the name in bold, the descri
   const catalogFunc & c = s.C[s.idx[i]];
   int y = LT + r * RH, on = i == s.sel, bg = on ? UC_ACC : UC_BG;
   if (on) ui_rrect(0, 6, y, 306, RH, 5, UC_ACC, UC_BG);
+#ifdef FLOWCE_STEPS
+  if (s.only) { // (DeltaCE) a phrase: its words with a box for each blank, as it is typed
+    if (!on) ui_fill(6, y, 306, RH, col(UC_BG)); // (the selection's color was left under these rows)
+    const char * p = strchr(c.insert, '(');
+    int na = 1;
+    for (const char * q = p; *q; ++q) na += *q == ',';
+    const char * wd = phrase_words(c.insert, p - c.insert, na);
+    if (!wd) return;
+    const ui_face * f = &ui_tr12;
+    for (int pass = 0; pass < 2; ++pass) { // measured, then drawn (in a smaller face if too wide)
+      int x = 13;
+      const char * q = wd;
+      for (int k = 0; k <= na; ++k, q += strlen(q) + 1) {
+        if (*q) x += pass ? ui_draw_text(f, q, -1, x, y + 14, ramp(on ? UC_ONACC : UC_INK, bg), 0) + 4 : ui_text_width(f, q, -1) + 4;
+        if (k < na) { if (pass) ui_fill(x, y + 15, 10, 1, col(on ? UC_ONACC : UC_ACC)); x += 14; } // (a blank)
+      }
+      if (!pass && x > 304) f = &ui_tr10;
+    }
+    return;
+  }
+#endif
   int w = text_cut(&ui_tb12, c.name, name_len(c.name), 13, y + 14, 200, ramp(on ? UC_ONACC : UC_INK, bg));
   int dx = 13 + w + 10 > DX ? 13 + w + 10 : DX;
   if (c.desc) text_cut(&ui_tr10, catalog_desc(c.desc), -1, dx, y + 14, 306 - dx, ramp(on ? UC_ONACC : UC_SUB, bg));
@@ -505,7 +543,7 @@ int focus_catalog(const char * query, char * out, int outsize) {
   focus_status_label(s.only ? "WORD PROBLEMS" : "COMMANDS");
   lock_alpha(); // plain keys type letters
   focus_phase = 65;
-  focus_bar_tabs(TABS, 0);
+  focus_bar_tabs(s.only ? TABP : TABS, 0);
   filter(0);
   int res = 0, plain = 0, typed = 0; // typed: the query was edited here (not just the word before the caret)
   for (;;) {
@@ -532,12 +570,12 @@ int focus_catalog(const char * query, char * out, int outsize) {
       }
       break;
     }
-    if (ch && s.ql < QMAX) { s.q[s.ql++] = (char)ch; s.q[s.ql] = 0; filter(1); typed = 1; }
+    if (ch && s.ql < QMAX) { s.q[s.ql++] = (char)ch; s.q[s.ql] = 0; filter(!(s.only && s.ql == 1)); typed = 1; } // (Word problems: a query looks past the tab)
     else if (k == KEY_CTRL_DEL) { s.q[--s.ql] = 0; filter(0); typed = 1; }
     else if (t >= 0 && t != s.tab) {
       s.tab = t;
       focus_phase = 65;
-      focus_bar_tabs(TABS, t);
+      focus_bar_tabs(s.only ? TABP : TABS, t);
       filter(0);
     }
     else { // the selection moves; the list scrolls to keep it in view

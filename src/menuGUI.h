@@ -95,6 +95,7 @@ const char * catalog_desc(const char * packed);
 #define CAT_CATEGORY_UNIT 16
 #define CAT_CATEGORY_PLOT 17
 #define CAT_CATEGORY_PHRASE 18 // (DeltaCE: phrase.cc, More > Word problems)
+#define PH_GROUP(g) ((0x40 + (g)) << 8) // (DeltaCE) a phrase's tab in Word problems (1-4), category byte 1
 // the catalog of the current language (menufr.cc) and its size n (the Focus command search)
 const catalogFunc * catalog_entries(int & n);
 
