@@ -24,18 +24,30 @@ answers (`π²/6`, not `1.64493`), the steps behind them, graphs, statistics and
 **[Install it from the DeltaCE page](https://bupfff.github.io/DeltaCE/)**: plug in the calculator,
 click Install, then press `enter` once on the calculator.
 
+## New in 2.2.1
+
+| ![Word problems: tabs, each problem shown as its sentence, its example filled in](docs/screenshots/word_problems.png) | ![A whole word problem on one line, then solved](docs/screenshots/phrase_story.png) |
+|:---:|:---:|
+| **Word problems, laid out** | **A whole story on one line** |
+
+- **Find the right problem at a glance.** *more* → 7: five tabs (% & rate, geometry, multivar,
+  functions, recent), each problem shown as the sentence you'll fill in, with an example.
+- **71 word problems**, 22 new: sales tax, percent change, half-life, the score you need, law of
+  cosines, angle of elevation, sectors, trapezoids, ages, coins and tickets, mixtures, limits…
+- **Combine them with commas.** "[l] is [3] more than [2w], a rectangle [l] by [w] has perimeter
+  [36], find [w]" on one line: **w = 5, l = 13**. Phrases nest, too.
+
 ## New in 2.2
 
-| ![The Δ key on x² − 5x + 6: its facts and next moves](docs/screenshots/delta_quadratic.png) | ![A word problem told as a story, then solved](docs/screenshots/phrase_story.png) | ![The answer bar under an answer](docs/screenshots/action_row.png) |
-|:---:|:---:|:---:|
-| **The Δ key** | **Word problems** | **The answer bar** |
+| ![The Δ key on x² − 5x + 6: its facts and next moves](docs/screenshots/delta_quadratic.png) | ![The answer bar under an answer](docs/screenshots/action_row.png) |
+|:---:|:---:|
+| **The Δ key** | **The answer bar** |
 
 - **Δ: "what is this?"** Type anything, press `prgm`. DeltaCE names it and lists what a
   textbook would ask: a parabola's vertex, a circle's center, a sine wave's period, a number line
   for an inequality.
 - **Word problems in plain words.** Type "[l] is [3] more than [2w]", then "a rectangle [l] by [w]
-  has perimeter [36]", then "find [w]": **w = 5, l = 13**. 49 phrases: percents, rates,
-  interest, shapes, a thrown ball…
+  has perimeter [36]", then "find [w]": **w = 5, l = 13**.
 - **One-row answer bar.** `◀` `▶` flip an answer between its forms (factored, expanded, decimal);
   `prgm` shows what to do next.
 - **Cleaner answers.** Rationalized denominators, physical constants that give their values, and a
@@ -48,7 +60,7 @@ click Install, then press `enter` once on the calculator.
   next moves on `1` to `9`. Typed while an answer shows, it also checks your answer against it.
 - **Word problems.** *more* → Word problems: each one shown as its sentence, in five tabs on
   `F1`-`F5` (% & rate, geometry, multivar, functions, recent); type a word to search them all.
-  Fill the boxes with `▶`; a story takes a fact a line, then "find".
+  Fill the boxes with `▶`; a story takes a fact a line (or all on one line, between commas), then "find".
 - **The steps.** After an answer, press `enter` to see how to get it, the way a worked example in a
   textbook does: derivatives, integrals, limits, sums and Taylor series (FlowCE Steps), and in
   algebra, linear and quadratic equations (always by the formula: a, b and c, the discriminant,
