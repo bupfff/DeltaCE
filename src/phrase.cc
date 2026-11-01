@@ -111,6 +111,7 @@ const char * phrase_words(const char * name, int nlen, int na) {
   const int i = nlen > 3 && name[0] == 'p' && name[1] == 'h' && name[2] == '_' ? lookup(name, nlen, na) : -1;
   return i < 0 ? 0 : PH[i].words;
 }
+static bool letter(char c) { return (c | 32) >= 'a' && (c | 32) <= 'z'; }
 static bool namec(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
 // what the letters in a story's facts stand for (find answers in words: "width w = 5"): the roles
 // of the phrases' blanks, recorded as their facts are put into giac
@@ -263,6 +264,14 @@ static void find_of(std::string & out, const std::string & v) {
   std::string st("[");
 #ifdef WITH_UNITS
   nref = 0;
+  for (const char * p = strstr(phrase_story, "/_"); p; p = strstr(p + 1, "/_")) { // a rate's units first
+    const char * a = p; // (50_min then 40_mi/_h: solved in mi and h, the rates in mi/h)
+    while (a > phrase_story && letter(a[-1])) --a;
+    if (a > phrase_story && a[-1] == '_') in_ref(a, p - a);
+    int n = 0;
+    while (letter(p[2 + n])) ++n;
+    in_ref(p + 2, n);
+  }
 #endif
   unitless(st, phrase_story);
   st += ']';
@@ -276,7 +285,10 @@ static void find_of(std::string & out, const std::string & v) {
     if (s != v) { vars += ','; vars += s; }
   }
   vars += ']';
-  out = vars; out += "=solve("; out += st; out += ','; out += vars; out += ')'; // (one picked: phrase_answer)
+  // (one picked: phrase_answer). A story with decimals is solved exact, its answers decimals (solve
+  // with 2.1, 6.5 and 5.4 found no single solution)
+  const bool dec = strchr(phrase_story, '.');
+  out = vars; out += dec ? "=evalf(solve(exact(" : "=solve("; out += st; out += dec ? ")," : ","; out += vars; out += dec ? "))" : ")";
 }
 bool phrase_expand(char * buf, int cap) {
   bool any = false;
@@ -381,17 +393,15 @@ bool phrase_answer(gen & g, std::string & msg) {
     ff[1] = gen(aa, f[1].subtype);
     g = symbolic(at_of, gen(ff, f.subtype));
   }
-  if (!rn) return false;
   const gen & a = g._SYMBptr->feuille[1];
   if (a.type != _VECT || a._VECTptr->size() != 2 || a[0].type != _VECT || a[1].type != _VECT || a[0]._VECTptr->size() != a[1]._VECTptr->size()) return false;
   std::string m;
-  bool named = false;
   for (unsigned i = 0; i < a[0]._VECTptr->size(); ++i) {
     const std::string v = a[0][i].print(contextptr);
     const char * un = "";
     if (i) m += ", ";
     for (int k = 0; k < rn; ++k)
-      if (v == rv[k]) { m += rr[k]; m += ' '; un = ru[k]; named = true; break; }
+      if (v == rv[k]) { m += rr[k]; m += ' '; un = ru[k]; break; }
     gen x = a[1][i]; // (10.0 from 0.25 and 0.1: 10)
 #ifdef WITH_UNITS
     if (*un) { // (solved in the story's units: in the role's, 1/2 h is 30 min)
@@ -400,12 +410,20 @@ bool phrase_answer(gen & g, std::string & msg) {
       x = eval(x / gen(f, contextptr), 1, contextptr);
     }
 #endif
+    if (x.type == _FRAC && x._FRACptr->den.type == _INT_) { // (12/5 h: 2.4 h, as a textbook; 7/3 stays)
+      int d = x._FRACptr->den.val;
+      while (d % 2 == 0) d /= 2;
+      while (d % 5 == 0) d /= 5;
+      if (d == 1) x = evalf(x, 1, contextptr);
+    }
     if (x.type == _DOUBLE_ && x._DOUBLE_val == (int)x._DOUBLE_val) x = (int)x._DOUBLE_val;
     m += v.c_str(); m += " = "; m += x.print(contextptr).c_str();
     if (*un) { m += ' '; for (; *un; ++un) if (*un != '_') m += *un; } // (km/h, not _km/_h)
+    const gen y = evalf(x, 1, contextptr); // (5*sqrt(2) cm: then about 7.07107)
+    if (y.type == _DOUBLE_ && x.type != _DOUBLE_ && x.type != _INT_ && x.type != _ZINT && x.type != _FRAC) { m += " \xe2\x89\x88 "; m += y.print(contextptr).c_str(); }
   }
-  if (named) msg = m;
+  msg = m; // (letters without a role too: n = 18, not [n] = [18])
   rn = 0; // (used: the next story gives its letters their roles)
-  return named;
+  return true;
 }
 #endif
