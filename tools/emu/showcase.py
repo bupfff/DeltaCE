@@ -80,6 +80,11 @@ SCENES = {
     'delta_system':   [('v', '[2x+3y=12,x-y=1]'), ('k', '{prgm}'), ('w', 3000), ('k', '{down}'), ('w', 800)],
     'delta_tree':     [('v', '360'), ('k', '{prgm}'), ('w', 3000), ('k', '{down}{down}'), ('w', 800)],
     'delta_part':     [('v', '(x+1)/(x^2-4)'), ('k', '{left}{left}{left}{prgm}'), ('w', 3000)],
+    # 2.3.2: Δ after an answer (its equation's card), ± and quadratic in form, their steps, a matrix's picture, units
+    'delta_quartic':  [('p', '(x^2+6x+1)(x^2+6x-3)=5'), ('w', 1000), ('k', '{prgm}'), ('w', 9000), ('k', '{down}{down}'), ('w', 800)],
+    'steps_qform':    [('p', '(x^2+6x+1)(x^2+6x-3)=5'), ('w', 1000), ('k', '{enter}'), ('w', 10000), ('k', '{down}'), ('w', 800)],
+    'delta_matrix':   [('v', '[[2,1],[1,3]]'), ('k', '{prgm}'), ('w', 6000), ('k', '{down}{down}{down}{down}{down}{down}{down}'), ('w', 800)],
+    'phrase_units':   [('p', 'ph_drt(d,60_mi/_h,30_min),ph_find(d)'), ('w', 3000)],
     'word_problems':  [('k', '{graph}7'), ('w', 2000), ('k', '{window}{down}{down}'), ('w', 800)],
     'steps_system':   [('p', 'solve([2x+3y=12,x-y=1],[x,y])'), ('k', '{enter}'), ('w', 6000)],
     'steps_log':      [('p', 'solve(log(x)+log(x-3)=1,x)'), ('k', '{enter}'), ('w', 8000)],

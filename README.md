@@ -24,6 +24,33 @@ answers (`π²/6`, not `1.64493`), the steps behind them, graphs, statistics and
 **[Install it from the DeltaCE page](https://bupfff.github.io/DeltaCE/)**: plug in the calculator,
 click Install, then press `enter` once on the calculator.
 
+## New in 2.3.2
+
+| ![The Δ card after solving (x²+6x+1)(x²+6x−3) = 5: x = −3 ± √13 or −3 ± √7, factored, quadratic in form](docs/screenshots/delta_quartic.png) | ![Steps for (x²+6x+1)(x²+6x−3) = 5: u = x² + 6x substituted](docs/screenshots/steps_qform.png) |
+|:---:|:---:|
+| **± answers, factored, quadratic in form** | **Steps for many more equations** |
+| ![The Δ card of a 2×2 matrix: the unit square and the parallelogram of its columns](docs/screenshots/delta_matrix.png) | ![A distance, rate and time story with units: distance d = 30 mi](docs/screenshots/phrase_units.png) |
+| **A matrix's picture** | **Distance, rate and time, with units** |
+
+- **Δ after an answer reads the equation:** `prgm` after solving shows the equation's card (it said
+  "No solution" for any equation with two answers or more).
+- **± answers, as textbooks write them:** x = −3 ± √13, x = (1 ± √5)/2, x = ±3, x = −1 ± 2i, in the
+  console and on the card (the decimal form is still a `◀` `▶` away).
+- **Polynomial equations say more:** factored over the rationals, how many solutions, and a quartic
+  quadratic in form gets its substitution (u = x² + 6x), its equation in u and u's values.
+- **Steps for many more equations**, and the steps button only where they come: quartics quadratic
+  in form, polynomials that factor, |A| = |B|, 4ˣ with 2ˣ. (It promised steps for some and showed
+  "No steps" after 15 s.)
+- **Word problems:** distance, rate and time with units (minutes and hours mixed: 30 min at 60 mi/h
+  is 30 mi); "how long to go", "how far at", "the speed to go"; every "find" answered in words; a
+  negative width never chosen; the % now shows in the percent phrases.
+- **Pictures:** larger, with visible axes and labels clear of the lines; a 2×2 matrix's unit square
+  and its columns; a polynomial's sketch zoomed to where it turns.
+- **Editing:** backspace undoes a list in a word problem's box, one item at a time.
+- **Checked against 121 real textbook word problems** (OpenStax *Elementary Algebra 2e*): all right.
+- Room for this: Laplace and Fourier transforms and a few college-level commands (`lu`, `ker`,
+  `resultant`, `ichinrem`...) are out. Everything through AP Calculus BC stays, `desolve` included.
+
 ## New in 2.3
 
 | ![The Δ card of a sinusoid: its sketch with the midline, amplitude and period marked](docs/screenshots/delta_sinusoid.png) | ![The Δ card of two equations: the two lines and where they cross](docs/screenshots/delta_system.png) |
@@ -85,14 +112,15 @@ click Install, then press `enter` once on the calculator.
   algebra, linear and quadratic equations (always by the formula: a, b and c, the discriminant,
   the roots simplified), rational and radical equations (excluded values, the LCD, every candidate
   checked), factoring (GCF, differences of squares and cubes, two numbers or the ac method,
-  grouping, rational roots), systems of 2 or 3 equations by elimination, exponential and log
+  grouping, rational roots), equations of degree 3 and 4 (factored, or as a quadratic in form:
+  u = x² + 6x), systems of 2 or 3 equations by elimination, exponential and log
   equations (the same base, ln of both sides, the log rules, every solution checked), trig
   equations (the reference angle, its quadrants, every solution, those in [0, 2π)), implicit
   differentiation (`implicitdiff(x^2+y^2=25,x,y)`), polynomial division (long division, synthetic
   division, or factor and cancel with the excluded values: `F4` on the steps page switches),
   inequalities (linear ones flip the sign by a negative; polynomial and rational ones get their
   critical numbers and a number tested in each interval) and absolute values (two cases or one
-  compound inequality, every candidate checked). Each step names its rule; `▲` `▼` move between
+  compound inequality, every candidate checked; |A| = |B| too). Each step names its rule; `▲` `▼` move between
   them. An equation or inequality typed alone (`3x-5<7`) is solved.
 - **Answers like your textbook, and their other forms.** `F4` cycles an answer's forms: simplified,
   one fraction, factored, expanded, the completed square, long division, partial fractions,
