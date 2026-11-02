@@ -146,6 +146,16 @@ static int more_able(const char * s) {
   if (has(s, trig, 3)) {
     if (has(s, bad, 5) || has(s, bad + 7, nb - 7) || has(s, logs, 4) || strstr(s, "^(") || strchr(s, '[')) return 0;
     if (!giac::angle_radian(contextptr)) return 0; // (the steps' angles: radians)
+    const char * a0 = 0; // (one argument for every trig call: sin(2x) = cos(x) needs an identity, no steps)
+    int n0 = 0;
+    for (const char * p = s; (p = strpbrk(p, "sct")); ++p) {
+      if (!(starts(p, "sin(") || starts(p, "cos(") || starts(p, "tan(")) || (p > s && isalpha((unsigned char)p[-1]))) continue;
+      const char * q = p + 4;
+      for (int d = 1; *q && d; ++q) d += *q == '(' ? 1 : *q == ')' ? -1 : 0;
+      const int n = q - p - 4;
+      if (!a0) { a0 = p + 4; n0 = n; }
+      else if (n != n0 || strncmp(a0, p + 4, n)) return 0;
+    }
     static const char * const tn[] = {"sin", "cos", "tan"};
     return inside(s, tn, 3, false);
   }
@@ -225,7 +235,10 @@ static int ineq_able(const char * s) {
   if (!strchr(s, '<') && !strchr(s, '>') && !strstr(s, "abs(")) return -1;
   static const char * const no[] = {"[", "log", "ln(", "exp(", "sin(", "cos(", "tan(", "^(", "e^", "!", "%", "sqrt(", "surd(", "=>", ":="};
   for (unsigned k = 0; k < sizeof(no) / sizeof(no[0]); ++k) if (strstr(s, no[k])) return 0;
-  if (const char * a = strstr(s, "abs(")) if (strstr(a + 4, "abs(") || strchr(s, '^')) return 0; // (one absolute value, linear)
+  if (const char * a = strstr(s, "abs(")) { // (one absolute value, linear; or |A| = |B| alone, steps.cc abs_steps)
+    const char * b = strstr(a + 4, "abs(");
+    if (strchr(s, '^') || (b && (strchr(s, '<') || strchr(s, '>') || a != s + 6 || b[-1] != '=' || b[-2] != ')' || strstr(b + 4, "abs(")))) return 0;
+  }
   const char * v = 0; // one name besides solve( and abs(
   int vn = 0;
   for (const char * p = s; *p;) {
@@ -248,6 +261,45 @@ static bool relation(const char * s) {
     else if (!d && (*p == '<' || *p == '>' || (*p == '=' && p > s && !strchr(":=!<>", p[-1]) && p[1] != '=' && p[1] != '>'))) return true;
   }
   return false;
+}
+// (DeltaCE) solutions a polynomial's steps reach (steps.cc eq_factor, eq_qform): whole numbers,
+// fractions, square roots, not one in another, nor cube roots, decimals or none (x^3+x+1 = 0: the
+// chip and 15 s for "No steps", the user)
+bool steps_simple_roots(const char * a) {
+  if (!a || !strncmp(a, "no solution", 11)) return a != 0; // (x^4-7x^2+14 = 0: no real u; an irreducible quartic with none is rare)
+  if (!*a || strstr(a, "rootof") || strstr(a, "surd") || strstr(a, "^(1/") || strchr(a, '.')) return false;
+  for (const char * p = a; (p = strstr(p, "sqrt(")); ) {
+    int d = 0;
+    for (p += 5; *p && d >= 0; ++p) {
+      if (*p == '(') ++d; else if (*p == ')') --d;
+      else if (!strncmp(p, "sqrt(", 5)) return false;
+    }
+  }
+  return true;
+}
+// the one name's every place followed by an even power (x^4-13x^2+5): a quadratic in x^2
+static bool even_powers(const char * s) {
+  for (const char * p = s + 6; *p; ++p) {
+    if (!isalpha((unsigned char)*p) || (p > s && (isalnum((unsigned char)p[-1]) || p[-1] == '_'))) continue;
+    const char * q = p;
+    while (isalnum((unsigned char)*q) || *q == '_') ++q;
+    if (*q == '(' || *q == ',') { p = q - 1; continue; } // (a call; solve's x)
+    if (*q != '^' || !isdigit((unsigned char)q[1])) return false;
+    int k = 0;
+    for (++q; isdigit((unsigned char)*q); ++q) k = 10 * k + *q - '0';
+    if (k % 2) return false;
+    p = q - 1;
+  }
+  return true;
+}
+// the equation's degree in solve(L=R,...) as written, -1 if not a polynomial
+static int eq_deg(const char * s) {
+  const char * a = s + 6, * e = a, * q = 0;
+  for (int d = 0; *e && !(d == 0 && (*e == ',' || *e == ')')); ++e) {
+    if (*e == '(') ++d; else if (*e == ')') --d; else if (*e == '=' && !d) q = e;
+  }
+  const int l = text_deg(a, q ? q : e), r = q ? text_deg(q + 1, e) : 0;
+  return l < 0 || r < 0 ? -1 : l > r ? l : r;
 }
 int focus_steps_able(const char * s, const char * ans) {
   if (starts(s, "implicitdiff(")) return 1;
@@ -279,7 +331,8 @@ int focus_steps_able(const char * s, const char * ans) {
     if (p == s || !isalnum((unsigned char)p[-1]))
       for (unsigned k = 0; k < sizeof(ops) / sizeof(ops[0]); ++k)
         if (starts(p, ops[k])) return 1;
-  if ((starts(s, "solve(") || (starts(s, "factor(") && !strchr(s, '.'))) && alg_able(s)) return 1; // (factor(0.5x^2-2): decimals)
+  if ((starts(s, "solve(") || (starts(s, "factor(") && !strchr(s, '.'))) && alg_able(s)) // (factor(0.5x^2-2): decimals)
+    return !(starts(s, "solve(") && ans && *ans && eq_deg(s) >= 3 && !steps_simple_roots(ans) && !(eq_deg(s) == 4 && even_powers(s))); // (ans "": the Δ card's, it knows)
   return div_able(s, ans);
 }
 
@@ -1261,6 +1314,9 @@ static __attribute__((noinline)) const char * build_delta(const char * in, const
   else if (stopped) why = "Stopped";
   giac::ctrl_c = giac::kbd_interrupted = giac::interrupted = giac::stack_hit = false;
   if (!why) {
+    for (size_t i = 0; i < dmv_->size();) // (DeltaCE) a move with steps where they are: else not offered
+      if ((*dmv_)[i].how == 's' && !focus_steps_able((*dmv_)[i].cmd.c_str(), "")) dmv_->erase(dmv_->begin() + i);
+      else ++i;
     if (dmore_ && !v.empty()) { dl_move m; m.label = "More actions"; m.how = 'm'; dmv_->push_back(m); }
     if (!dmv_->empty() && !v.empty()) { // NEXT under the head: a move a row, its key as its label
       static const char * const K[9] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};

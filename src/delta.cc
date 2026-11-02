@@ -576,9 +576,12 @@ static NOINL const char * eq_kind(const gen & f,const gen & x,bool ineq,bool rat
   return s;
 }
 // the moves of a relation in x: solve with steps, both sides graphed
+bool steps_simple_roots(const char * a); // focus_steps.cc
+static bool nosteps_; // (a polynomial of degree 3 or more whose solutions its steps do not reach)
 static NOINL void rel_moves(const gen & r,const gen & x){
   std::string c("solve("); c+=P(ev(r)); c+=','; c+=P(x); c+=')';
-  move("Solve with steps",c,'s');
+  if (!nosteps_) move("Solve with steps",c,'s');
+  nosteps_=false;
   std::string g("["); g+=P(ev(r._SYMBptr->feuille[0])); g+=','; g+=P(ev(r._SYMBptr->feuille[1])); g+=']';
   move("Graph both sides",g,'g');
 }
@@ -674,6 +677,11 @@ static NOINL void equation1(const gen & eq,const gen & x){
   const int n=pdeg(f,x);
   let("qx",x);
   if (n==2){ let("qa",co(f,x,2)); let("qb",co(f,x,1)); let("qc",co(f,x,0)); }
+  if (s.type==_VECT && n>=3){ // (steps for those solved by factors or as a quadratic in form only)
+    std::string t;
+    for (unsigned i=0;i<s._VECTptr->size();++i){ t+=P((*s._VECTptr)[i]); t+=','; }
+    nosteps_=!steps_simple_roots(t.c_str());
+  }
   if (s.type==_VECT){
     const unsigned k=s._VECTptr->size();
     std::string m=answer_pm(x,*s._VECTptr,"\n"); // (x=-3±sqrt(13))

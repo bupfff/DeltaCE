@@ -36,6 +36,7 @@ enum {
   R_IDIFF, R_ICHAIN, R_ISIDE, R_IFACT,
   R_NFLIP, R_NFAC, R_NCRIT, R_NTEST, R_NLINE, R_NKEEP1, R_NKEEP2, R_NKEEP3, R_NKEEP4, R_NNONE, R_NALL,
   R_BNEG, R_BZERO, R_BTWO, R_BCASE1, R_BCASE2, R_BBETW, R_B3, R_B3DIV, R_B3FLIP, R_BOUT, R_BALL, R_BNOT0, R_BSOL,
+  R_PQFORM, R_BABS2,
   R_NRULES
 };
 // (DeltaCE) packed like the catalog's descriptions (tools/catpack.py src/steps.cc
@@ -294,6 +295,8 @@ static const char * const RULES[]={
   ST("Every number works"),0,ST("A"),
   ST("Every number but where the inside is 0"),0,ST("A"),
   ST("The solutions"),0,ST("A"),
+  ST("Quadratic in form: substitute"),0,ST("A"),
+  ST("Equal absolute values: two cases"),0,ST("A"),
 };
 // (DeltaCE) an inequality's relation: 0 an equation, 1 <, 2 <=, 3 >, 4 >=
 static const unary_function_ptr * relop(int r){ return r==1?at_inferieur_strict:r==2?at_inferieur_egal:r==3?at_superieur_strict:r==4?at_superieur_egal:at_equal; }
@@ -2567,10 +2570,62 @@ static NOINL bool factor_steps(const gen & input){
 }
 // degree 3 and more: one side, factored, each factor 0, each solved (a quadratic factor left has
 // no real root: the factoring goes as far as the real roots)
+static NOINL bool eq_poly(const gen & L,const gen & R);
+static NOINL vecteur roots_of(const gen & L,const gen & R);
+// (DeltaCE) a quartic quadratic in form: a u^2+B u+C in u = x^2+2wx, w = b/(4a), B = c-4aw^2, when
+// its x coefficient is 2wB (x^4-5x^2+4 in u = x^2; (x^2+6x+1)(x^2+6x-3) = 5 in u = x^2+6x): u
+// substituted, the quadratic in u solved, then x^2+2wx = each u solved
+static NOINL bool eq_qform(const vecteur & c){ // (c: its coefficients, x^4's first)
+  const gen a=c[0],w=ev(c[1]/(4*a)),B=ev(c[2]-4*a*w*w),C=c[4];
+  if (!is_zero(ev(c[3]-2*w*B))) return false;
+  const gen t(identificateur("u")),F=ev(symb_pow(X,2)+2*w*X),Q=ev(a*symb_pow(t,2)+B*t+C);
+  const gen x0=X;
+  X=t;
+  const vecteur r=roots_of(Q,0);
+  X=x0;
+  S(R_PQFORM,SYM2(at_equal,t,F),0);
+  S(R_ACONT,Q,0);
+  X=t;
+  ++depth_;
+  const bool ok=eq_poly(Q,0);
+  --depth_;
+  X=x0;
+  if (!ok) return false;
+  EACH(it,r){
+    S(R_GBACK,SYM2(at_equal,F,*it),0);
+    ++depth_;
+    bool o=true;
+    const gen v=normal(ev(*it+w*w),CTX); // (x+w)^2 = u+w^2
+    if (!is_zero(w) && (it->type==_INT_ || it->type==_ZINT || it->type==_FRAC)) o=eq_poly(F,*it); // (x^2+6x = 4: its quadratic's steps)
+    else if (!is_zero(w) && (S(R_ALINE,SYM2(at_equal,symb_pow(ev(X+w),2),v),0),false)) {} // (x^2-2x = u, u a root: the square completed)
+    else if (is_strictly_positive(-v,CTX)) S(R_FNOREAL,ev(F-*it),0); // (x^2 = -2)
+    else PL(R_ALINE,is_zero(w)?"%0=~%2":"%0=%1~%2",X,ev(-w),ev(symbolic(at_sqrt,v))); // (x^2 = 6+3sqrt(3): x = ±sqrt(6+3sqrt(3)))
+    --depth_;
+    if (!o) return false;
+  }
+  return true;
+}
 static NOINL bool eq_factor(const gen & L,const gen & R){
   gen p=ev(expand(ev(L-R),CTX));
   if (!is_zero(R) || !written(p,L)) S(R_QSTD,p,0);
-  if (!fac_steps(p)) return false;
+  { const vecteur c=coeffs(p); if (c.size()==5 && eq_qform(c)) return true; }
+  // (DeltaCE) its factors over the rationals first (fast): one of degree 3 or more, no steps (at
+  // once: the textbook methods below took 15 s to find none); the methods' factors, else these
+  const gen fc=_collect(p,CTX);
+  vecteur fl;
+  flat(at_prod,fc,fl);
+  EACH(it,fl){ const gen f=it->is_symb_of_sommet(at_pow)?it->_SYMBptr->feuille[0]:*it; if (dep(f) && coeffs(f).size()>3) return false; }
+  const size_t m0=out_->size();
+  if (!fac_steps(p)){
+    out_->resize(m0);
+    S(R_ALINE,SYM2(at_equal,p,fc),0);
+    F_->clear();
+    EACH(it,fl){
+      if (it->is_symb_of_sommet(at_pow) && it->_SYMBptr->feuille[1].type==_INT_)
+        for (int k=0;k<it->_SYMBptr->feuille[1].val;++k) F_->push_back(it->_SYMBptr->feuille[0]);
+      else F_->push_back(*it);
+    }
+  }
   std::string z,v;
   vecteur none;
   for (unsigned i=0;i<F_->size();++i){
@@ -2588,7 +2643,11 @@ static NOINL bool eq_factor(const gen & L,const gen & R){
   }
   S(R_FZERO,txt(z),0);
   if (!v.empty()) S(R_FSOLVE,txt(v),0);
-  EACH(it,none) S(R_FNOREAL,*it,0);
+  EACH(it,none){ // (DeltaCE) a quadratic factor with real roots: solved (x^2+6x-4 = 0); else none
+    const vecteur c=coeffs(*it);
+    if (c.size()==3 && !is_strictly_positive(ev(4*c[0]*c[2]-c[1]*c[1]),CTX)){ ++depth_; const bool o=eq_quadratic(*it,0); --depth_; if (!o) return false; }
+    else S(R_FNOREAL,*it,0);
+  }
   return true;
 }
 // a polynomial equation L = R in x (numeric coefficients): its steps by its degree
@@ -3099,13 +3158,16 @@ static NOINL bool el_two(const gen & F1,const gen & F2){
 // every term on the left, k*b^(m x) with m 1 or 2, one base: u = b^x, a quadratic in u
 static NOINL bool el_quad(const vecteur & K,const vecteur & Fs,const gen & c){
   const gen t(identificateur(X==gen(identificateur("u"))?"t":"u"));
-  gen b0,Q=c;
-  bool one=false,two=false;
+  gen b0,Q=c,W=0,b,u; // (W: written in the smaller base, 4^x as (2^x)^2: textbooks do)
+  bool one=false,two=false,re=false;
+  for (unsigned i=0;i<K.size();++i){ el_kind(Fs[i],b,u); if (!i || is_strictly_greater(b0,b,CTX)) b0=b; }
   for (unsigned i=0;i<K.size();++i){
-    gen b,u;
     el_kind(Fs[i],b,u);
-    if (i && !(b==b0)) return false;
-    b0=b;
+    if (!(b==b0)){
+      if (!is_zero(ev(b-b0*b0))) return false;
+      W=W+K[i]*symb_pow(el_pow(b0,u),2); u=ev(2*u); re=true;
+    }
+    else W=W+K[i]*Fs[i];
     const gen m=D(u,X);
     if (!is_zero(ev(u-m*X))) return false;
     if (m==1){ one=true; Q=Q+K[i]*t; }
@@ -3113,6 +3175,7 @@ static NOINL bool el_quad(const vecteur & K,const vecteur & Fs,const gen & c){
     else return false;
   }
   if (!one || !two) return false;
+  if (re) S(R_ALINE,SYM2(at_equal,W+c,0),0);
   Q=ev(expand(Q,CTX));
   const gen F=el_pow(b0,X);
   S(R_GSUBU,SYM2(at_equal,t,F),0);
@@ -3484,6 +3547,20 @@ static NOINL void lin_part(int rule,const gen & a,const gen & b,int rl){ // a rl
 static NOINL bool abs_steps(const gen & eq,int rl){
   if (!rl && !eq.is_symb_of_sommet(at_equal)) return false;
   const gen L=ev(arg(eq,0)),R=ev(arg(eq,1));
+  if (!rl && is(L,at_abs) && is(R,at_abs) && polyf(arg(L)) && polyf(arg(R))){ // (DeltaCE) |A| = |B|: A = B or A = -B
+    S(R_BABS2,SYM2(at_equal,L,R),0);
+    vecteur sol;
+    for (int c=0;c<2;++c){
+      const gen A=arg(L),rb=c?ev(-arg(R)):arg(R);
+      S(c?R_BCASE2:R_BCASE1,A,rb);
+      ++depth_; const bool o=eq_poly(A,rb); --depth_;
+      if (!o) return false;
+      const vecteur r=roots_of(A,rb);
+      EACH(it,r){ bool seen=false; EACH(jt,sol) seen=seen || *jt==*it; if (!seen) sol.push_back(*it); }
+    }
+    if (!sol.empty()) S(R_BSOL,eqseq(sol,at_equal),0);
+    return true;
+  }
   const vecteur ab=lop(makevecteur(L,R),at_abs);
   if (ab.size()!=1) return false;
   const gen B=ab[0],A=arg(B),u(identificateur("u__")),Lu=sub(L,B,u),Ru=sub(R,B,u),fu=ev(expand(Lu-Ru,CTX));

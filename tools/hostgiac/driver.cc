@@ -390,7 +390,12 @@ int main(int argc,char ** argv){
   angle_radian(1,contextptr);
   { char c; giac::stack_floor=(size_t)&c-(6<<20); } // as main.cc's stack_floor: 6 MB of the 8 MB stack
   if (able){ // -Q: the steps chip for each input (focus_steps_able, as typed)
-    for (int k=0;k<ne;++k) printf("%d  %s\n",focus_steps_able(exprs[k]),exprs[k]);
+    for (int k=0;k<ne;++k){ // (with -k: given the console's answer too, as the chip is)
+      std::string a=dorun && khicas_do_run?khicas_do_run(exprs[k]):std::string();
+      const size_t t=a.find("  ~ ");
+      if (t!=std::string::npos) a=a.substr(0,t);
+      printf("%d  %s\n",focus_steps_able(exprs[k],dorun?a.c_str():0),exprs[k]);
+    }
     return 0;
   }
   if (aviewdir){
